@@ -58,10 +58,14 @@ cliente real continua enviando apenas comandos de entrada ao servidor.
 
 ## Build Web como artifact
 
-Em **Actions → Godot Web demo build**, selecione **Run workflow**. O job manual
-instala Godot 4.4.1 e os templates oficiais, valida o projeto e a demo, exporta o
-preset `Web Demo` e publica o artifact `armed-mystery-web-demo`. Nenhum deploy é
-feito.
+Em **Actions → Godot Web demo build**, selecione **Run workflow**. O job instala
+Godot 4.4.1 e os templates oficiais, valida o projeto e a demo, exporta o preset
+`Web Demo` e publica o artifact `armed-mystery-web-demo`.
+
+Pull requests executam todas as validações e geram o artifact para inspeção, mas
+nunca publicam o site. A publicação no environment `github-pages` ocorre somente
+em uma execução manual ou após push na branch `main`, e apenas se parser, testes
+determinísticos, teste multiplayer, exportação e verificações passarem.
 
 Baixe e extraia o artifact. Sirva a pasta extraída por HTTP — não abra
 `index.html` diretamente com `file://`:

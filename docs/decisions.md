@@ -61,8 +61,9 @@ Seu controlador gera apenas estados descartáveis para a apresentação e não c
 `MultiplayerPeer`, não usa RPC e não instancia a autoridade do servidor.
 
 O preset Web desativa threads para permitir inspeção local com um servidor HTTP
-simples. O workflow é exclusivamente manual e publica somente um artifact para
-download; não há deploy em Pages, Railway ou outro serviço.
+simples. Pull requests validam e geram o artifact sem publicar. O deploy em Pages
+só ocorre após execução manual ou push em `main`, depois de todos os testes e da
+verificação do conteúdo exportado; Railway continua fora deste marco.
 
 Neste marco o preset inclui todos os recursos para reduzir o risco de omitir uma
 dependência da demo. Isso também inclui scripts do servidor no PCK e não deve ser
