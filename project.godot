@@ -1,0 +1,15 @@
+[application]
+config/name="Armed Mystery"
+run/main_scene="res://shared/network_app.tscn"
+
+[display]
+window/size/viewport_width=960
+window/size/viewport_height=540
+
+[network]
+limits/debugger/max_queued_messages=2048
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+
