@@ -33,12 +33,21 @@ var closed_session_count := 0
 func _ready() -> void:
 	arguments = NetworkConfig.user_arguments()
 	mode = str(arguments.get("mode", ""))
+	if mode.is_empty() and OS.has_feature("visual_demo"):
+		mode = "demo"
 	if mode == "server":
 		start_server()
 	elif mode == "client":
 		start_client()
+	elif mode == "demo":
+		start_demo()
 	else:
-		fail("MODE_REQUIRED use -- --mode=server or -- --mode=client")
+		fail("MODE_REQUIRED use -- --mode=server, -- --mode=client or -- --mode=demo")
+
+func start_demo() -> void:
+	var demo := VisualDemo.new()
+	demo.test_mode = str(arguments.get("demo-test", "false")) == "true"
+	add_child(demo)
 
 func start_server() -> void:
 	authoritative_world = AuthoritativeWorld.new()
@@ -104,7 +113,7 @@ func _physics_process(delta: float) -> void:
 		world_snapshot.rpc(authoritative_world.snapshot())
 
 func _unhandled_input(event: InputEvent) -> void:
-	if mode == "client" and event is InputEventMouseMotion:
+	if mode == "client" and event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		pending_yaw_delta = clampf(pending_yaw_delta - event.relative.x * 0.0025, -MovementRules.MAX_YAW_DELTA, MovementRules.MAX_YAW_DELTA)
 
 func _on_peer_connected(peer_id: int) -> void:

@@ -1,0 +1,97 @@
+name: Godot Web demo build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-web-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Godot with export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: true
+
+      - name: Create output directories
+        run: mkdir -p build/web "$RUNNER_TEMP/godot-web-logs"
+
+      - name: godot --version
+        run: |
+          set -o pipefail
+          godot --version 2>&1 | tee "$RUNNER_TEMP/godot-web-logs/version.log"
+
+      - name: Validate project
+        run: |
+          set -o pipefail
+          godot --headless --path . --editor --quit 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/parser.log"
+
+      - name: Validate offline demo
+        run: |
+          set -o pipefail
+          godot --headless --path . -- --mode=demo --demo-test=true 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/demo.log"
+          grep -q 'DEMO_TEST_OK simulated_players=4 network=disabled' \
+            "$RUNNER_TEMP/godot-web-logs/demo.log"
+          ! grep -Eq 'SERVER_|CLIENT_CONNECTING|CLIENT_CONNECTED|CLIENT_CONNECTION_FAILED|CLIENT_SERVER_DISCONNECTED|unable_to_connect' \
+            "$RUNNER_TEMP/godot-web-logs/demo.log"
+
+      - name: Validate movement rules
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/movement_rules_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/movement-rules.log"
+
+      - name: Validate multiplayer regression
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/godot-web-logs/network-processes
+        run: |
+          set -o pipefail
+          GODOT_BIN="$(command -v godot)" ./tests/network_smoke_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/network-smoke.log"
+
+      - name: Export Web demo
+        run: |
+          set -o pipefail
+          godot --headless --path . --export-release "Web Demo" build/web/index.html 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/export.log"
+
+      - name: Verify Web artifact
+        run: |
+          if [[ ! -s build/web/index.html ]]; then
+            echo "Missing non-empty Web entry point: build/web/index.html" >&2
+            exit 1
+          fi
+          for extension in wasm pck js; do
+            count="$(find build/web -maxdepth 1 -type f -name "*.$extension" -size +0c | wc -l)"
+            echo "WEB_ARTIFACT_CHECK extension=$extension count=$count"
+            if [[ "$count" -lt 1 ]]; then
+              echo "Missing non-empty *.$extension Web artifact" >&2
+              exit 1
+            fi
+          done
+
+      - name: Upload Web demo
+        uses: actions/upload-artifact@v4
+        with:
+          name: armed-mystery-web-demo
+          path: build/web
+          if-no-files-found: error
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-web-build-logs
+          path: ${{ runner.temp }}/godot-web-logs
+          if-no-files-found: warn

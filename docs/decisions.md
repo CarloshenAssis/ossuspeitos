@@ -51,3 +51,20 @@ essa desconexão esperada e nenhuma RPC é enviada após o início do fechamento
 fechamento local é terminal: o servidor cancela o timeout de preparação, preserva
 a contagem encerrada, limpa explicitamente suas tabelas autoritativas e termina
 sem depender de callbacks de desconexão que o peer já fechado não produzirá.
+
+## Marco visual: demo e exportação Web
+
+O artifact Web usa a feature de exportação `visual_demo`, que seleciona uma demo
+offline antes de qualquer inicialização de transporte. A mesma demo pode ser
+aberta explicitamente com `--mode=demo`, mas nunca é fallback de erro de rede.
+Seu controlador gera apenas estados descartáveis para a apresentação e não cria
+`MultiplayerPeer`, não usa RPC e não instancia a autoridade do servidor.
+
+O preset Web desativa threads para permitir inspeção local com um servidor HTTP
+simples. O workflow é exclusivamente manual e publica somente um artifact para
+download; não há deploy em Pages, Railway ou outro serviço.
+
+Neste marco o preset inclui todos os recursos para reduzir o risco de omitir uma
+dependência da demo. Isso também inclui scripts do servidor no PCK e não deve ser
+considerado proteção de segredos; antes de adicionar papéis ou compras secretas,
+o export deverá selecionar estritamente os recursos do cliente.

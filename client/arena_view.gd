@@ -15,7 +15,12 @@ func _ready() -> void:
 	camera = Camera3D.new()
 	camera.position.y = 0.7
 	player_rig.add_child(camera)
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _ensure_input_actions() -> void:
 	var bindings := {
