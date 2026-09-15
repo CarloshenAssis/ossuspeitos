@@ -28,3 +28,17 @@ clientes estiveram conectados simultaneamente antes do encerramento controlado.
 O encerramento é coordenado pelo servidor: cada cliente confirma sua conclusão,
 o servidor valida quatro `peer_id` distintos, entra em estado de shutdown antes
 de autorizar as saídas e termina após as desconexões ou um timeout curto.
+
+## Marco 2: movimento autoritativo
+
+O cliente transmite apenas uma sequência, um eixo de movimento e uma variação de
+rotação limitada. O servidor deriva o jogador do remetente da RPC, rejeita valores
+não finitos, magnitudes impossíveis e sequências antigas, e calcula posição,
+velocidade e rotação usando seu próprio passo de física. O estado oficial é
+limitado à arena e publicado em snapshots; clientes apenas interpolam cápsulas
+remotas e posicionam a câmera local a partir desses snapshots.
+
+A autoridade de movimento não instancia geometria. Os oito spawns e limites ficam
+em regras compartilhadas determinísticas, enquanto piso, paredes, iluminação,
+câmera e cápsulas pertencem somente à apresentação do cliente. O transporte
+WebSocket e o protocolo coordenado de encerramento permanecem independentes.

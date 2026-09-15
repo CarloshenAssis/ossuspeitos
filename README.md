@@ -1,8 +1,8 @@
 # Armed Mystery
 
-Primeiro marco do protótipo: um servidor Godot 4 headless autoritativo e clientes
-locais conectados por WebSocket. Este marco cobre apenas conexão, apresentação e
-lista pública; ainda não há gameplay.
+Protótipo Godot 4 com servidor headless autoritativo e clientes locais conectados
+por WebSocket. O segundo marco adiciona uma arena 3D provisória, movimento em
+primeira pessoa e cápsulas interpoladas para os jogadores remotos.
 
 ## Requisitos
 
@@ -25,6 +25,9 @@ godot4 --headless --path . -- --mode=client --client-id=client-1
 
 O endereço pode ser alterado com `--url=ws://host:porta`. O servidor aceita
 `--bind=endereço`, `--port=porta` e também a variável de ambiente `PORT`.
+Nos clientes gráficos, use WASD para mover e o mouse para girar a câmera. O
+cliente envia apenas eixos de entrada e variação de rotação; posição e velocidade
+são calculadas, limitadas e publicadas pelo servidor.
 
 ## Teste servidor + quatro clientes
 
@@ -37,4 +40,4 @@ quatro sessões simultâneas com IDs de peer distintos e encerra todos os proces
 Se o executável não estiver no `PATH`, use
 `GODOT_BIN=/caminho/para/godot ./tests/network_smoke_test.sh`.
 
-Não há configuração nem deploy do Railway neste marco.
+Armas, papéis, lojas, Android e deploy do Railway não fazem parte deste marco.

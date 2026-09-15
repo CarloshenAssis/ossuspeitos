@@ -6,7 +6,7 @@ const DEFAULT_BIND_ADDRESS := "127.0.0.1"
 const DEFAULT_PORT := 9080
 const MIN_PLAYERS := 4
 const MAX_PLAYERS := 8
-const PROTOCOL_VERSION := 1
+const PROTOCOL_VERSION := 2
 const CONNECT_TIMEOUT_SECONDS := 10.0
 
 static func user_arguments() -> Dictionary:
@@ -21,4 +21,3 @@ static func user_arguments() -> Dictionary:
 static func integer_argument(arguments: Dictionary, key: String, fallback: int) -> int:
 	var value := str(arguments.get(key, fallback))
 	return value.to_int() if value.is_valid_int() else fallback
-

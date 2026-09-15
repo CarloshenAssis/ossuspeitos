@@ -4,7 +4,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GODOT_BIN="${GODOT_BIN:-$(command -v godot4 || command -v godot || true)}"
 PORT="${TEST_PORT:-$((19080 + RANDOM % 1000))}"
-TMP_DIR="$(mktemp -d)"
+if [[ -n "${TEST_LOG_DIR:-}" ]]; then
+  TMP_DIR="$TEST_LOG_DIR"
+  mkdir -p "$TMP_DIR"
+  REMOVE_TMP_DIR=false
+else
+  TMP_DIR="$(mktemp -d)"
+  REMOVE_TMP_DIR=true
+fi
 PIDS=()
 WATCHDOG_PID=""
 TEST_FINISHED=false
@@ -13,7 +20,7 @@ cleanup() {
   [[ -n "$WATCHDOG_PID" ]] && kill "$WATCHDOG_PID" 2>/dev/null || true
   for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done
   wait 2>/dev/null || true
-  rm -rf "$TMP_DIR"
+  [[ "$REMOVE_TMP_DIR" == true ]] && rm -rf "$TMP_DIR"
 }
 trap cleanup EXIT INT TERM
 
@@ -68,12 +75,43 @@ WATCHDOG_PID=""
 grep -q 'SERVER_TEST_OK clients=4' "$TMP_DIR/server.log"
 [[ "$(grep -c 'CLIENT_JOINED id=client-' "$TMP_DIR/server.log")" -eq 4 ]]
 [[ "$(sed -n 's/.*CLIENT_JOINED.*peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u | wc -l)" -eq 4 ]]
+[[ "$(grep -c 'PLAYER_SPAWNED peer_id=' "$TMP_DIR/server.log")" -eq 4 ]]
+[[ "$(sed -n 's/.*PLAYER_SPAWNED.*position=\([^ ]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u | wc -l)" -eq 4 ]]
+[[ "$(grep -c 'MOVEMENT_AUTHORIZED peer_id=' "$TMP_DIR/server.log")" -eq 4 ]]
+[[ "$(sed -n 's/.*MOVEMENT_AUTHORIZED peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u | wc -l)" -eq 4 ]]
+grep -q 'INPUT_REJECTED peer_id=.* reason=move_magnitude' "$TMP_DIR/server.log"
+grep -q 'SERVER_MOVEMENT_TEST_OK players=4 .* rejected_impossible=1' "$TMP_DIR/server.log"
+awk '
+  /SERVER_MOVEMENT_TEST_OK/ {
+    for (field = 1; field <= NF; field++) {
+      if ($field ~ /^max_speed=/) {
+        split($field, value, "=")
+        if (value[2] > 5.001) exit 1
+        found = 1
+      }
+    }
+  }
+  END { if (!found) exit 1 }
+' "$TMP_DIR/server.log"
+awk -F'[=, ]+' '
+  /PLAYER_STATE/ {
+    for (field = 1; field <= NF; field++) {
+      if ($field == "position") {
+        x = $(field + 1); y = $(field + 2); z = $(field + 3)
+        if (x < -11.501 || x > 11.501 || y < 0.999 || y > 1.001 || z < -11.501 || z > 11.501) exit 1
+        found++
+      }
+    }
+  }
+  END { if (found != 4) exit 1 }
+' "$TMP_DIR/server.log"
 [[ "$(grep -c 'CLIENT_TEST_CONFIRMED peer_id=' "$TMP_DIR/server.log")" -eq 4 ]]
 [[ "$(sed -n 's/.*CLIENT_TEST_CONFIRMED peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u | wc -l)" -eq 4 ]]
 diff -u \
   <(sed -n 's/.*CLIENT_JOINED.*peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u) \
   <(sed -n 's/.*CLIENT_TEST_CONFIRMED peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u)
 grep -q 'SERVER_SHUTDOWN_COMPLETE disconnected=4' "$TMP_DIR/server.log"
+[[ "$(sed -n 's/.*CLIENT_LEFT peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u | wc -l)" -eq 4 ]]
 ! grep -q 'SERVER_SHUTDOWN_TIMEOUT' "$TMP_DIR"/*.log
 ! grep -q 'ready_state != STATE_OPEN' "$TMP_DIR"/*.log
 for id in 1 2 3 4; do

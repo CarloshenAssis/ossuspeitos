@@ -38,7 +38,15 @@ jobs:
           godot --headless --path . --editor --quit 2>&1 \
             | tee "$RUNNER_TEMP/godot-network-logs/parser.log"
 
+      - name: Validate movement rules
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/movement_rules_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/movement-rules.log"
+
       - name: Run network smoke test
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/godot-network-logs/processes
         run: |
           set -o pipefail
           GODOT_BIN="$(command -v godot)" ./tests/network_smoke_test.sh 2>&1 \
