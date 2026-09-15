@@ -25,3 +25,6 @@ permitir trocar WebSocket/TCP por ENet/UDP.
 O teste do marco executa um servidor e quatro clientes como processos headless
 independentes. Marcadores de log, timeout e códigos de saída verificam que quatro
 clientes estiveram conectados simultaneamente antes do encerramento controlado.
+O encerramento é coordenado pelo servidor: cada cliente confirma sua conclusão,
+o servidor valida quatro `peer_id` distintos, entra em estado de shutdown antes
+de autorizar as saídas e termina após as desconexões ou um timeout curto.

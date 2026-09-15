@@ -7,7 +7,11 @@ var client_label := ""
 var expected_clients := 0
 var joined := false
 var started_at_msec := 0
-var test_shutdown_scheduled := false
+var completion_sent := false
+var shutdown_authorized_received := false
+var shutting_down := false
+var completed_peers: Dictionary = {}
+var shutdown_peer_count := 0
 
 func _ready() -> void:
 	arguments = NetworkConfig.user_arguments()
@@ -65,6 +69,11 @@ func _on_peer_connected(peer_id: int) -> void:
 func _on_peer_disconnected(peer_id: int) -> void:
 	if sessions.erase(peer_id):
 		print("CLIENT_LEFT peer_id=%d count=%d" % [peer_id, sessions.size()])
+		if shutting_down:
+			if sessions.is_empty():
+				call_deferred("_successful_server_shutdown")
+			return
+		completed_peers.erase(peer_id)
 		publish_client_count()
 
 func _on_connected_to_server() -> void:
@@ -75,7 +84,7 @@ func _on_connection_failed() -> void:
 	fail("CLIENT_CONNECTION_FAILED id=%s" % client_label)
 
 func _on_server_disconnected() -> void:
-	if not joined or (expected_clients > 0 and not test_shutdown_scheduled):
+	if not joined or (expected_clients > 0 and not shutdown_authorized_received):
 		fail("CLIENT_SERVER_DISCONNECTED id=%s" % client_label)
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -109,25 +118,51 @@ func join_rejected(reason: String) -> void:
 
 func publish_client_count() -> void:
 	client_count_changed.rpc(sessions.size())
-	var stop_after := NetworkConfig.integer_argument(arguments, "stop-after-clients", 0)
-	if stop_after > 0 and sessions.size() >= stop_after and not test_shutdown_scheduled:
-		test_shutdown_scheduled = true
-		print("SERVER_CLIENT_COUNT_REACHED count=%d" % sessions.size())
-		get_tree().create_timer(1.0).timeout.connect(_successful_server_shutdown)
 
 @rpc("authority", "call_remote", "reliable")
 func client_count_changed(count: int) -> void:
 	print("CLIENT_COUNT id=%s count=%d" % [client_label, count])
-	if expected_clients > 0 and count >= expected_clients:
-		test_shutdown_scheduled = true
-		get_tree().create_timer(0.2).timeout.connect(_successful_client_shutdown)
+	if expected_clients > 0 and count >= expected_clients and not completion_sent:
+		completion_sent = true
+		print("CLIENT_TEST_OK id=%s" % client_label)
+		client_test_completed.rpc_id(1)
+
+@rpc("any_peer", "call_remote", "reliable")
+func client_test_completed() -> void:
+	if not multiplayer.is_server() or shutting_down:
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	var stop_after := NetworkConfig.integer_argument(arguments, "stop-after-clients", 0)
+	if stop_after <= 0 or not sessions.has(sender) or completed_peers.has(sender):
+		return
+	completed_peers[sender] = true
+	print("CLIENT_TEST_CONFIRMED peer_id=%d count=%d" % [sender, completed_peers.size()])
+	if stop_after > 0 and completed_peers.size() >= stop_after:
+		_begin_server_shutdown()
+
+func _begin_server_shutdown() -> void:
+	shutting_down = true
+	shutdown_peer_count = completed_peers.size()
+	print("SERVER_TEST_OK clients=%d" % completed_peers.size())
+	for peer_id in completed_peers:
+		shutdown_authorized.rpc_id(peer_id)
+	get_tree().create_timer(1.0).timeout.connect(_server_shutdown_timeout)
+
+@rpc("authority", "call_remote", "reliable")
+func shutdown_authorized() -> void:
+	shutdown_authorized_received = true
+	print("CLIENT_SHUTDOWN_AUTHORIZED id=%s" % client_label)
+	call_deferred("_successful_client_shutdown")
 
 func _successful_client_shutdown() -> void:
-	print("CLIENT_TEST_OK id=%s" % client_label)
 	get_tree().quit(0)
 
 func _successful_server_shutdown() -> void:
-	print("SERVER_TEST_OK clients=%d" % sessions.size())
+	print("SERVER_SHUTDOWN_COMPLETE disconnected=%d" % shutdown_peer_count)
+	get_tree().quit(0)
+
+func _server_shutdown_timeout() -> void:
+	print("SERVER_SHUTDOWN_TIMEOUT remaining=%d" % sessions.size())
 	get_tree().quit(0)
 
 func fail(message: String) -> void:
