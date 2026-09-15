@@ -1,0 +1,8 @@
+# Cache do editor Godot, regenerado por `godot --headless --editor --quit`.
+.godot/
+
+# Identificadores de recurso gerados pelo editor; o projeto nunca os versionou.
+*.uid
+
+# Saída da exportação Web.
+/build/

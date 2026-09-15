@@ -1,8 +1,11 @@
 # Armed Mystery
 
 Protótipo Godot 4 com servidor headless autoritativo e clientes locais conectados
-por WebSocket. O segundo marco adiciona uma arena 3D provisória, movimento em
-primeira pessoa e cápsulas interpoladas para os jogadores remotos.
+por WebSocket. O segundo marco adicionou uma arena 3D provisória, movimento em
+primeira pessoa e cápsulas interpoladas para os jogadores remotos. O marco atual
+acrescenta as fundações do ciclo de partida: lobby autoritativo, máquina de
+estados da rodada, papéis secretos, estado vivo/morto, condições de vitória,
+reinício e um HUD provisório.
 
 ## Requisitos
 
@@ -29,18 +32,140 @@ Nos clientes gráficos, use WASD para mover e o mouse para girar a câmera. O
 cliente envia apenas eixos de entrada e variação de rotação; posição e velocidade
 são calculadas, limitadas e publicadas pelo servidor.
 
-## Teste servidor + quatro clientes
+## Ciclo de partida
+
+O servidor é a única autoridade sobre participantes, fase da rodada, contagem
+regressiva, sorteio de papéis, estado vivo/morto, vencedor e reinício. O cliente
+envia apenas intenções e recebe o resultado oficial.
+
+### Estados da rodada
+
+| Estado | Significado | Transições válidas |
+| --- | --- | --- |
+| `WAITING` | Lobby aberto, sem papéis e sem vencedor | `COUNTDOWN` |
+| `COUNTDOWN` | Contagem publicada pelo servidor | `ACTIVE`, `WAITING` |
+| `ACTIVE` | Participantes congelados, papéis sorteados | `ENDED` |
+| `ENDED` | Vencedor registrado, gameplay bloqueado | `WAITING`, `COUNTDOWN` |
+
+Qualquer outra transição é recusada e registrada como
+`ROUND_TRANSITION_REJECTED`. Todo prazo usa o tempo do servidor e carrega o
+identificador da rodada que o criou, portanto um temporizador antigo nunca
+altera a rodada seguinte.
+
+### Quantidade de jogadores e distribuição dos papéis
+
+São aceitos de 4 a 8 jogadores (`RoundRules.MIN_PLAYERS` e
+`RoundRules.MAX_PLAYERS`); o nono é recusado com `room_unavailable`. Toda rodada
+válida tem exatamente **1 assassino**, **1 detetive** e o restante **vítimas**:
+2 vítimas com 4 jogadores, 6 vítimas com 8.
+
+O sorteio acontece somente no servidor, usa um `RandomNumberGenerator` injetável
+(`--round-seed=` para reproduzir), embaralha por Fisher-Yates e portanto não
+favorece a ordem de conexão. Cada rodada produz uma distribuição nova.
+
+### Limite de sigilo
+
+O mapa completo de papéis existe apenas em `RoundAuthority` e nunca sai por
+broadcast. Cada cliente recebe o próprio papel por `rpc_id`, depois que o
+servidor confirma que o peer pertence à rodada, que a rodada está `ACTIVE` e que
+o papel é dele. Roster público, snapshots de movimento, estado público, logs de
+cliente e a demo offline não têm campo de papel. Os logs de servidor só trazem a
+contagem agregada (`ROUND_ROLE_COUNTS assassin=1 detective=1 victim=2`), nunca a
+associação entre peer e papel. Não existe RPC que permita ao cliente escolher o
+próprio papel, consultar o papel alheio ou declarar morte; o servidor também
+desliga o relay do `SceneMultiplayer`, então um cliente não consegue endereçar
+RPC a outro cliente.
+
+### Join tardio
+
+Quem entra durante `WAITING` ou `COUNTDOWN` participa da rodada. Quem entra com
+a rodada `ACTIVE` ou `ENDED` fica só no lobby, não recebe papel, não pode ser
+eliminado e aguarda o próximo `WAITING` (marcador `ROUND_LATE_JOIN`).
+
+### Política de desconexão
+
+| Fase | Efeito |
+| --- | --- |
+| `WAITING` | Apenas atualiza o lobby |
+| `COUNTDOWN` | Cancela a contagem e volta a `WAITING` se restarem menos de 4 |
+| `ACTIVE`, participante vivo | Conta como eliminado (`cause=disconnect`) e reavalia a vitória |
+| `ACTIVE`, assassino | Vitória imediata dos inocentes |
+| `ACTIVE`, último inocente | Vitória do assassino |
+| `ACTIVE`, detetive | Conta como eliminado, mas não encerra se houver vítima viva |
+| `ENDED` | Apenas remove a sessão |
+
+Durante a rodada nada anuncia que o jogador desconectado era o assassino: só o
+estado de vida muda. O papel aparece no máximo como parte do resultado final.
+
+### Condições de vitória
+
+- **Inocentes** vencem quando o assassino não está mais vivo
+  (`reason=assassin_down`).
+- **Assassino** vence quando está vivo e não resta nenhum inocente vivo
+  (`reason=innocents_down`).
+
+Neste marco, "inocente" é `DETECTIVE` ou `VICTIM`. A avaliação roda no servidor
+após cada eliminação e após cada desconexão durante `ACTIVE`. O resultado público
+tem somente identificador da rodada, equipe vencedora (`ASSASSIN` ou
+`INNOCENTS`) e a razão sanitizada.
+
+### Eliminação
+
+`RoundAuthority.eliminate_player(peer_id, cause, instigator_peer_id, now_msec)` é
+API interna do servidor, sem RPC equivalente. Ela recusa peer inexistente,
+jogador fora da rodada, eliminação duplicada e rodada que não esteja `ACTIVE`, e
+sanitiza a causa antes de registrar. Por enquanto só os testes e o gancho de
+teste do servidor a chamam; o sistema de combate futuro usará o mesmo ponto.
+
+### HUD provisório
+
+O cliente gráfico carrega `client/round_hud.tscn` e mostra estado da rodada,
+jogadores conectados, contagem regressiva, papel local depois do início, estado
+local vivo/morto, vencedor e o aviso de quem aguarda a próxima rodada. O HUD não
+calcula papel, vitória nem vida: ele só formata o que o servidor publicou. O
+servidor headless nunca carrega essa cena — os marcadores
+`SERVER_UI hud=false arena=false display=headless` e `CLIENT_UI ...` são
+derivados do estado real dos nós e verificados pelos testes.
+
+## Testes
 
 ```bash
+# regras puras da rodada
+godot4 --headless --path . --script tests/round_rules_test.gd
+# apresentação do HUD, sem renderização
+godot4 --headless --path . --script tests/round_hud_test.gd
+# autoridade headless: estados, papéis, vivo/morto, vitória, reinício
+godot4 --headless --path . --script tests/round_authority_test.gd
+# regras de movimento
+godot4 --headless --path . --script tests/movement_rules_test.gd
+# sigilo dos papéis com servidor e cinco clientes reais
+./tests/round_network_test.sh
+# regressão de movimento com servidor e quatro clientes reais
 ./tests/network_smoke_test.sh
 ```
 
-O teste abre uma porta local aleatória, inicia cinco processos headless, exige
-quatro sessões simultâneas com IDs de peer distintos e encerra todos os processos.
-Se o executável não estiver no `PATH`, use
-`GODOT_BIN=/caminho/para/godot ./tests/network_smoke_test.sh`.
+O teste de movimento abre uma porta local aleatória, inicia cinco processos
+headless, exige quatro sessões simultâneas com IDs de peer distintos e encerra
+todos os processos. O teste de sigilo sobe um servidor, quatro clientes que
+participam da rodada e um quinto que chega tarde; ele confirma que cada cliente
+recebe exatamente um papel, que nenhum log traz papel alheio e que a tentativa de
+um cliente entregar papel a outro não chega ao destino. Se o executável não
+estiver no `PATH`, use `GODOT_BIN=/caminho/para/godot ./tests/...`.
 
-Armas, papéis, lojas, Android e deploy do Railway não fazem parte deste marco.
+Argumentos úteis do servidor: `--countdown-seconds=`, `--round-end-delay-seconds=`
+e `--round-seed=` para rodadas curtas e reproduzíveis.
+
+## Limitações deste marco
+
+Ainda **não existem**: armas, tiros, dano jogável, munição, itens no chão,
+inventário, lojas, créditos, arma especial do assassino, Arma do Veredito do
+detetive, ressurreição, corpos, espectador, voz, chat, matchmaking, servidor
+Railway, multiplayer Web público, banco de dados, contas, APK Android, arte
+definitiva, efeitos sonoros e deploy do servidor.
+
+Além disso, neste marco o movimento **não** é bloqueado pela fase da rodada:
+jogadores continuam podendo se mover em `WAITING` e `ENDED`. O bloqueio de ações
+de gameplay por fase entra junto com o combate.
 
 ## Demonstração visual offline
 

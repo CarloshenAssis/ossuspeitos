@@ -15,7 +15,7 @@ permissions:
 jobs:
   build-web-demo:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -51,12 +51,43 @@ jobs:
             "$RUNNER_TEMP/godot-web-logs/demo.log"
           ! grep -Eq 'SERVER_|CLIENT_CONNECTING|CLIENT_CONNECTED|CLIENT_CONNECTION_FAILED|CLIENT_SERVER_DISCONNECTED|unable_to_connect' \
             "$RUNNER_TEMP/godot-web-logs/demo.log"
+          ! grep -Eq 'ROUND_|ROLE_|ASSASSIN|DETECTIVE|VICTIM' \
+            "$RUNNER_TEMP/godot-web-logs/demo.log"
 
       - name: Validate movement rules
         run: |
           set -o pipefail
           godot --headless --path . --script tests/movement_rules_test.gd 2>&1 \
             | tee "$RUNNER_TEMP/godot-web-logs/movement-rules.log"
+
+      - name: Validate round rules
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/round_rules_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/round-rules.log"
+          grep -q 'ROUND_RULES_TEST_OK' "$RUNNER_TEMP/godot-web-logs/round-rules.log"
+
+      - name: Validate round HUD presentation
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/round_hud_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/round-hud.log"
+          grep -q 'ROUND_HUD_TEST_OK' "$RUNNER_TEMP/godot-web-logs/round-hud.log"
+
+      - name: Validate round authority
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/round_authority_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/round-authority.log"
+          grep -q 'ROUND_AUTHORITY_TEST_OK' "$RUNNER_TEMP/godot-web-logs/round-authority.log"
+
+      - name: Validate role privacy
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/godot-web-logs/round-processes
+        run: |
+          set -o pipefail
+          GODOT_BIN="$(command -v godot)" ./tests/round_network_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/round-network.log"
 
       - name: Validate multiplayer regression
         env:

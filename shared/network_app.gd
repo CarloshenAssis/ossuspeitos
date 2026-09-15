@@ -2,7 +2,8 @@ extends Node
 
 var arguments: Dictionary
 var mode := ""
-var sessions: Dictionary = {}
+var lobby := LobbyRegistry.new()
+var round_authority: RoundAuthority
 var client_label := ""
 var expected_clients := 0
 var joined := false
@@ -29,6 +30,20 @@ var server_peer_closing := false
 var server_terminal := false
 var shutdown_prepare_timer: Timer
 var closed_session_count := 0
+var round_stop_after := 0
+var round_expect_late_joins := 0
+var round_ack_peers: Dictionary = {}
+var round_late_join_peers: Dictionary = {}
+var round_test_mode := false
+var round_hud: Node
+var local_role := Role.NONE
+var local_round_id := 0
+var local_role_receipts := 0
+var local_round_public: Dictionary = {}
+var local_roster_peers: Array = []
+var local_result_round_id := 0
+var role_spoof_attempted := false
+var ack_replay_attempted := false
 
 func _ready() -> void:
 	arguments = NetworkConfig.user_arguments()
@@ -51,6 +66,7 @@ func start_demo() -> void:
 
 func start_server() -> void:
 	authoritative_world = AuthoritativeWorld.new()
+	_start_round_authority()
 	shutdown_prepare_timer = Timer.new()
 	shutdown_prepare_timer.one_shot = true
 	shutdown_prepare_timer.timeout.connect(_server_shutdown_timeout)
@@ -63,12 +79,35 @@ func start_server() -> void:
 		return
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	# Sem relay: um cliente não consegue endereçar RPC a outro cliente, portanto
+	# não existe caminho para se passar pelo servidor e entregar um papel.
+	if multiplayer is SceneMultiplayer:
+		(multiplayer as SceneMultiplayer).server_relay = false
 	multiplayer.multiplayer_peer = peer
+	# Marcador derivado do estado real: o servidor headless não cria HUD,
+	# câmera, cápsulas nem qualquer outro nó de apresentação.
+	print("SERVER_UI hud=%s arena=%s display=%s" % [
+		str(round_hud != null), str(arena_view != null), DisplayServer.get_name()])
 	print("SERVER_READY address=%s port=%d" % [bind_address, port])
+
+func _start_round_authority() -> void:
+	round_authority = RoundAuthority.new(lobby, NetworkConfig.integer_argument(arguments, "round-seed", 0))
+	round_authority.configure(
+		NetworkConfig.float_argument(arguments, "countdown-seconds", RoundRules.COUNTDOWN_SECONDS),
+		NetworkConfig.float_argument(arguments, "round-end-delay-seconds", RoundRules.ROUND_END_DELAY_SECONDS))
+	round_stop_after = NetworkConfig.integer_argument(arguments, "stop-after-round-active", 0)
+	round_expect_late_joins = NetworkConfig.integer_argument(arguments, "expect-late-joins", 0)
+	round_authority.state_changed.connect(_on_round_state_changed)
+	round_authority.roles_ready.connect(_on_round_roles_ready)
+	round_authority.alive_changed.connect(_on_round_alive_changed)
+	round_authority.round_ended.connect(_on_round_ended)
+	round_authority.round_reset.connect(_on_round_reset)
+	round_authority.invalid_transition.connect(_on_round_invalid_transition)
 
 func start_client() -> void:
 	client_label = str(arguments.get("client-id", "client"))
 	expected_clients = NetworkConfig.integer_argument(arguments, "expect-clients", 0)
+	round_test_mode = NetworkConfig.bool_argument(arguments, "round-test")
 	started_at_msec = Time.get_ticks_msec()
 	var url := str(arguments.get("url", "ws://%s:%d" % [NetworkConfig.DEFAULT_HOST, configured_port()]))
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
@@ -82,7 +121,20 @@ func start_client() -> void:
 	if DisplayServer.get_name() != "headless":
 		arena_view = ArenaView.new()
 		add_child(arena_view)
+		_start_round_hud()
+	print("CLIENT_UI id=%s hud=%s arena=%s display=%s" % [
+		client_label, str(round_hud != null), str(arena_view != null), DisplayServer.get_name()])
 	print("CLIENT_CONNECTING id=%s url=%s" % [client_label, url])
+
+## O HUD só existe no cliente gráfico. A cena nem é carregada no headless,
+## portanto o servidor nunca instancia interface.
+func _start_round_hud() -> void:
+	var scene := load("res://client/round_hud.tscn") as PackedScene
+	if scene == null:
+		return
+	round_hud = scene.instantiate()
+	add_child(round_hud)
+	_update_round_hud()
 
 func configured_port() -> int:
 	var fallback := NetworkConfig.DEFAULT_PORT
@@ -96,7 +148,7 @@ func _process(_delta: float) -> void:
 		return
 	if not joined and Time.get_ticks_msec() - started_at_msec > int(NetworkConfig.CONNECT_TIMEOUT_SECONDS * 1000.0):
 		fail("CLIENT_TIMEOUT id=%s" % client_label)
-	if joined and expected_clients == 0:
+	if joined and expected_clients == 0 and not round_test_mode:
 		input_accumulator += _delta
 		if input_accumulator >= 0.05:
 			input_accumulator = 0.0
@@ -106,7 +158,12 @@ func _process(_delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	if mode != "server" or shutting_down or authoritative_world == null:
 		return
-	authoritative_world.step(delta, Time.get_ticks_msec())
+	var now_msec := Time.get_ticks_msec()
+	authoritative_world.step(delta, now_msec)
+	if round_authority != null:
+		round_authority.tick(now_msec)
+		if round_authority.consume_countdown_tick(now_msec):
+			_publish_round_state()
 	snapshot_accumulator += delta
 	if snapshot_accumulator >= 0.05:
 		snapshot_accumulator = 0.0
@@ -120,16 +177,24 @@ func _on_peer_connected(peer_id: int) -> void:
 	print("PEER_CONNECTED peer_id=%d" % peer_id)
 
 func _on_peer_disconnected(peer_id: int) -> void:
-	if server_terminal:
+	if server_terminal or not lobby.has(peer_id):
 		return
-	if sessions.erase(peer_id):
-		if authoritative_world != null:
-			authoritative_world.remove_player(peer_id)
-		print("CLIENT_LEFT peer_id=%d count=%d" % [peer_id, sessions.size()])
-		if shutting_down:
-			return
-		completed_peers.erase(peer_id)
-		publish_client_count()
+	if authoritative_world != null:
+		authoritative_world.remove_player(peer_id)
+	# A autoridade remove a sessão do lobby e aplica a política da fase atual:
+	# cancelar o countdown, marcar o participante como eliminado ou apenas
+	# atualizar o lobby. O papel do jogador que saiu nunca é anunciado.
+	if round_authority != null:
+		round_authority.leave(peer_id, Time.get_ticks_msec())
+	else:
+		lobby.remove(peer_id)
+	print("CLIENT_LEFT peer_id=%d count=%d" % [peer_id, lobby.size()])
+	if shutting_down:
+		return
+	completed_peers.erase(peer_id)
+	round_ack_peers.erase(peer_id)
+	round_late_join_peers.erase(peer_id)
+	publish_client_count()
 
 func _on_connected_to_server() -> void:
 	print("CLIENT_CONNECTED id=%s peer_id=%d" % [client_label, multiplayer.get_unique_id()])
@@ -150,28 +215,36 @@ func _on_server_disconnected() -> void:
 func request_join(protocol_version: int, requested_label: String) -> void:
 	if not multiplayer.is_server() or shutting_down:
 		return
+	# A identidade de rede vem sempre do remetente da RPC, nunca de um argumento.
 	var sender := multiplayer.get_remote_sender_id()
-	var clean_label := requested_label.strip_edges()
 	if protocol_version != NetworkConfig.PROTOCOL_VERSION:
 		join_rejected.rpc_id(sender, "protocol_version")
 		return
-	if clean_label.is_empty() or clean_label.length() > 32 or not clean_label.replace("-", "_").is_valid_identifier() or sessions.has(sender):
-		join_rejected.rpc_id(sender, "invalid_client")
-		return
-	if sessions.size() >= NetworkConfig.MAX_PLAYERS or sessions.values().has(clean_label):
-		join_rejected.rpc_id(sender, "room_unavailable")
+	var reason := lobby.validate_join(sender, requested_label)
+	if not reason.is_empty():
+		join_rejected.rpc_id(sender, reason)
 		return
 	var state := authoritative_world.add_player(sender)
 	if state.is_empty():
 		join_rejected.rpc_id(sender, "room_unavailable")
 		return
-	sessions[sender] = clean_label
-	print("CLIENT_JOINED id=%s peer_id=%d count=%d" % [clean_label, sender, sessions.size()])
+	var join_reason := round_authority.join(sender, requested_label, Time.get_ticks_msec())
+	if not join_reason.is_empty():
+		authoritative_world.remove_player(sender)
+		join_rejected.rpc_id(sender, join_reason)
+		return
+	print("CLIENT_JOINED id=%s peer_id=%d count=%d" % [lobby.label_for(sender), sender, lobby.size()])
 	var spawn: Vector3 = state["position"]
 	print("PLAYER_SPAWNED peer_id=%d position=%.2f,%.2f,%.2f" % [sender, spawn.x, spawn.y, spawn.z])
+	if round_authority.is_waiting_for_next_round(sender):
+		round_late_join_peers[sender] = true
+		print("ROUND_LATE_JOIN peer_id=%d round_id=%d count=%d" % [
+			sender, round_authority.round_id, round_late_join_peers.size()])
 	join_accepted.rpc_id(sender, sender)
 	publish_client_count()
 	world_snapshot.rpc(authoritative_world.snapshot())
+	_publish_round_state(sender)
+	_maybe_finish_round_privacy_test()
 
 @rpc("authority", "call_remote", "reliable")
 func join_accepted(peer_id: int) -> void:
@@ -187,7 +260,8 @@ func join_rejected(reason: String) -> void:
 func publish_client_count() -> void:
 	if shutting_down:
 		return
-	client_count_changed.rpc(sessions.size())
+	client_count_changed.rpc(lobby.size())
+	_publish_round_state()
 
 @rpc("authority", "call_remote", "reliable")
 func client_count_changed(count: int) -> void:
@@ -219,7 +293,7 @@ func submit_input(sequence: int, move: Vector2, yaw_delta: float) -> void:
 	if not multiplayer.is_server() or shutting_down:
 		return
 	var sender := multiplayer.get_remote_sender_id()
-	if not sessions.has(sender):
+	if not lobby.has(sender):
 		return
 	var reason := authoritative_world.accept_input(sender, sequence, move, yaw_delta, Time.get_ticks_msec())
 	if not reason.is_empty():
@@ -270,7 +344,7 @@ func client_test_completed() -> void:
 		return
 	var sender := multiplayer.get_remote_sender_id()
 	var stop_after := NetworkConfig.integer_argument(arguments, "stop-after-clients", 0)
-	if stop_after <= 0 or not sessions.has(sender) or completed_peers.has(sender):
+	if stop_after <= 0 or not lobby.has(sender) or completed_peers.has(sender):
 		return
 	if not authoritative_world.has_moved(sender):
 		print("TEST_CONFIRMATION_REJECTED peer_id=%d reason=not_moved" % sender)
@@ -278,14 +352,10 @@ func client_test_completed() -> void:
 	completed_peers[sender] = true
 	print("CLIENT_TEST_CONFIRMED peer_id=%d count=%d" % [sender, completed_peers.size()])
 	if completed_peers.size() >= stop_after and not impossible_input_rejected_peers.is_empty() and authoritative_world.all_positions_distinct(completed_peers.keys()):
-		_begin_server_shutdown()
+		_report_movement_test()
+		_begin_server_shutdown(completed_peers.keys())
 
-func _begin_server_shutdown() -> void:
-	if shutting_down:
-		return
-	shutting_down = true
-	for peer_id in completed_peers:
-		shutdown_expected_peers[peer_id] = true
+func _report_movement_test() -> void:
 	var observed_max_speed := 0.0
 	for peer_id in completed_peers:
 		var state: Dictionary = authoritative_world.states[peer_id]
@@ -295,7 +365,14 @@ func _begin_server_shutdown() -> void:
 		observed_max_speed = maxf(observed_max_speed, speed)
 		print("PLAYER_STATE peer_id=%d position=%.3f,%.3f,%.3f speed=%.3f" % [peer_id, position.x, position.y, position.z, speed])
 	print("SERVER_MOVEMENT_TEST_OK players=%d max_speed=%.3f rejected_impossible=%d" % [completed_peers.size(), observed_max_speed, impossible_input_rejected_peers.size()])
-	print("SERVER_TEST_OK clients=%d" % completed_peers.size())
+
+func _begin_server_shutdown(peer_ids: Array) -> void:
+	if shutting_down:
+		return
+	shutting_down = true
+	for peer_id in peer_ids:
+		shutdown_expected_peers[int(peer_id)] = true
+	print("SERVER_TEST_OK clients=%d" % shutdown_expected_peers.size())
 	for peer_id in shutdown_expected_peers:
 		shutdown_prepare.rpc_id(peer_id)
 	shutdown_prepare_timer.start(2.0)
@@ -313,7 +390,7 @@ func shutdown_ready() -> void:
 	if not multiplayer.is_server() or not shutting_down or server_peer_closing:
 		return
 	var sender := multiplayer.get_remote_sender_id()
-	if not shutdown_expected_peers.has(sender) or not sessions.has(sender) or shutdown_ready_peers.has(sender):
+	if not shutdown_expected_peers.has(sender) or not lobby.has(sender) or shutdown_ready_peers.has(sender):
 		return
 	shutdown_ready_peers[sender] = true
 	print("CLIENT_SHUTDOWN_READY peer_id=%d count=%d" % [sender, shutdown_ready_peers.size()])
@@ -333,13 +410,17 @@ func _close_server_peer() -> void:
 	server_peer_closing = true
 	server_terminal = true
 	closed_session_count = shutdown_expected_peers.size()
-	sessions.clear()
+	if round_authority != null:
+		round_authority.clear()
+	lobby.clear()
 	if authoritative_world != null:
 		authoritative_world.clear()
 	completed_peers.clear()
 	impossible_input_rejected_peers.clear()
 	shutdown_ready_peers.clear()
 	shutdown_expected_peers.clear()
+	round_ack_peers.clear()
+	round_late_join_peers.clear()
 	multiplayer.multiplayer_peer.close()
 	print("SERVER_SHUTDOWN_COMPLETE closed=%d" % closed_session_count)
 	get_tree().quit(0)
@@ -347,8 +428,213 @@ func _close_server_peer() -> void:
 func _server_shutdown_timeout() -> void:
 	if server_terminal or shutdown_ready_peers.size() >= shutdown_expected_peers.size():
 		return
-	print("SERVER_SHUTDOWN_TIMEOUT ready=%d remaining=%d" % [shutdown_ready_peers.size(), sessions.size()])
+	print("SERVER_SHUTDOWN_TIMEOUT ready=%d remaining=%d" % [shutdown_ready_peers.size(), lobby.size()])
 	get_tree().quit(1)
+
+# --- Ciclo de partida --------------------------------------------------------
+#
+# Mensagens públicas: `round_public_state` e `round_roster`, em broadcast.
+# Mensagem privada: `round_private_role`, sempre por `rpc_id` ao próprio dono.
+# Estado interno do servidor (mapa de papéis, seed, avaliação de vitória)
+# jamais sai de `RoundAuthority`.
+
+func _on_round_state_changed(state: int, round_id: int) -> void:
+	print("ROUND_STATE state=%s round_id=%d players=%d participants=%d" % [
+		RoundState.to_label(state), round_id, lobby.size(), round_authority.participants.size()])
+	_publish_round_state()
+
+func _on_round_roles_ready(round_id: int, participant_ids: Array) -> void:
+	# Somente a contagem agregada vai para o log: nunca a associação peer/papel.
+	var counts := round_authority.role_counts()
+	print("ROUND_ROLE_COUNTS assassin=%d detective=%d victim=%d" % [
+		int(counts["assassin"]), int(counts["detective"]), int(counts["victim"])])
+	var delivered := 0
+	for raw_peer_id in participant_ids:
+		var peer_id := int(raw_peer_id)
+		# O papel só sai se pertencer ao destinatário, ele estiver na rodada
+		# ativa e a sessão continuar conectada.
+		if not round_authority.can_deliver_role(peer_id):
+			continue
+		var role := round_authority.get_role_for_peer(peer_id)
+		round_private_role.rpc_id(peer_id, round_id, role)
+		delivered += 1
+	print("ROUND_ROLES_DELIVERED round_id=%d peers=%d" % [round_id, delivered])
+
+func _on_round_alive_changed(round_id: int, peer_id: int, alive: bool) -> void:
+	print("ROUND_ALIVE_CHANGED round_id=%d peer_id=%d alive=%s" % [round_id, peer_id, str(alive)])
+	_publish_round_state()
+
+func _on_round_ended(round_id: int, winning_team: int, reason: String) -> void:
+	# `state_changed` já publicou o payload com o resultado; aqui só registramos.
+	print("ROUND_RESULT round_id=%d team=%s reason=%s" % [
+		round_id, Role.team_to_label(winning_team), reason])
+
+func _on_round_reset(round_id: int) -> void:
+	round_ack_peers.clear()
+	round_late_join_peers.clear()
+	print("ROUND_RESET round_id=%d players=%d" % [round_id, lobby.size()])
+
+func _on_round_invalid_transition(from_state: int, to_state: int) -> void:
+	print("ROUND_TRANSITION_REJECTED from=%s to=%s" % [
+		RoundState.to_label(from_state), RoundState.to_label(to_state)])
+
+## Publica estado público e roster seguro. `target_peer_id` > 0 envia apenas ao
+## recém-chegado, para que ele receba a fase corrente sem esperar a próxima
+## mudança.
+func _publish_round_state(target_peer_id: int = 0) -> void:
+	if not multiplayer.is_server() or shutting_down or round_authority == null:
+		return
+	var payload := round_authority.public_state(Time.get_ticks_msec())
+	var roster := round_authority.public_roster()
+	if target_peer_id > 0:
+		round_public_state.rpc_id(target_peer_id, payload)
+		round_roster.rpc_id(target_peer_id, roster)
+		return
+	round_public_state.rpc(payload)
+	round_roster.rpc(roster)
+
+@rpc("authority", "call_remote", "reliable")
+func round_public_state(payload: Dictionary) -> void:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
+		return
+	local_round_public = payload
+	var state := int(payload.get("state", RoundState.WAITING))
+	if state == RoundState.WAITING or state == RoundState.COUNTDOWN:
+		local_role = Role.NONE
+		local_round_id = 0
+	print("CLIENT_ROUND_STATE id=%s state=%s round_id=%d players=%d countdown=%d" % [
+		client_label, RoundState.to_label(state), int(payload.get("round_id", 0)),
+		int(payload.get("connected", 0)), int(payload.get("countdown_msec", 0))])
+	var announced_round := int(payload.get("round_id", 0))
+	if state == RoundState.ENDED and local_result_round_id != announced_round:
+		local_result_round_id = announced_round
+		print("CLIENT_ROUND_RESULT id=%s round_id=%d team=%s reason=%s" % [
+			client_label, announced_round,
+			Role.team_to_label(int(payload.get("winning_team", Role.TEAM_NONE))),
+			str(payload.get("winner_reason", ""))])
+	_update_round_hud()
+
+@rpc("authority", "call_remote", "reliable")
+func round_roster(entries: Array) -> void:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
+		return
+	local_roster_peers.clear()
+	for raw_entry in entries:
+		var entry: Dictionary = raw_entry
+		# O roster público nunca traz papel; se trouxesse, o cliente descartaria.
+		if entry.has("role"):
+			print("CLIENT_ROSTER_REJECTED id=%s reason=role_field" % client_label)
+			return
+		local_roster_peers.append(int(entry.get("peer_id", 0)))
+	if round_hud != null:
+		round_hud.call("apply_roster", entries)
+
+## Entrega privada do papel. Só chega por `rpc_id` vinda do servidor.
+@rpc("authority", "call_remote", "reliable")
+func round_private_role(round_id: int, role: int) -> void:
+	if multiplayer.is_server():
+		return
+	if multiplayer.get_remote_sender_id() != 1:
+		print("ROLE_SPOOF_REJECTED id=%s" % client_label)
+		return
+	if round_id <= 0 or not Role.is_valid(role):
+		return
+	if local_round_id == round_id and local_role == role:
+		return
+	local_round_id = round_id
+	local_role = role
+	local_role_receipts += 1
+	# O valor do papel nunca vai para o log; só a confirmação de recebimento.
+	print("CLIENT_PRIVATE_ROLE_RECEIVED id=%s count=%d" % [client_label, local_role_receipts])
+	_update_round_hud()
+	if round_test_mode:
+		_run_role_privacy_probes()
+		round_role_acknowledged.rpc_id(1, round_id)
+
+## Confirmação de recebimento. Carrega somente o identificador da rodada.
+@rpc("any_peer", "call_remote", "reliable")
+func round_role_acknowledged(acknowledged_round_id: int) -> void:
+	if not multiplayer.is_server() or shutting_down or round_authority == null:
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if round_stop_after <= 0:
+		return
+	var reason := ""
+	if round_authority.state != RoundState.ACTIVE:
+		reason = "round_not_active"
+	elif acknowledged_round_id != round_authority.round_id:
+		reason = "stale_round"
+	elif not lobby.has(sender) or not round_authority.is_participant(sender):
+		reason = "not_in_round"
+	elif round_ack_peers.has(sender):
+		reason = "duplicate"
+	if not reason.is_empty():
+		print("ROUND_ACK_REJECTED peer_id=%d reason=%s" % [sender, reason])
+		return
+	round_ack_peers[sender] = true
+	print("CLIENT_PRIVATE_ROLE_ACK peer_id=%d count=%d" % [sender, round_ack_peers.size()])
+	_maybe_finish_round_privacy_test()
+
+## Encerramento do teste de sigilo. Roda apenas sob --stop-after-round-active,
+## depois de todas as confirmações e dos join tardios esperados.
+func _maybe_finish_round_privacy_test() -> void:
+	if round_stop_after <= 0 or shutting_down or round_authority == null:
+		return
+	if round_authority.state != RoundState.ACTIVE:
+		return
+	if round_ack_peers.size() < round_stop_after:
+		return
+	if round_late_join_peers.size() < round_expect_late_joins:
+		return
+	var counts := round_authority.role_counts()
+	print("ROLE_PRIVACY_TEST_OK clients=%d assassin=%d detective=%d victim=%d" % [
+		round_ack_peers.size(), int(counts["assassin"]), int(counts["detective"]), int(counts["victim"])])
+	print("ROUND_LATE_JOIN_TOTAL count=%d participants=%d" % [
+		round_late_join_peers.size(), round_authority.participants.size()])
+	_eliminate_assassin_for_test()
+	# Encerra com todas as sessões conectadas, inclusive as que aguardam a
+	# próxima rodada, para que ninguém perca o handshake de shutdown.
+	_begin_server_shutdown(lobby.peer_ids())
+
+## Gancho de teste do combate futuro: exercita a API interna de eliminação e a
+## avaliação de vitória. Nenhuma RPC de cliente alcança este caminho.
+func _eliminate_assassin_for_test() -> void:
+	for peer_id in round_authority.participants:
+		if round_authority.get_role_for_peer(peer_id) != Role.ASSASSIN:
+			continue
+		var reason := round_authority.eliminate_player(int(peer_id), "test", 0, Time.get_ticks_msec())
+		print("ROUND_TEST_ELIMINATION accepted=%s repeated_rejected=%s" % [
+			str(reason.is_empty()),
+			str(round_authority.eliminate_player(int(peer_id), "test", 0, Time.get_ticks_msec()) != "")])
+		return
+
+## Sondas do teste de sigilo, executadas por um único cliente. Nenhuma delas
+## pode alterar o estado oficial.
+func _run_role_privacy_probes() -> void:
+	if client_label == "client-1" and not role_spoof_attempted:
+		role_spoof_attempted = true
+		# Tenta se passar pelo servidor e entregar um papel a outro peer.
+		var target := _first_remote_roster_peer()
+		if target > 0:
+			round_private_role.rpc_id(target, local_round_id, Role.ASSASSIN)
+		print("CLIENT_ROLE_SPOOF_ATTEMPTED id=%s target=%d" % [client_label, target])
+	if client_label == "client-2" and not ack_replay_attempted:
+		ack_replay_attempted = true
+		# Confirmação com identificador de rodada forjado: o servidor recusa.
+		round_role_acknowledged.rpc_id(1, local_round_id + 4242)
+		print("CLIENT_STALE_ACK_ATTEMPTED id=%s" % client_label)
+
+func _first_remote_roster_peer() -> int:
+	var own_id := multiplayer.get_unique_id()
+	for peer_id in local_roster_peers:
+		if int(peer_id) != own_id:
+			return int(peer_id)
+	return 0
+
+func _update_round_hud() -> void:
+	if round_hud == null:
+		return
+	round_hud.call("apply_round_state", local_round_public, local_role, local_round_id, multiplayer.get_unique_id())
 
 func fail(message: String) -> void:
 	push_error(message)

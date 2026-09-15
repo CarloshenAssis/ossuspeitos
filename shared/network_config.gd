@@ -4,9 +4,13 @@ extends RefCounted
 const DEFAULT_HOST := "127.0.0.1"
 const DEFAULT_BIND_ADDRESS := "127.0.0.1"
 const DEFAULT_PORT := 9080
-const MIN_PLAYERS := 4
-const MAX_PLAYERS := 8
-const PROTOCOL_VERSION := 2
+## Os limites de sala vivem em `RoundRules`; aqui ficam apenas os apelidos
+## usados pela camada de rede, para que não existam dois valores divergentes.
+const MIN_PLAYERS := RoundRules.MIN_PLAYERS
+const MAX_PLAYERS := RoundRules.MAX_PLAYERS
+## 3: acrescenta o estado público da rodada, o roster seguro e a entrega
+## direcionada do papel. Incompatível com clientes do marco de movimento.
+const PROTOCOL_VERSION := 3
 const CONNECT_TIMEOUT_SECONDS := 10.0
 
 static func user_arguments() -> Dictionary:
@@ -21,3 +25,10 @@ static func user_arguments() -> Dictionary:
 static func integer_argument(arguments: Dictionary, key: String, fallback: int) -> int:
 	var value := str(arguments.get(key, fallback))
 	return value.to_int() if value.is_valid_int() else fallback
+
+static func float_argument(arguments: Dictionary, key: String, fallback: float) -> float:
+	var value := str(arguments.get(key, fallback))
+	return value.to_float() if value.is_valid_float() else fallback
+
+static func bool_argument(arguments: Dictionary, key: String) -> bool:
+	return str(arguments.get(key, "false")) == "true"
