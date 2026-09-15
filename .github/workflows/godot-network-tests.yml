@@ -1,0 +1,53 @@
+name: Godot network tests
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  network-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Create log directory
+        run: mkdir -p "$RUNNER_TEMP/godot-network-logs"
+
+      - name: godot --version
+        run: |
+          set -o pipefail
+          godot --version 2>&1 | tee "$RUNNER_TEMP/godot-network-logs/version.log"
+
+      - name: Validate project
+        run: |
+          set -o pipefail
+          godot --headless --path . --editor --quit 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/parser.log"
+
+      - name: Run network smoke test
+        run: |
+          set -o pipefail
+          GODOT_BIN="$(command -v godot)" ./tests/network_smoke_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/network-smoke.log"
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-network-test-logs
+          path: ${{ runner.temp }}/godot-network-logs
+          if-no-files-found: warn
