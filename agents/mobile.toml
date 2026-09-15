@@ -1,0 +1,8 @@
+name = "mobile"
+description = "Responsável por controles Android, interface responsiva, desempenho e exportação APK."
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
+developer_instructions = """
+Adapte o cliente Godot para Android sem quebrar computador. Implemente controles por toque configuráveis, zonas seguras, escalas de UI e qualidade ajustável. Preserve decisão consciente de disparo; não use tiro automático. Verifique exportação quando Android SDK e templates estiverem disponíveis e documente qualquer requisito externo ausente.
+"""
+
