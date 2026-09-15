@@ -11,6 +11,7 @@ func _initialize() -> void:
 	_test_health_pickups_and_privacy()
 	_test_fire_damage_and_validation()
 	_test_raycast_and_death()
+	_test_action_rate_limit_boundaries()
 	_test_inactive_and_cleanup()
 	if failures: quit(1); return
 	print("COMBAT_AUTHORITY_TEST_OK checks=%d" % checks)
@@ -63,7 +64,12 @@ func _test_fire_damage_and_validation() -> void:
 	_expect(authority.health[2] == 66, "official 34 damage applied")
 	_expect(authority.request_fire(1, 1, eye, Vector3.FORWARD, 1500)["reason"] == "replay", "sequence replay rejected")
 	_expect(authority.health[2] == 66, "damage exactly once")
-	_expect(authority.request_fire(1, 2, eye, Vector3.FORWARD, 1100)["reason"] == "rate_limited", "action rate limit")
+	var inventory_before_rate_limit := authority.inventory.get_inventory(1)
+	var rate_result := authority.request_fire(1, 2, eye, Vector3.FORWARD, 1050)
+	_expect(rate_result.get("reason", "accepted") == "rate_limited",
+		"action rate limit action=fire previous_timestamp=1000 current_timestamp=1050 interval=%d previous_sequence=1 current_sequence=2 expected=rate_limited actual=%s" % [
+			CombatAuthority.ACTION_INTERVAL_MSEC, str(rate_result.get("reason", "accepted"))])
+	_expect(authority.inventory.get_inventory(1) == inventory_before_rate_limit, "rate-limited action preserves inventory")
 	_expect(authority.request_fire(1, 2, eye, Vector3.FORWARD, 1300)["reason"] == "fire_rate", "weapon cadence")
 	_expect(authority.request_fire(1, {"damage": 999}, eye, Vector3.FORWARD, 1500)["reason"] == "invalid_sequence", "client cannot choose damage or victim")
 	authority.inventory.inventories[1]["magazine"] = 0
@@ -100,6 +106,39 @@ func _test_raycast_and_death() -> void:
 	_expect(authority.request_fire(1, 5, eye, Vector3.FORWARD, 4200)["reason"] == "player_dead", "dead player cannot fire")
 	_expect(authority.request_pickup(1, "ammo_0", 3, 4200)["reason"] == "player_dead", "dead player cannot collect")
 	_expect(authority.request_reload(1, 2, 4200)["reason"] == "player_dead", "dead player cannot reload")
+
+func _test_action_rate_limit_boundaries() -> void:
+	var peer_id := 4
+	var start := 6000
+	var interval := CombatAuthority.ACTION_INTERVAL_MSEC
+	_expect_gate(peer_id, "pickup", 1, start, "", "first action")
+	authority._commit_sequence(peer_id, "pickup", 1, start)
+	_expect_gate(peer_id, "pickup", 2, start, "rate_limited", "immediate second action")
+	_expect_gate(peer_id, "pickup", 2, start + interval - 1, "rate_limited", "one millisecond before boundary")
+	_expect_gate(peer_id, "pickup", 2, start + interval, "", "exact boundary")
+	authority._commit_sequence(peer_id, "pickup", 2, start + interval)
+	_expect_gate(peer_id, "pickup", 3, start + interval * 2 + 1, "", "one millisecond after boundary")
+	_expect_gate(peer_id, "pickup", 3, start + interval - 1, "rate_limited", "clock rollback")
+	_expect_gate(peer_id, "reload", 1, start + interval, "", "different action at same timestamp")
+	_expect_gate(3, "pickup", 1, start + interval, "", "different peer at same timestamp")
+	authority.clear_player(peer_id)
+	_expect(not authority._sequences.has(peer_id) and not authority._last_action_msec.has(peer_id), "session removal clears action limits")
+	rounds.round_id = 2
+	rounds.alive[peer_id] = true
+	authority.begin_round(2, [1, 2, 3, 4])
+	_expect_gate(peer_id, "pickup", 1, start, "", "new round clears action limits")
+
+func _expect_gate(peer_id: int, action: String, sequence: int, now_msec: int, expected: String, label: String) -> void:
+	var previous_sequence := int((authority._sequences.get(peer_id, {}) as Dictionary).get(action, -1))
+	var previous_timestamp := int((authority._last_action_msec.get(peer_id, {}) as Dictionary).get(action, -1))
+	var actual := authority._gate(peer_id, action, sequence, now_msec)
+	_expect(actual == expected,
+		"%s action=%s peer=%d previous_timestamp=%d current_timestamp=%d interval=%d previous_sequence=%d current_sequence=%d expected=%s actual=%s" % [
+			label, action, peer_id, previous_timestamp, now_msec, CombatAuthority.ACTION_INTERVAL_MSEC,
+			previous_sequence, sequence, _safe_reason(expected), _safe_reason(actual)])
+
+func _safe_reason(reason: String) -> String:
+	return "accepted" if reason.is_empty() else reason
 
 func _test_inactive_and_cleanup() -> void:
 	rounds.state = RoundState.ENDED
