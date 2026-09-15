@@ -76,6 +76,14 @@ jobs:
           grep -q 'COMBAT_RULES_TEST_OK' "$RUNNER_TEMP/godot-network-logs/combat_rules.log"
           grep -q 'COMBAT_AUTHORITY_TEST_OK' "$RUNNER_TEMP/godot-network-logs/combat_authority.log"
 
+      - name: Run authoritative combat network test
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/godot-network-logs/combat-processes
+        run: |
+          set -o pipefail
+          GODOT_BIN="$(command -v godot)" ./tests/combat_network_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/combat-network.log"
+
       - name: Run role privacy network test
         env:
           TEST_LOG_DIR: ${{ runner.temp }}/godot-network-logs/round-processes

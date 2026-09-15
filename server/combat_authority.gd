@@ -108,13 +108,14 @@ func request_fire(peer_id: int, sequence: Variant, claimed_origin: Variant, clai
 	if not bool(shot.get("accepted", false)):
 		return shot
 	_commit_sequence(peer_id, "fire", int(sequence), now_msec)
+	var shot_round_id := active_round_id
 	var hit := _raycast(peer_id, shot["origin"], shot["direction"], shot["max_distance"])
 	var endpoint: Vector3 = shot["origin"] + shot["direction"] * float(shot["max_distance"])
 	if float(hit.get("distance", -1.0)) >= 0.0:
 		endpoint = shot["origin"] + shot["direction"] * float(hit["distance"])
 	if int(hit.get("peer_id", 0)) > 0:
 		_apply_damage(int(hit["peer_id"]), peer_id, int(shot["damage"]), now_msec)
-	var event := {"round_id": active_round_id, "shooter_peer_id": peer_id,
+	var event := {"round_id": shot_round_id, "shooter_peer_id": peer_id,
 		"origin": shot["origin"], "end": endpoint, "hit_player": int(hit.get("peer_id", 0)) > 0}
 	shot_resolved.emit(event)
 	private_state_changed.emit(peer_id, private_state(peer_id))

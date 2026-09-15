@@ -47,6 +47,7 @@ var role_spoof_attempted := false
 var ack_replay_attempted := false
 var combat_sequence := {"pickup": 0, "fire": 0, "reload": 0}
 var local_combat_state: Dictionary = {}
+var combat_network_test: Node
 
 func _ready() -> void:
 	arguments = NetworkConfig.user_arguments()
@@ -70,6 +71,7 @@ func start_demo() -> void:
 func start_server() -> void:
 	authoritative_world = AuthoritativeWorld.new()
 	_start_round_authority()
+	_start_combat_network_test()
 	shutdown_prepare_timer = Timer.new()
 	shutdown_prepare_timer.one_shot = true
 	shutdown_prepare_timer.timeout.connect(_server_shutdown_timeout)
@@ -116,6 +118,7 @@ func start_client() -> void:
 	client_label = str(arguments.get("client-id", "client"))
 	expected_clients = NetworkConfig.integer_argument(arguments, "expect-clients", 0)
 	round_test_mode = NetworkConfig.bool_argument(arguments, "round-test")
+	_start_combat_network_test()
 	started_at_msec = Time.get_ticks_msec()
 	var url := str(arguments.get("url", "ws://%s:%d" % [NetworkConfig.DEFAULT_HOST, configured_port()]))
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
@@ -150,6 +153,17 @@ func configured_port() -> int:
 	if env_port.is_valid_int():
 		fallback = env_port.to_int()
 	return NetworkConfig.integer_argument(arguments, "port", fallback)
+
+func _start_combat_network_test() -> void:
+	if not NetworkConfig.bool_argument(arguments, "combat-test"):
+		return
+	var script := load("res://tests/combat_network_coordinator.gd") as GDScript
+	if script == null:
+		fail("COMBAT_TEST_ERROR coordinator_missing")
+		return
+	combat_network_test = script.new()
+	combat_network_test.name = "CombatNetworkCoordinator"
+	add_child(combat_network_test)
 
 func _process(_delta: float) -> void:
 	if mode != "client":
@@ -426,6 +440,7 @@ func shutdown_ready() -> void:
 	if shutdown_ready_peers.size() >= shutdown_expected_peers.size():
 		_cancel_shutdown_prepare_timeout()
 		print("SERVER_SHUTDOWN_READY clients=%d" % shutdown_ready_peers.size())
+		if combat_network_test != null: print("COMBAT_SHUTDOWN_READY clients=%d" % shutdown_ready_peers.size())
 		call_deferred("_close_server_peer")
 
 func _cancel_shutdown_prepare_timeout() -> void:
@@ -454,6 +469,7 @@ func _close_server_peer() -> void:
 	round_late_join_peers.clear()
 	multiplayer.multiplayer_peer.close()
 	print("SERVER_SHUTDOWN_COMPLETE closed=%d" % closed_session_count)
+	if combat_network_test != null: print("COMBAT_SHUTDOWN_COMPLETE clients=%d" % closed_session_count)
 	get_tree().quit(0)
 
 func _server_shutdown_timeout() -> void:
@@ -503,7 +519,11 @@ func _on_round_ended(round_id: int, winning_team: int, reason: String) -> void:
 	# `state_changed` já publicou o payload com o resultado; aqui só registramos.
 	print("ROUND_RESULT round_id=%d team=%s reason=%s" % [
 		round_id, Role.team_to_label(winning_team), reason])
-	if combat_authority != null:
+	call_deferred("_clear_combat_round_if_ended", round_id)
+
+func _clear_combat_round_if_ended(ended_round_id: int) -> void:
+	if combat_authority != null and round_authority.state == RoundState.ENDED \
+			and round_authority.round_id == ended_round_id and combat_authority.active_round_id == ended_round_id:
 		combat_authority.clear_round()
 
 func _on_round_reset(round_id: int) -> void:
@@ -682,6 +702,7 @@ func request_pickup(pickup_id: Variant, sequence: Variant) -> void:
 	if not lobby.has(sender):
 		return
 	var result := combat_authority.request_pickup(sender, pickup_id, sequence, Time.get_ticks_msec())
+	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "pickup", result)
 	if not bool(result.get("accepted", false)):
 		combat_action_rejected.rpc_id(sender, "pickup", int(sequence) if typeof(sequence) == TYPE_INT else -1, _safe_combat_reason(result.get("reason", "rejected")))
 
@@ -693,6 +714,7 @@ func request_fire(sequence: Variant, claimed_origin: Variant, claimed_direction:
 	if not lobby.has(sender):
 		return
 	var result := combat_authority.request_fire(sender, sequence, claimed_origin, claimed_direction, Time.get_ticks_msec())
+	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "fire", result)
 	if not bool(result.get("accepted", false)):
 		combat_action_rejected.rpc_id(sender, "fire", int(sequence) if typeof(sequence) == TYPE_INT else -1, _safe_combat_reason(result.get("reason", "rejected")))
 	elif bool(result.get("hit", false)):
@@ -706,38 +728,49 @@ func request_reload(sequence: Variant) -> void:
 	if not lobby.has(sender):
 		return
 	var result := combat_authority.request_reload(sender, sequence, Time.get_ticks_msec())
+	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "reload", result)
 	if not bool(result.get("accepted", false)):
 		combat_action_rejected.rpc_id(sender, "reload", int(sequence) if typeof(sequence) == TYPE_INT else -1, _safe_combat_reason(result.get("reason", "rejected")))
 
 @rpc("authority", "call_remote", "reliable")
 func combat_private_state(payload: Dictionary) -> void:
-	if multiplayer.is_server(): return
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1: return
 	local_combat_state = payload.duplicate(true)
+	if combat_network_test != null: combat_network_test.call("observe_client_event", "private", payload)
 	if arena_view != null:
 		arena_view.apply_combat_state(local_combat_state)
 	_update_round_hud()
 
 @rpc("authority", "call_remote", "reliable")
 func pickup_public_state(payload: Array) -> void:
-	if not multiplayer.is_server() and arena_view != null:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1: return
+	if combat_network_test != null: combat_network_test.call("observe_client_event", "pickups", payload)
+	if arena_view != null:
 		arena_view.apply_pickups(payload)
 
 @rpc("authority", "call_remote", "reliable")
 func combat_public_shot(payload: Dictionary) -> void:
-	if not multiplayer.is_server() and arena_view != null:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1: return
+	if combat_network_test != null: combat_network_test.call("observe_client_event", "shot", payload)
+	if arena_view != null:
 		arena_view.show_shot(payload)
 
 @rpc("authority", "call_remote", "reliable")
 func combat_public_elimination(peer_id: int) -> void:
-	if not multiplayer.is_server() and arena_view != null:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1: return
+	if combat_network_test != null: combat_network_test.call("observe_client_event", "elimination", peer_id)
+	if arena_view != null:
 		arena_view.set_player_alive(peer_id, false)
 
 @rpc("authority", "call_remote", "reliable")
 func combat_hit_confirmed() -> void:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1: return
+	if combat_network_test != null: combat_network_test.call("observe_client_event", "hit", null)
 	if arena_view != null: arena_view.show_hit_marker()
 
 @rpc("authority", "call_remote", "reliable")
 func combat_action_rejected(action: String, sequence: int, reason: String) -> void:
+	if combat_network_test != null: combat_network_test.call("observe_client_event", "rejection", {"action": action, "sequence": sequence, "reason": reason})
 	print("COMBAT_REJECTED id=%s action=%s sequence=%d reason=%s" % [client_label, action, sequence, reason])
 
 func _on_pickups_changed(snapshot: Array) -> void:
@@ -745,6 +778,7 @@ func _on_pickups_changed(snapshot: Array) -> void:
 		pickup_public_state.rpc(snapshot)
 
 func _on_combat_private_state_changed(peer_id: int, state: Dictionary) -> void:
+	if combat_network_test != null: combat_network_test.call("observe_private_emission", peer_id, state)
 	if multiplayer.is_server() and lobby.has(peer_id) and not shutting_down:
 		combat_private_state.rpc_id(peer_id, state)
 
@@ -753,6 +787,7 @@ func _on_shot_resolved(event: Dictionary) -> void:
 		combat_public_shot.rpc(event)
 
 func _on_combat_player_eliminated(peer_id: int, _instigator_peer_id: int) -> void:
+	if combat_network_test != null: combat_network_test.call("observe_server_elimination", peer_id)
 	if multiplayer.is_server() and not shutting_down:
 		combat_public_elimination.rpc(peer_id)
 
