@@ -33,6 +33,10 @@ func remove_player(peer_id: int) -> void:
 	occupied_spawns.erase(int(states[peer_id]["spawn_index"]))
 	states.erase(peer_id)
 
+func clear() -> void:
+	states.clear()
+	occupied_spawns.clear()
+
 func accept_input(peer_id: int, sequence: int, move: Vector2, yaw_delta: float, now_msec: int) -> String:
 	if not states.has(peer_id):
 		return "unknown_peer"

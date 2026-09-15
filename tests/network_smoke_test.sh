@@ -110,8 +110,7 @@ awk -F'[=, ]+' '
 diff -u \
   <(sed -n 's/.*CLIENT_JOINED.*peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u) \
   <(sed -n 's/.*CLIENT_TEST_CONFIRMED peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u)
-grep -q 'SERVER_SHUTDOWN_COMPLETE disconnected=4' "$TMP_DIR/server.log"
-[[ "$(sed -n 's/.*CLIENT_LEFT peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u | wc -l)" -eq 4 ]]
+grep -q 'SERVER_SHUTDOWN_COMPLETE closed=4' "$TMP_DIR/server.log"
 [[ "$(grep -c 'CLIENT_SHUTDOWN_READY peer_id=' "$TMP_DIR/server.log")" -eq 4 ]]
 [[ "$(sed -n 's/.*CLIENT_SHUTDOWN_READY peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u | wc -l)" -eq 4 ]]
 diff -u \

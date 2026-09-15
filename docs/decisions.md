@@ -47,4 +47,7 @@ O encerramento usa duas fases para não disputar com sockets em fechamento. O
 servidor primeiro interrompe snapshots, roster e comandos, envia uma única
 preparação e espera uma confirmação deduplicada de cada peer. Somente então o
 servidor fecha o `MultiplayerPeer`; clientes permanecem conectados até observarem
-essa desconexão esperada e nenhuma RPC é enviada após o início do fechamento.
+essa desconexão esperada e nenhuma RPC é enviada após o início do fechamento. O
+fechamento local é terminal: o servidor cancela o timeout de preparação, preserva
+a contagem encerrada, limpa explicitamente suas tabelas autoritativas e termina
+sem depender de callbacks de desconexão que o peer já fechado não produzirá.

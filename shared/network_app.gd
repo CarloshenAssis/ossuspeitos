@@ -22,11 +22,13 @@ var client_spawn_position := Vector3.ZERO
 var client_movement_observed := false
 var impossible_input_rejected_peers: Dictionary = {}
 var test_direction := Vector2.ZERO
-var shutdown_disconnected_peers: Dictionary = {}
 var test_roster_ready := false
 var shutdown_expected_peers: Dictionary = {}
 var shutdown_ready_peers: Dictionary = {}
 var server_peer_closing := false
+var server_terminal := false
+var shutdown_prepare_timer: Timer
+var closed_session_count := 0
 
 func _ready() -> void:
 	arguments = NetworkConfig.user_arguments()
@@ -40,6 +42,10 @@ func _ready() -> void:
 
 func start_server() -> void:
 	authoritative_world = AuthoritativeWorld.new()
+	shutdown_prepare_timer = Timer.new()
+	shutdown_prepare_timer.one_shot = true
+	shutdown_prepare_timer.timeout.connect(_server_shutdown_timeout)
+	add_child(shutdown_prepare_timer)
 	var port := configured_port()
 	var bind_address := str(arguments.get("bind", NetworkConfig.DEFAULT_BIND_ADDRESS))
 	var peer := WebSocketServerTransport.listen(port, bind_address)
@@ -105,14 +111,13 @@ func _on_peer_connected(peer_id: int) -> void:
 	print("PEER_CONNECTED peer_id=%d" % peer_id)
 
 func _on_peer_disconnected(peer_id: int) -> void:
+	if server_terminal:
+		return
 	if sessions.erase(peer_id):
 		if authoritative_world != null:
 			authoritative_world.remove_player(peer_id)
 		print("CLIENT_LEFT peer_id=%d count=%d" % [peer_id, sessions.size()])
 		if shutting_down:
-			shutdown_disconnected_peers[peer_id] = true
-			if server_peer_closing and shutdown_disconnected_peers.size() >= shutdown_expected_peers.size():
-				call_deferred("_successful_server_shutdown")
 			return
 		completed_peers.erase(peer_id)
 		publish_client_count()
@@ -284,7 +289,7 @@ func _begin_server_shutdown() -> void:
 	print("SERVER_TEST_OK clients=%d" % completed_peers.size())
 	for peer_id in shutdown_expected_peers:
 		shutdown_prepare.rpc_id(peer_id)
-	get_tree().create_timer(2.0).timeout.connect(_server_shutdown_timeout)
+	shutdown_prepare_timer.start(2.0)
 
 @rpc("authority", "call_remote", "reliable")
 func shutdown_prepare() -> void:
@@ -304,21 +309,34 @@ func shutdown_ready() -> void:
 	shutdown_ready_peers[sender] = true
 	print("CLIENT_SHUTDOWN_READY peer_id=%d count=%d" % [sender, shutdown_ready_peers.size()])
 	if shutdown_ready_peers.size() >= shutdown_expected_peers.size():
+		_cancel_shutdown_prepare_timeout()
 		print("SERVER_SHUTDOWN_READY clients=%d" % shutdown_ready_peers.size())
 		call_deferred("_close_server_peer")
 
+func _cancel_shutdown_prepare_timeout() -> void:
+	if shutdown_prepare_timer == null:
+		return
+	shutdown_prepare_timer.stop()
+
 func _close_server_peer() -> void:
-	if server_peer_closing:
+	if server_peer_closing or server_terminal:
 		return
 	server_peer_closing = true
+	server_terminal = true
+	closed_session_count = shutdown_expected_peers.size()
+	sessions.clear()
+	if authoritative_world != null:
+		authoritative_world.clear()
+	completed_peers.clear()
+	impossible_input_rejected_peers.clear()
+	shutdown_ready_peers.clear()
+	shutdown_expected_peers.clear()
 	multiplayer.multiplayer_peer.close()
-
-func _successful_server_shutdown() -> void:
-	print("SERVER_SHUTDOWN_COMPLETE disconnected=%d" % shutdown_disconnected_peers.size())
+	print("SERVER_SHUTDOWN_COMPLETE closed=%d" % closed_session_count)
 	get_tree().quit(0)
 
 func _server_shutdown_timeout() -> void:
-	if shutdown_disconnected_peers.size() >= shutdown_expected_peers.size():
+	if server_terminal or shutdown_ready_peers.size() >= shutdown_expected_peers.size():
 		return
 	print("SERVER_SHUTDOWN_TIMEOUT ready=%d remaining=%d" % [shutdown_ready_peers.size(), sessions.size()])
 	get_tree().quit(1)
