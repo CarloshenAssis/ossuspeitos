@@ -8,9 +8,8 @@ const DEFAULT_PORT := 9080
 ## usados pela camada de rede, para que não existam dois valores divergentes.
 const MIN_PLAYERS := RoundRules.MIN_PLAYERS
 const MAX_PLAYERS := RoundRules.MAX_PLAYERS
-## 3: acrescenta o estado público da rodada, o roster seguro e a entrega
-## direcionada do papel. Incompatível com clientes do marco de movimento.
-const PROTOCOL_VERSION := 3
+## 4: adds authoritative basic-combat intentions and public/private combat DTOs.
+const PROTOCOL_VERSION := 4
 const CONNECT_TIMEOUT_SECONDS := 10.0
 
 static func user_arguments() -> Dictionary:

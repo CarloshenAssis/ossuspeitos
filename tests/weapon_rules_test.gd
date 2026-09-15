@@ -26,6 +26,8 @@ func _initialize() -> void:
 	_expect(WeaponRules.validate_origin(Vector3(1, 0, 0), Vector3.ZERO).is_empty(), "plausible origin")
 	_expect(WeaponRules.validate_origin(Vector3(5, 0, 0), Vector3.ZERO) == "implausible_origin", "impossible origin")
 	_expect(WeaponRules.validate_origin(Vector3(INF, 0, 0), Vector3.ZERO) == "non_finite", "non-finite origin")
+	_expect(WeaponRules.validate_direction_for_yaw(Vector3.FORWARD, 0.0).is_empty(), "direction follows official yaw")
+	_expect(WeaponRules.validate_direction_for_yaw(Vector3.BACK, 0.0) == "direction_yaw_divergence", "direction diverging from yaw")
 	_finish()
 
 func _expect(condition: bool, message: String) -> void:

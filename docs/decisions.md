@@ -137,3 +137,27 @@ sobreviva caso esse caminho passe a ser usado.
 Registros indexados por `peer_id` são limpos quando o peer sai. O teste
 adversarial fixa essa invariante estruturalmente, comparando o conjunto de
 dicionários limpos no encerramento com os limpos na desconexão.
+
+## Marco 4: primeiro combate autoritativo
+
+`CombatAuthority` é headless e compõe `RoundAuthority`, `AuthoritativeWorld`,
+`InventoryAuthority` e `CombatRules`. A rodada continua dona de eliminação e
+vitória; o mundo é a fonte de posição e yaw; a pistola server-owned fornece 34
+de dano, carregador 6, reserva 18, cadência de 400 ms, alcance 20 m e recarga de
+1,2 s.
+
+Cada entrada em `ACTIVE` recria quatro armas e quatro caixas com IDs estáveis e
+`round_id`. Vida, inventário, munição e recarga são privados; pickups e efeitos
+usam DTOs públicos por allowlist, sem papéis. A coleta é síncrona, então a
+primeira intenção válida torna o pickup indisponível antes da publicação.
+
+O servidor headless resolve hitscan analítico contra os AABBs de `ArenaRules` e
+hitboxes vivas. A mesma geometria é apresentada pelo cliente. A origem efetiva é
+sempre o olho oficial e a direção precisa ser finita, normalizada e compatível
+com o yaw oficial. Parede bloqueia alvos; atirador e mortos são ignorados.
+
+As intenções reliable de coleta, disparo e recarga usam remetente derivado por
+`get_remote_sender_id()`, sequências independentes, deduplicação, salto limitado
+e rate limit. Argumentos de borda são `Variant` validados. O protocolo é versão
+4. Viewmodel, pickups, mira, tracer, hit marker e HUD existem só no cliente
+gráfico; a demo offline permanece isolada.
