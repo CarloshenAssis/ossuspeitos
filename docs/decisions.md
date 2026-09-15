@@ -41,4 +41,10 @@ remotas e posicionam a câmera local a partir desses snapshots.
 A autoridade de movimento não instancia geometria. Os oito spawns e limites ficam
 em regras compartilhadas determinísticas, enquanto piso, paredes, iluminação,
 câmera e cápsulas pertencem somente à apresentação do cliente. O transporte
-WebSocket e o protocolo coordenado de encerramento permanecem independentes.
+WebSocket permanece independente.
+
+O encerramento usa duas fases para não disputar com sockets em fechamento. O
+servidor primeiro interrompe snapshots, roster e comandos, envia uma única
+preparação e espera uma confirmação deduplicada de cada peer. Somente então o
+servidor fecha o `MultiplayerPeer`; clientes permanecem conectados até observarem
+essa desconexão esperada e nenhuma RPC é enviada após o início do fechamento.

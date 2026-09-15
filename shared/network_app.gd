@@ -8,10 +8,9 @@ var expected_clients := 0
 var joined := false
 var started_at_msec := 0
 var completion_sent := false
-var shutdown_authorized_received := false
+var shutdown_prepare_received := false
 var shutting_down := false
 var completed_peers: Dictionary = {}
-var shutdown_peer_count := 0
 var authoritative_world: AuthoritativeWorld
 var arena_view: ArenaView
 var snapshot_accumulator := 0.0
@@ -25,6 +24,9 @@ var impossible_input_rejected_peers: Dictionary = {}
 var test_direction := Vector2.ZERO
 var shutdown_disconnected_peers: Dictionary = {}
 var test_roster_ready := false
+var shutdown_expected_peers: Dictionary = {}
+var shutdown_ready_peers: Dictionary = {}
+var server_peer_closing := false
 
 func _ready() -> void:
 	arguments = NetworkConfig.user_arguments()
@@ -109,7 +111,7 @@ func _on_peer_disconnected(peer_id: int) -> void:
 		print("CLIENT_LEFT peer_id=%d count=%d" % [peer_id, sessions.size()])
 		if shutting_down:
 			shutdown_disconnected_peers[peer_id] = true
-			if sessions.is_empty():
+			if server_peer_closing and shutdown_disconnected_peers.size() >= shutdown_expected_peers.size():
 				call_deferred("_successful_server_shutdown")
 			return
 		completed_peers.erase(peer_id)
@@ -123,12 +125,16 @@ func _on_connection_failed() -> void:
 	fail("CLIENT_CONNECTION_FAILED id=%s" % client_label)
 
 func _on_server_disconnected() -> void:
-	if not joined or (expected_clients > 0 and not shutdown_authorized_received):
+	if shutdown_prepare_received:
+		print("CLIENT_SHUTDOWN_COMPLETE id=%s" % client_label)
+		get_tree().quit(0)
+		return
+	if not joined or expected_clients > 0:
 		fail("CLIENT_SERVER_DISCONNECTED id=%s" % client_label)
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_join(protocol_version: int, requested_label: String) -> void:
-	if not multiplayer.is_server():
+	if not multiplayer.is_server() or shutting_down:
 		return
 	var sender := multiplayer.get_remote_sender_id()
 	var clean_label := requested_label.strip_edges()
@@ -165,6 +171,8 @@ func join_rejected(reason: String) -> void:
 	fail("JOIN_REJECTED id=%s reason=%s" % [client_label, reason])
 
 func publish_client_count() -> void:
+	if shutting_down:
+		return
 	client_count_changed.rpc(sessions.size())
 
 @rpc("authority", "call_remote", "reliable")
@@ -187,6 +195,8 @@ func _try_start_test_movement() -> void:
 			_send_input(test_direction, 0.0)
 
 func _send_input(move: Vector2, yaw_delta: float) -> void:
+	if shutdown_prepare_received:
+		return
 	input_sequence += 1
 	submit_input.rpc_id(1, input_sequence, move, yaw_delta)
 
@@ -217,7 +227,7 @@ func input_rejected(reason: String, _sequence: int) -> void:
 
 @rpc("authority", "call_remote", "unreliable_ordered")
 func world_snapshot(states: Array) -> void:
-	if multiplayer.is_server():
+	if multiplayer.is_server() or shutdown_prepare_received:
 		return
 	if arena_view != null:
 		arena_view.apply_snapshot(states)
@@ -257,8 +267,11 @@ func client_test_completed() -> void:
 		_begin_server_shutdown()
 
 func _begin_server_shutdown() -> void:
+	if shutting_down:
+		return
 	shutting_down = true
-	shutdown_peer_count = completed_peers.size()
+	for peer_id in completed_peers:
+		shutdown_expected_peers[peer_id] = true
 	var observed_max_speed := 0.0
 	for peer_id in completed_peers:
 		var state: Dictionary = authoritative_world.states[peer_id]
@@ -269,26 +282,46 @@ func _begin_server_shutdown() -> void:
 		print("PLAYER_STATE peer_id=%d position=%.3f,%.3f,%.3f speed=%.3f" % [peer_id, position.x, position.y, position.z, speed])
 	print("SERVER_MOVEMENT_TEST_OK players=%d max_speed=%.3f rejected_impossible=%d" % [completed_peers.size(), observed_max_speed, impossible_input_rejected_peers.size()])
 	print("SERVER_TEST_OK clients=%d" % completed_peers.size())
-	for peer_id in completed_peers:
-		shutdown_authorized.rpc_id(peer_id)
-	get_tree().create_timer(1.0).timeout.connect(_server_shutdown_timeout)
+	for peer_id in shutdown_expected_peers:
+		shutdown_prepare.rpc_id(peer_id)
+	get_tree().create_timer(2.0).timeout.connect(_server_shutdown_timeout)
 
 @rpc("authority", "call_remote", "reliable")
-func shutdown_authorized() -> void:
-	shutdown_authorized_received = true
-	print("CLIENT_SHUTDOWN_AUTHORIZED id=%s" % client_label)
-	call_deferred("_successful_client_shutdown")
+func shutdown_prepare() -> void:
+	if shutdown_prepare_received:
+		return
+	shutdown_prepare_received = true
+	print("CLIENT_SHUTDOWN_PREPARE id=%s" % client_label)
+	shutdown_ready.rpc_id(1)
 
-func _successful_client_shutdown() -> void:
-	get_tree().quit(0)
+@rpc("any_peer", "call_remote", "reliable")
+func shutdown_ready() -> void:
+	if not multiplayer.is_server() or not shutting_down or server_peer_closing:
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if not shutdown_expected_peers.has(sender) or not sessions.has(sender) or shutdown_ready_peers.has(sender):
+		return
+	shutdown_ready_peers[sender] = true
+	print("CLIENT_SHUTDOWN_READY peer_id=%d count=%d" % [sender, shutdown_ready_peers.size()])
+	if shutdown_ready_peers.size() >= shutdown_expected_peers.size():
+		print("SERVER_SHUTDOWN_READY clients=%d" % shutdown_ready_peers.size())
+		call_deferred("_close_server_peer")
+
+func _close_server_peer() -> void:
+	if server_peer_closing:
+		return
+	server_peer_closing = true
+	multiplayer.multiplayer_peer.close()
 
 func _successful_server_shutdown() -> void:
 	print("SERVER_SHUTDOWN_COMPLETE disconnected=%d" % shutdown_disconnected_peers.size())
 	get_tree().quit(0)
 
 func _server_shutdown_timeout() -> void:
-	print("SERVER_SHUTDOWN_TIMEOUT remaining=%d" % sessions.size())
-	get_tree().quit(0)
+	if shutdown_disconnected_peers.size() >= shutdown_expected_peers.size():
+		return
+	print("SERVER_SHUTDOWN_TIMEOUT ready=%d remaining=%d" % [shutdown_ready_peers.size(), sessions.size()])
+	get_tree().quit(1)
 
 func fail(message: String) -> void:
 	push_error(message)

@@ -112,11 +112,18 @@ diff -u \
   <(sed -n 's/.*CLIENT_TEST_CONFIRMED peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u)
 grep -q 'SERVER_SHUTDOWN_COMPLETE disconnected=4' "$TMP_DIR/server.log"
 [[ "$(sed -n 's/.*CLIENT_LEFT peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u | wc -l)" -eq 4 ]]
+[[ "$(grep -c 'CLIENT_SHUTDOWN_READY peer_id=' "$TMP_DIR/server.log")" -eq 4 ]]
+[[ "$(sed -n 's/.*CLIENT_SHUTDOWN_READY peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u | wc -l)" -eq 4 ]]
+diff -u \
+  <(sed -n 's/.*CLIENT_TEST_CONFIRMED peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u) \
+  <(sed -n 's/.*CLIENT_SHUTDOWN_READY peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u)
+grep -q 'SERVER_SHUTDOWN_READY clients=4' "$TMP_DIR/server.log"
 ! grep -q 'SERVER_SHUTDOWN_TIMEOUT' "$TMP_DIR"/*.log
 ! grep -q 'ready_state != STATE_OPEN' "$TMP_DIR"/*.log
 for id in 1 2 3 4; do
-  grep -q "CLIENT_TEST_OK id=client-$id" "$TMP_DIR/client-$id.log"
-  grep -q "CLIENT_SHUTDOWN_AUTHORIZED id=client-$id" "$TMP_DIR/client-$id.log"
+	grep -q "CLIENT_TEST_OK id=client-$id" "$TMP_DIR/client-$id.log"
+	[[ "$(grep -c "CLIENT_SHUTDOWN_PREPARE id=client-$id" "$TMP_DIR/client-$id.log")" -eq 1 ]]
+	[[ "$(grep -c "CLIENT_SHUTDOWN_COMPLETE id=client-$id" "$TMP_DIR/client-$id.log")" -eq 1 ]]
 done
 cat "$TMP_DIR/server.log"
 echo "NETWORK_SMOKE_OK server=1 clients=4"
