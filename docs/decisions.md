@@ -116,3 +116,24 @@ embarcando os scripts do servidor no PCK. Isso não expõe segredo de partida �
 demo offline nunca instancia a autoridade e nenhum papel é sorteado no cliente —
 mas a restrição registrada no marco visual permanece: antes de multiplayer Web
 público, o preset precisa selecionar estritamente os recursos do cliente.
+
+## Auditoria do marco 3: precondição do reinício
+
+O reinício da rodada passou a validar a própria fase em vez de delegar a
+checagem à matriz de transições. `COUNTDOWN -> WAITING` é uma transição legítima
+— é assim que um countdown é cancelado quando o lobby cai abaixo do mínimo —,
+portanto `reset_for_next_round()` apoiado apenas em `_transition()` aceitava ser
+chamado durante uma contagem regressiva válida: cancelava a contagem, reiniciava
+o prazo e consumia um identificador de rodada, tudo sem registrar transição
+inválida. O reinício agora só existe a partir de `ENDED`; qualquer outra origem é
+contabilizada como transição inválida e ignorada.
+
+Pela mesma razão, `_begin_countdown()` limpa explicitamente papéis, participantes,
+vivos e eliminações. Hoje só se chega a `COUNTDOWN` vindo de `WAITING`, que já
+está limpo, mas `ENDED -> COUNTDOWN` é uma transição declarada válida na
+especificação: limpar na entrada garante que nenhum papel da rodada anterior
+sobreviva caso esse caminho passe a ser usado.
+
+Registros indexados por `peer_id` são limpos quando o peer sai. O teste
+adversarial fixa essa invariante estruturalmente, comparando o conjunto de
+dicionários limpos no encerramento com os limpos na desconexão.

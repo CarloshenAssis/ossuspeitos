@@ -232,6 +232,14 @@ func _begin_countdown(now_msec: int) -> void:
 	if not _transition(RoundState.COUNTDOWN):
 		return
 	round_id += 1
+	# A contagem regressiva nunca carrega estado de rodada. Hoje só se chega
+	# aqui a partir de WAITING, já limpo, mas ENDED->COUNTDOWN é uma transição
+	# declarada válida: limpar aqui garante que nenhum papel da rodada anterior
+	# sobreviva caso esse caminho passe a ser usado.
+	_roles.clear()
+	_eliminations.clear()
+	participants.clear()
+	alive.clear()
 	winning_team = Role.TEAM_NONE
 	winner_reason = ""
 	_countdown_round_id = round_id
@@ -305,7 +313,16 @@ func _end_round(team: int, reason: String, now_msec: int) -> void:
 ## Apaga papéis, vivos, resultado, eliminações e prazos da rodada anterior e
 ## devolve o lobby ao ciclo. Nenhum callback atrasado da rodada anterior
 ## sobrevive: os prazos guardam o `round_id` que os criou.
+##
+## O reinício só existe a partir de ENDED. Como COUNTDOWN->WAITING é uma
+## transição legítima de cancelamento, delegar a checagem apenas a
+## `_transition` deixaria um reset indevido cancelar uma contagem regressiva
+## válida e consumir um identificador de rodada.
 func reset_for_next_round(now_msec: int) -> void:
+	if state != RoundState.ENDED:
+		invalid_transition_count += 1
+		invalid_transition.emit(state, RoundState.WAITING)
+		return
 	if not _transition(RoundState.WAITING):
 		return
 	_roles.clear()

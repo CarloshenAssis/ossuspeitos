@@ -1,0 +1,249 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Teste adversarial da auditoria. Uma rodada real com quatro participantes roda
+# enquanto um quinto peer hostil, que chega depois do início, envia argumentos
+# malformados, identidades forjadas, round_id falsificado e RPC fora de fase.
+#
+# O objetivo é provar três coisas: o servidor sobrevive, continua sendo a única
+# autoridade, e o peer hostil nunca recebe papel algum.
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GODOT_BIN="${GODOT_BIN:-}"
+if [[ -z "$GODOT_BIN" ]]; then
+  if command -v godot4 >/dev/null; then
+    GODOT_BIN="$(command -v godot4)"
+  elif command -v godot >/dev/null; then
+    GODOT_BIN="$(command -v godot)"
+  fi
+fi
+PORT="${TEST_PORT:-$((23080 + RANDOM % 1000))}"
+ROUND_SEED="${TEST_ROUND_SEED:-20250915}"
+if [[ -n "${TEST_LOG_DIR:-}" ]]; then
+  TMP_DIR="$TEST_LOG_DIR"
+  mkdir -p "$TMP_DIR"
+  REMOVE_TMP_DIR=false
+else
+  TMP_DIR="$(mktemp -d)"
+  REMOVE_TMP_DIR=true
+fi
+PIDS=()
+PROCESS_NAMES=()
+PROCESS_STATUSES=()
+WATCHDOG_PID=""
+TEST_FINISHED=false
+
+cleanup() {
+	local original_status=$?
+	trap - EXIT
+	if [[ -n "$WATCHDOG_PID" ]]; then
+		kill "$WATCHDOG_PID" 2>/dev/null || true
+	fi
+	for pid in "${PIDS[@]:-}"; do
+		kill "$pid" 2>/dev/null || true
+	done
+	wait 2>/dev/null || true
+	if [[ "$REMOVE_TMP_DIR" == true ]]; then
+		rm -rf "$TMP_DIR"
+	fi
+	return "$original_status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+report_failure() {
+	local status="$1"
+	local line="$2"
+	local command="$3"
+	echo "HARNESS_ERROR line=$line status=$status command=$command" >&2
+	echo "Adversarial round test failed (exit=$status). Logs:" >&2
+	if compgen -G "$TMP_DIR/*.log" >/dev/null; then
+		cat "$TMP_DIR"/*.log >&2
+	fi
+	exit "$status"
+}
+trap 'report_failure "$?" "$LINENO" "$BASH_COMMAND"' ERR
+
+check_ok() { echo "ASSERT_OK name=$1"; }
+check_failed() { echo "ASSERT_FAILED name=$1 detail=$2" >&2; return 1; }
+
+assert_grep() {
+	local name="$1" pattern="$2"; shift 2
+	if grep -qE -- "$pattern" "$@"; then check_ok "$name"; else check_failed "$name" "pattern not found: $pattern"; fi
+}
+
+assert_no_grep() {
+	local name="$1" pattern="$2"; shift 2
+	if grep -qE -- "$pattern" "$@"; then check_failed "$name" "forbidden pattern found: $pattern"; else check_ok "$name"; fi
+}
+
+assert_equal() {
+	local name="$1" actual="$2" expected="$3"
+	if [[ "$actual" == "$expected" ]]; then check_ok "$name"; else check_failed "$name" "expected=$expected actual=$actual"; fi
+}
+
+wait_for_marker() {
+	local pattern="$1" file="$2" guard_pid="$3"
+	for _ in {1..600}; do
+		if grep -qE -- "$pattern" "$file"; then return 0; fi
+		kill -0 "$guard_pid" 2>/dev/null || { cat "$file" >&2; return 1; }
+		sleep 0.05
+	done
+	cat "$file" >&2
+	return 1
+}
+
+if [[ -z "$GODOT_BIN" || ! -x "$GODOT_BIN" ]]; then
+  echo "Godot 4 not found. Set GODOT_BIN to the executable." >&2
+  exit 127
+fi
+
+# --- Invariante estrutural: registros por peer precisam morrer com o peer -----
+# Todo dicionário indexado por peer_id limpo no encerramento também precisa ser
+# limpo na desconexão, senão um ciclo de reconexões cresce sem limite.
+DISCONNECT_BLOCK="$(awk '/^func _on_peer_disconnected/,/^$/' "$ROOT/shared/network_app.gd")"
+for registry in completed_peers impossible_input_rejected_peers round_ack_peers round_late_join_peers; do
+	if grep -q "${registry}\.erase(peer_id)" <<<"$DISCONNECT_BLOCK"; then
+		check_ok "per-peer-registry-cleared-on-disconnect-$registry"
+	else
+		check_failed "per-peer-registry-cleared-on-disconnect-$registry" "$registry is never erased when a peer leaves"
+	fi
+done
+
+# --- O atacante precisa falar exatamente o mesmo protocolo -------------------
+# O Godot resolve cada RPC por índice na lista ordenada de métodos anotados do
+# nó. Se a superfície do atacante divergir da do servidor, os ataques passariam
+# a bater em outros métodos e o teste viraria teatro.
+rpc_surface_of() {
+	awk '
+	  /^@rpc/ { pending = 1; next }
+	  pending && /^func / { name = $2; sub(/\(.*/, "", name); print name; pending = 0; next }
+	  pending && $0 !~ /^[[:space:]]*(#|$)/ { pending = 0 }
+	' "$@" | sort -u | tr '\n' ' '
+}
+SERVER_SURFACE="$(rpc_surface_of "$ROOT"/shared/*.gd "$ROOT"/client/*.gd "$ROOT"/server/*.gd)"
+ATTACKER_SURFACE="$(rpc_surface_of "$ROOT/tests/adversarial_peer.gd")"
+echo "RPC_SURFACE server=[$SERVER_SURFACE]"
+assert_equal "attacker-mirrors-the-server-rpc-surface" "$ATTACKER_SURFACE" "$SERVER_SURFACE"
+
+# --- Servidor e rodada legítima ----------------------------------------------
+"$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 \
+  --port="$PORT" --countdown-seconds=1 --round-end-delay-seconds=30 \
+  --round-seed="$ROUND_SEED" --stop-after-round-active=4 --expect-late-joins=1 \
+  >"$TMP_DIR/server.log" 2>&1 &
+PIDS+=("$!")
+PROCESS_NAMES+=("server")
+SERVER_PID="${PIDS[0]}"
+
+wait_for_marker 'SERVER_READY' "$TMP_DIR/server.log" "$SERVER_PID"
+assert_grep "headless-server-has-no-ui" 'SERVER_UI hud=false arena=false display=headless' "$TMP_DIR/server.log"
+
+for id in 1 2 3 4; do
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=client --client-id="client-$id" \
+    --url="ws://127.0.0.1:$PORT" --round-test=true >"$TMP_DIR/client-$id.log" 2>&1 &
+	PIDS+=("$!")
+	PROCESS_NAMES+=("client-$id")
+done
+
+(
+  sleep 60
+  if [[ "$TEST_FINISHED" != true ]]; then
+    echo "Timed out waiting for adversarial round test" >"$TMP_DIR/timeout.log"
+	for pid in "${PIDS[@]}"; do
+		kill "$pid" 2>/dev/null && echo "WATCHDOG_KILL pid=$pid" || echo "WATCHDOG_KILL_FAILED pid=$pid"
+	done
+  fi
+) &
+WATCHDOG_PID=$!
+
+# O peer hostil só entra com a rodada já ACTIVE: ele é um join tardio e não pode
+# se tornar participante nem receber papel.
+wait_for_marker 'ROUND_STATE state=ACTIVE' "$TMP_DIR/server.log" "$SERVER_PID"
+"$GODOT_BIN" --headless --path "$ROOT" --script tests/adversarial_client.gd -- \
+  --client-id=attacker --url="ws://127.0.0.1:$PORT" --quit-after-msec=45000 \
+  >"$TMP_DIR/attacker.log" 2>&1 &
+PIDS+=("$!")
+PROCESS_NAMES+=("attacker")
+
+for index in "${!PIDS[@]}"; do
+	pid="${PIDS[$index]}"
+	name="${PROCESS_NAMES[$index]}"
+	if wait "$pid"; then process_status=0; else process_status=$?; fi
+	echo "PROCESS_STATUS name=$name pid=$pid status=$process_status"
+	PROCESS_STATUSES+=("$process_status")
+done
+for index in "${!PROCESS_STATUSES[@]}"; do
+	assert_equal "process-${PROCESS_NAMES[$index]}-exit" "${PROCESS_STATUSES[$index]}" "0"
+done
+TEST_FINISHED=true
+kill "$WATCHDOG_PID" 2>/dev/null || true
+wait "$WATCHDOG_PID" 2>/dev/null || true
+WATCHDOG_PID=""
+if [[ ! -f "$TMP_DIR/timeout.log" ]]; then
+	check_ok "watchdog-timeout-absent"
+else
+	check_failed "watchdog-timeout-absent" "timeout.log exists"
+fi
+
+# --- O servidor sobreviveu e continuou autoritativo --------------------------
+# O peer hostil termina pelo shutdown coordenado do servidor, não pelo próprio
+# timer: os dois desfechos são aceitos, mas ele precisa ter atacado e entrado.
+assert_grep "attacker-terminated-cleanly" '(ATTACKER_SERVER_DISCONNECTED id=attacker attacks=[0-9]+|ATTACKER_DONE id=attacker attacks=[0-9]+)' "$TMP_DIR/attacker.log"
+assert_grep "attacker-obtained-a-session" 'ATTACKER_JOIN_ACCEPTED id=attacker' "$TMP_DIR/attacker.log"
+ATTACK_COUNT="$(sed -n 's/.*ATTACKER_SERVER_DISCONNECTED id=attacker attacks=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/attacker.log" | tail -1)"
+if [[ -n "$ATTACK_COUNT" && "$ATTACK_COUNT" -ge 50 ]]; then
+	check_ok "attacker-sent-its-full-attack-set"
+else
+	check_failed "attacker-sent-its-full-attack-set" "expected at least 50 attacks, got '${ATTACK_COUNT:-none}'"
+fi
+# ACHADO F7 (pré-existente, LOW): `shutdown_ready` não é correlacionado com o
+# `shutdown_prepare` que deveria tê-lo provocado, então o ack não solicitado do
+# peer hostil é aceito assim que o servidor entra em shutdown. A consequência é
+# auto-infligida — o servidor pode fechar antes que esse peer processe o
+# prepare —, por isso o marcador do atacante é opcional aqui. O que não pode
+# variar é o handshake dos clientes legítimos, afirmado logo abaixo.
+for id in 1 2 3 4; do
+	assert_equal "legit-client-$id-single-shutdown-prepare" "$(grep -c "CLIENT_SHUTDOWN_PREPARE id=client-$id" "$TMP_DIR/client-$id.log")" "1"
+	assert_equal "legit-client-$id-single-shutdown-complete" "$(grep -c "CLIENT_SHUTDOWN_COMPLETE id=client-$id" "$TMP_DIR/client-$id.log")" "1"
+done
+assert_grep "hostile-peer-did-not-degrade-the-handshake" 'SERVER_SHUTDOWN_READY clients=5' "$TMP_DIR/server.log"
+assert_grep "server-completed-the-round" 'ROLE_PRIVACY_TEST_OK clients=4 assassin=1 detective=1 victim=2' "$TMP_DIR/server.log"
+assert_grep "server-shut-down-cleanly" 'SERVER_SHUTDOWN_COMPLETE closed=5' "$TMP_DIR/server.log"
+assert_no_grep "no-shutdown-timeout" 'SERVER_SHUTDOWN_TIMEOUT' "$TMP_DIR"/*.log
+assert_no_grep "no-websocket-state-error" 'ready_state != STATE_OPEN' "$TMP_DIR"/*.log
+
+# --- O peer hostil nunca recebeu papel ---------------------------------------
+assert_no_grep "attacker-never-received-a-role" 'ATTACKER_RECEIVED_PRIVATE_ROLE' "$TMP_DIR/attacker.log"
+assert_no_grep "attacker-roster-carries-no-role" 'ATTACKER_ROSTER_HAS_ROLE' "$TMP_DIR/attacker.log"
+assert_no_grep "attacker-public-state-carries-no-role" 'ATTACKER_PUBLIC_STATE_HAS_ROLE' "$TMP_DIR/attacker.log"
+assert_no_grep "attacker-log-carries-no-role-name" '(ASSASSIN|DETECTIVE|VICTIM)' "$TMP_DIR/attacker.log"
+assert_grep "attacker-registered-as-late-join" 'ROUND_LATE_JOIN peer_id=[0-9]+ round_id=1 count=1' "$TMP_DIR/server.log"
+
+# --- Argumentos malformados são recusados pela camada de RPC -----------------
+# O Godot recusa a conversão antes de executar o corpo tipado do servidor.
+assert_grep "wrong-typed-join-refused" "RPC - 'Node\(network_app.gd\)::request_join': Cannot convert argument" "$TMP_DIR/server.log"
+assert_grep "wrong-typed-input-refused" "RPC - 'Node\(network_app.gd\)::submit_input': Cannot convert argument" "$TMP_DIR/server.log"
+assert_grep "huge-label-refused" 'JOIN_REJECTED|invalid_client' "$TMP_DIR/attacker.log"
+assert_grep "duplicate-session-refused" 'ATTACKER_JOIN_REJECTED id=attacker reason=invalid_client' "$TMP_DIR/attacker.log"
+
+# --- RPC de autoridade não pode ser chamada por um cliente -------------------
+for rpc in round_private_role round_public_state round_roster; do
+	assert_grep "authority-rpc-refused-$rpc" "RPC '$rpc' is not allowed on node .* Mode is 2, authority is 1" "$TMP_DIR/server.log"
+done
+
+# --- round_id forjado e ack de não participante são recusados ---------------
+assert_grep "forged-ack-refused" 'ROUND_ACK_REJECTED peer_id=[0-9]+ reason=(stale_round|not_in_round)' "$TMP_DIR/server.log"
+assert_equal "acknowledgements-stay-at-four" "$(grep -c 'CLIENT_PRIVATE_ROLE_ACK peer_id=' "$TMP_DIR/server.log")" "4"
+assert_equal "four-unique-acknowledging-peers" "$(sed -n 's/.*CLIENT_PRIVATE_ROLE_ACK peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u | wc -l | tr -d ' ')" "4"
+assert_equal "exactly-four-roles-delivered" "$(grep -c 'ROUND_ROLES_DELIVERED round_id=1 peers=4' "$TMP_DIR/server.log")" "1"
+assert_no_grep "no-extra-round-started" 'ROUND_STATE state=(COUNTDOWN|ACTIVE) round_id=[2-9]' "$TMP_DIR/server.log"
+assert_no_grep "no-invalid-transition" 'ROUND_TRANSITION_REJECTED' "$TMP_DIR/server.log"
+
+# --- Nenhum papel vazou para os clientes legítimos ---------------------------
+assert_no_grep "client-logs-carry-no-role-names" '(ASSASSIN|DETECTIVE|VICTIM)' "$TMP_DIR"/client-*.log
+assert_no_grep "server-log-carries-no-role-names" '(ASSASSIN|DETECTIVE|VICTIM)' "$TMP_DIR/server.log"
+assert_no_grep "no-peer-to-role-association" 'peer_id=[0-9]+.*role=' "$TMP_DIR"/*.log
+
+echo "FINAL_CHECKS status=0"
+echo "ROUND_ADVERSARIAL_OK server=1 participants=4 hostile=1"

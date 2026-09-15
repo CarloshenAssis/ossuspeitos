@@ -140,6 +140,8 @@ godot4 --headless --path . --script tests/round_authority_test.gd
 godot4 --headless --path . --script tests/movement_rules_test.gd
 # sigilo dos papéis com servidor e cinco clientes reais
 ./tests/round_network_test.sh
+# auditoria adversarial: peer hostil contra uma rodada real
+./tests/round_adversarial_test.sh
 # regressão de movimento com servidor e quatro clientes reais
 ./tests/network_smoke_test.sh
 ```
@@ -152,8 +154,15 @@ recebe exatamente um papel, que nenhum log traz papel alheio e que a tentativa d
 um cliente entregar papel a outro não chega ao destino. Se o executável não
 estiver no `PATH`, use `GODOT_BIN=/caminho/para/godot ./tests/...`.
 
+O teste adversarial sobe uma rodada legítima de quatro participantes e injeta um
+quinto peer hostil que chega depois do início: ele envia tipos errados, rótulos
+gigantes, `round_id` forjado, RPC antes do handshake, RPC de autoridade e spam de
+confirmação. As asserções exigem que o servidor sobreviva, continue autoritativo e
+que esse peer nunca receba papel algum.
+
 Argumentos úteis do servidor: `--countdown-seconds=`, `--round-end-delay-seconds=`
-e `--round-seed=` para rodadas curtas e reproduzíveis.
+e `--round-seed=` para rodadas curtas e reproduzíveis. Sem `--round-seed`, o
+sorteio usa `RandomNumberGenerator.randomize()`: a seed nunca vem do cliente.
 
 ## Limitações deste marco
 
