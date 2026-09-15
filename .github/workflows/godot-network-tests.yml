@@ -73,6 +73,14 @@ jobs:
           GODOT_BIN="$(command -v godot)" ./tests/round_network_test.sh 2>&1 \
             | tee "$RUNNER_TEMP/godot-network-logs/round-network.log"
 
+      - name: Run adversarial round test
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/godot-network-logs/adversarial-processes
+        run: |
+          set -o pipefail
+          GODOT_BIN="$(command -v godot)" ./tests/round_adversarial_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/adversarial.log"
+
       - name: Run network smoke test
         env:
           TEST_LOG_DIR: ${{ runner.temp }}/godot-network-logs/processes

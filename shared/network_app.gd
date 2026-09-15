@@ -192,6 +192,7 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	if shutting_down:
 		return
 	completed_peers.erase(peer_id)
+	impossible_input_rejected_peers.erase(peer_id)
 	round_ack_peers.erase(peer_id)
 	round_late_join_peers.erase(peer_id)
 	publish_client_count()

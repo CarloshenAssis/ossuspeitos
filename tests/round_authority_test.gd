@@ -33,6 +33,11 @@ func _initialize() -> void:
 	_test_invalid_values_do_not_corrupt_the_round()
 	_test_public_payloads_never_carry_roles()
 	_test_eliminations_are_recorded_sanitised()
+	_test_reset_is_refused_outside_ended()
+	_test_countdown_never_carries_round_state()
+	_test_two_consecutive_rounds()
+	_test_simultaneous_deaths_have_deterministic_precedence()
+	_test_production_seed_is_not_constant()
 	if failures > 0:
 		push_error("ROUND_AUTHORITY_TEST_FAILED failures=%d checks=%d" % [failures, checks])
 		quit(1)
@@ -362,6 +367,146 @@ func _test_eliminations_are_recorded_sanitised() -> void:
 	# O reinício apaga o registro junto com o resto do estado da rodada.
 	authority.tick(now + int(END_DELAY_SECONDS * 1000.0) * 2)
 	_expect(authority.elimination_count() == 0, "the reset clears the elimination records")
+
+## AUDITORIA F1: `reset_for_next_round()` só pode agir a partir de ENDED. Como
+## COUNTDOWN->WAITING é uma transição legítima (cancelamento), delegar a
+## validação apenas a `_transition` deixava um reset indevido cancelar uma
+## contagem regressiva válida e queimar um identificador de rodada.
+func _test_reset_is_refused_outside_ended() -> void:
+	var counting := _with_players(4)
+	var counting_id := counting.round_id
+	var counting_invalid := counting.invalid_transition_count
+	_expect(counting.state == RoundState.COUNTDOWN, "the lobby is counting down before the reset")
+	counting.reset_for_next_round(BASE_MSEC + 100)
+	_expect(counting.state == RoundState.COUNTDOWN, "a reset during COUNTDOWN is refused")
+	_expect(counting.round_id == counting_id, "the refused reset does not burn a round id")
+	_expect(counting.invalid_transition_count == counting_invalid + 1, "the refused reset is recorded as invalid")
+	counting.tick(_after_countdown())
+	_expect(counting.state == RoundState.ACTIVE, "the untouched countdown still reaches ACTIVE")
+
+	var waiting := _authority()
+	var waiting_invalid := waiting.invalid_transition_count
+	waiting.reset_for_next_round(BASE_MSEC)
+	_expect(waiting.state == RoundState.WAITING, "a reset during WAITING is refused")
+	_expect(waiting.invalid_transition_count == waiting_invalid + 1, "the WAITING reset is recorded as invalid")
+
+	# Um segundo reset depois de um reinício legítimo não pode reabrir o ciclo.
+	var ended := _active_round(4)
+	var now := _after_countdown()
+	ended.eliminate_player(_peer_with_role(ended, Role.ASSASSIN), "test", 0, now)
+	_expect(ended.state == RoundState.ENDED, "the round ended before the first reset")
+	ended.reset_for_next_round(now + 10)
+	var after_first := ended.round_id
+	var after_first_state := ended.state
+	var after_first_invalid := ended.invalid_transition_count
+	ended.reset_for_next_round(now + 20)
+	_expect(ended.state == after_first_state, "the second reset leaves the state untouched")
+	_expect(ended.round_id == after_first, "the second reset does not burn a round id")
+	_expect(ended.invalid_transition_count == after_first_invalid + 1, "the second reset is recorded as invalid")
+
+## AUDITORIA F3: COUNTDOWN nunca pode carregar papéis, participantes ou estado
+## de vida — nem os da rodada anterior, nem os da seguinte.
+func _test_countdown_never_carries_round_state() -> void:
+	var authority := _with_players(4)
+	_expect(authority.state == RoundState.COUNTDOWN, "the lobby is counting down")
+	_expect(not authority.has_roles(), "COUNTDOWN carries no roles")
+	_expect(authority.participants.is_empty(), "COUNTDOWN carries no participants")
+	_expect(authority.alive.is_empty(), "COUNTDOWN carries no alive state")
+	_expect(authority.alive_count() == 0, "COUNTDOWN reports nobody alive")
+	_expect(authority.elimination_count() == 0, "COUNTDOWN carries no eliminations")
+	_expect(authority.winning_team == Role.TEAM_NONE, "COUNTDOWN carries no winner")
+	for peer_id in authority.lobby.peer_ids():
+		_expect(authority.get_role_for_peer(peer_id) == Role.NONE, "COUNTDOWN exposes no role")
+		_expect(not authority.can_deliver_role(peer_id), "COUNTDOWN delivers no role")
+	for entry in authority.public_roster():
+		_expect(not bool((entry as Dictionary)["participant"]), "the COUNTDOWN roster marks nobody as participant")
+
+	# O mesmo vale para a contagem que abre a rodada seguinte.
+	authority.tick(_after_countdown())
+	var now := _after_countdown()
+	authority.eliminate_player(_peer_with_role(authority, Role.ASSASSIN), "test", 0, now)
+	authority.tick(now + int(END_DELAY_SECONDS * 1000.0))
+	_expect(authority.state == RoundState.COUNTDOWN, "the next countdown opened after the reset")
+	_expect(not authority.has_roles(), "the next COUNTDOWN carries no roles")
+	_expect(authority.participants.is_empty(), "the next COUNTDOWN carries no participants")
+	_expect(authority.alive.is_empty(), "the next COUNTDOWN carries no alive state")
+	_expect(authority.elimination_count() == 0, "the next COUNTDOWN carries no eliminations")
+
+## AUDITORIA: duas rodadas completas no mesmo processo.
+func _test_two_consecutive_rounds() -> void:
+	var authority := _active_round(4)
+	var first_now := _after_countdown()
+	var first_id := authority.round_id
+	var first_roles := _roles_snapshot(authority)
+	var first_assassin := _peer_with_role(authority, Role.ASSASSIN)
+	_expect(RoundRules.is_valid_distribution(first_roles), "round one has a valid distribution")
+
+	authority.eliminate_player(first_assassin, "test", 0, first_now)
+	_expect(authority.state == RoundState.ENDED, "round one ended")
+	_expect(not authority.is_alive(first_assassin), "the eliminated assassin is dead in round one")
+
+	authority.tick(first_now + int(END_DELAY_SECONDS * 1000.0))
+	_expect(authority.state == RoundState.COUNTDOWN, "round two opened its countdown")
+	_expect(authority.round_id == first_id + 1, "round two carries a new identifier")
+
+	var second_now := first_now + int(END_DELAY_SECONDS * 1000.0) + int(COUNTDOWN_SECONDS * 1000.0)
+	authority.tick(second_now)
+	_expect(authority.state == RoundState.ACTIVE, "round two reached ACTIVE")
+	_expect(authority.participants.size() == 4, "round two froze the same four players")
+	_expect(authority.alive_count() == 4, "everyone is alive again in round two")
+	_expect(authority.is_alive(first_assassin), "the player killed in round one is alive in round two")
+	_expect(authority.winning_team == Role.TEAM_NONE, "round two starts without a winner")
+	_expect(authority.winner_reason.is_empty(), "round two starts without a public reason")
+	_expect(authority.elimination_count() == 0, "round two starts without eliminations")
+
+	var second_roles := _roles_snapshot(authority)
+	_expect(RoundRules.is_valid_distribution(second_roles), "round two has a valid distribution")
+	_expect(second_roles.size() == 4, "round two assigned a role to every participant")
+
+	# A rodada seguinte também precisa poder terminar e ser avaliada.
+	var second_assassin := _peer_with_role(authority, Role.ASSASSIN)
+	authority.eliminate_player(second_assassin, "test", 0, second_now)
+	_expect(authority.state == RoundState.ENDED, "round two ended")
+	_expect(authority.round_id == first_id + 1, "the result belongs to round two")
+	_expect(authority.winning_team == Role.TEAM_INNOCENTS, "round two produced its own winner")
+
+## AUDITORIA: precedência determinística quando assassino e inocentes caem
+## juntos. O resultado não pode depender da ordem de iteração do Dictionary.
+func _test_simultaneous_deaths_have_deterministic_precedence() -> void:
+	var roles := {1: Role.ASSASSIN, 2: Role.DETECTIVE, 3: Role.VICTIM, 4: Role.VICTIM}
+	var everyone_dead := {1: false, 2: false, 3: false, 4: false}
+	var outcome := RoundRules.evaluate_winner(roles, everyone_dead)
+	_expect(int(outcome.get("team", Role.TEAM_NONE)) == Role.TEAM_INNOCENTS, "everyone dead resolves to an innocent win")
+	_expect(str(outcome.get("reason", "")) == RoundRules.REASON_ASSASSIN_DOWN, "the simultaneous reason is assassin_down")
+
+	# Mesmo conteúdo, ordens de inserção diferentes: o resultado não muda.
+	var reversed_roles := {4: Role.VICTIM, 3: Role.VICTIM, 2: Role.DETECTIVE, 1: Role.ASSASSIN}
+	var reversed_alive := {4: false, 3: false, 2: false, 1: false}
+	_expect(RoundRules.evaluate_winner(reversed_roles, reversed_alive) == outcome, "dictionary order does not change the outcome")
+
+	# Um estado de vida ausente é tratado como não vivo, sem travar a regra.
+	var missing := RoundRules.evaluate_winner(roles, {})
+	_expect(int(missing.get("team", Role.TEAM_NONE)) == Role.TEAM_INNOCENTS, "a missing alive map resolves deterministically")
+
+## AUDITORIA: em produção a seed não é constante e o cliente não a fornece.
+func _test_production_seed_is_not_constant() -> void:
+	var distributions: Dictionary = {}
+	for attempt in 12:
+		var authority := RoundAuthority.new(LobbyRegistry.new(), 0)
+		authority.configure(COUNTDOWN_SECONDS, END_DELAY_SECONDS)
+		for index in 6:
+			authority.join(200 + index, "client-%d" % (index + 1), BASE_MSEC)
+		authority.tick(_after_countdown())
+		var signature := ""
+		for peer_id in authority.lobby.peer_ids():
+			signature += "%d:%d," % [peer_id, authority.get_role_for_peer(peer_id)]
+		distributions[signature] = true
+	_expect(distributions.size() > 1, "the default seed is randomised, not constant")
+
+	# Uma seed explícita continua determinística para os testes.
+	var seeded_first := _roles_snapshot(_active_round(4))
+	var seeded_second := _roles_snapshot(_active_round(4))
+	_expect(seeded_first == seeded_second, "an explicit seed stays reproducible")
 
 # --- Apoio -------------------------------------------------------------------
 
