@@ -702,7 +702,7 @@ func request_pickup(pickup_id: Variant, sequence: Variant) -> void:
 	if not lobby.has(sender):
 		return
 	var result := combat_authority.request_pickup(sender, pickup_id, sequence, Time.get_ticks_msec())
-	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "pickup", result)
+	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "pickup", sequence, result)
 	if not bool(result.get("accepted", false)):
 		combat_action_rejected.rpc_id(sender, "pickup", int(sequence) if typeof(sequence) == TYPE_INT else -1, _safe_combat_reason(result.get("reason", "rejected")))
 
@@ -714,7 +714,7 @@ func request_fire(sequence: Variant, claimed_origin: Variant, claimed_direction:
 	if not lobby.has(sender):
 		return
 	var result := combat_authority.request_fire(sender, sequence, claimed_origin, claimed_direction, Time.get_ticks_msec())
-	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "fire", result)
+	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "fire", sequence, result)
 	if not bool(result.get("accepted", false)):
 		combat_action_rejected.rpc_id(sender, "fire", int(sequence) if typeof(sequence) == TYPE_INT else -1, _safe_combat_reason(result.get("reason", "rejected")))
 	elif bool(result.get("hit", false)):
@@ -728,7 +728,7 @@ func request_reload(sequence: Variant) -> void:
 	if not lobby.has(sender):
 		return
 	var result := combat_authority.request_reload(sender, sequence, Time.get_ticks_msec())
-	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "reload", result)
+	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "reload", sequence, result)
 	if not bool(result.get("accepted", false)):
 		combat_action_rejected.rpc_id(sender, "reload", int(sequence) if typeof(sequence) == TYPE_INT else -1, _safe_combat_reason(result.get("reason", "rejected")))
 
