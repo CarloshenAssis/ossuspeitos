@@ -119,7 +119,10 @@ func request_fire(peer_id: int, sequence: Variant, claimed_origin: Variant, clai
 		"origin": shot["origin"], "end": endpoint, "hit_player": int(hit.get("peer_id", 0)) > 0}
 	shot_resolved.emit(event)
 	private_state_changed.emit(peer_id, private_state(peer_id))
-	return {"accepted": true, "hit": int(hit.get("peer_id", 0)) > 0}
+	# `hit_peer_id` remains inside the server process. NetworkApp only exposes the
+	# boolean hit confirmation and sanitized public event to clients.
+	return {"accepted": true, "hit": int(hit.get("peer_id", 0)) > 0,
+		"hit_peer_id": int(hit.get("peer_id", 0))}
 
 func private_state(peer_id: int) -> Dictionary:
 	if not health.has(peer_id):

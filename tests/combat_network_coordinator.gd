@@ -35,6 +35,9 @@ var current_expected_action := ""
 var last_fire_one_diagnostic := ""
 var current_shot_events := 0
 var current_shot_hit := false
+var current_hit_peer_id := 0
+var lane_prepared_msec := 0
+var post_end_command_active := false
 
 func _ready() -> void:
 	app = get_parent()
@@ -106,14 +109,19 @@ func _server_tick() -> void:
 		var ammo_state: Dictionary = app.combat_authority.inventory.get_inventory(shooter)
 		if int(ammo_state.get("reserve", 0)) > 0 and not bool(app.combat_authority.inventory.ground_items["ammo_0"]["available"]):
 			print("COMBAT_STAGE_EXIT stage=AMMO result=official_ammo_present")
-			_prepare_lane(); _enter("FIRE_ONE", [shooter], _fire_payload(1)); return
+			_prepare_lane(); _enter_wait("WAIT_FIRE_ONE_READY"); return
 		if _has_rejection(): _fail("AMMO rejected: %s" % _latest_reason()); return
 	if stage == "WAIT_AMMO_READY" and _pickup_action_ready():
 		action_results.clear(); _enter("AMMO", [shooter], {"actor": shooter, "pickup_id": "ammo_0", "sequence": 3}); return
+	if stage == "WAIT_FIRE_ONE_READY":
+		var lane_error := validate_test_lane(app.authoritative_world.states, app.round_authority.alive, shooter, target)
+		if lane_error.is_empty() and Time.get_ticks_msec() > lane_prepared_msec:
+			print("COMBAT_STAGE_EXIT stage=WAIT_FIRE_ONE_READY result=official_positions_confirmed")
+			action_results.clear(); _enter("FIRE_ONE", [shooter], _fire_payload(1)); return
 	if stage == "FIRE_ONE" and _single_action_accepted():
 		_log_fire_one_state()
 		var fire_inventory: Dictionary = app.combat_authority.inventory.get_inventory(shooter)
-		if current_shot_events != 1 or not current_shot_hit or int(fire_inventory.get("magazine", -1)) != 5 \
+		if current_shot_events != 1 or not current_shot_hit or current_hit_peer_id != target or int(fire_inventory.get("magazine", -1)) != 5 \
 				or int(app.combat_authority.health.get(target, -1)) != 66:
 			_fail("first fire official outcome mismatch"); return
 		print("COMBAT_FIRE_OK shots=1 ammo_consumed=1 damage=34")
@@ -166,9 +174,7 @@ func _server_tick() -> void:
 		action_results.clear()
 		_enter("POST_END", peers, {"sequence": 63})
 		return
-	if stage == "POST_END" and acknowledgements.size() == 4 and action_results.size() == 12:
-		for result in action_results:
-			if str(result.get("reason", "")) != "round_not_active": _fail("post-end action accepted"); return
+	if stage == "POST_END" and post_end_complete(acknowledgements, action_results, peers, expected_round_id, command_id, current_sequence):
 		print("COMBAT_POST_END_ACTIONS_REJECTED")
 		print("COMBAT_PRIVACY_OK clients=4 leaks=0")
 		print("COMBAT_SERVER_TEST_OK clients=4")
@@ -183,6 +189,7 @@ func observe_server_action(peer_id: int, action: String, sequence: Variant, resu
 		print("COMBAT_STAGE_ACK stage=%s peer_id=%d event=stale_action_ignored count=%d expected=%d" % [stage, peer_id, action_results.size(), expected_peers.size()])
 		return
 	var entry := {"round_id": expected_round_id, "stage": stage, "command_id": command_id, "peer_id": peer_id, "action": action, "sequence": received_sequence, "accepted": bool(result.get("accepted", false)), "reason": str(result.get("reason", ""))}
+	if stage == "FIRE_ONE" and action == "fire": current_hit_peer_id = int(result.get("hit_peer_id", 0))
 	if not record_correlated_result(action_history, entry):
 		print("COMBAT_STAGE_ACK stage=%s peer_id=%d event=duplicate_action_ignored count=%d expected=%d" % [stage, peer_id, action_results.size(), expected_peers.size()])
 		return
@@ -229,12 +236,11 @@ func observe_client_event(kind: String, payload: Variant = null) -> void:
 			print("COMBAT_RPC_RECEIVED name=combat_public_elimination id=%s" % app.client_label)
 		"rejection":
 			print("COMBAT_RPC_RECEIVED name=combat_action_rejected id=%s" % app.client_label)
-			if str(pending_command.get("command", "")) == "POST_END":
+			if post_end_command_active:
 				post_end_rejections += 1
 				if post_end_rejections == 3 and privacy_leaks == 0:
 					print("COMBAT_CLIENT_TEST_OK id=%s" % app.client_label)
-					combat_test_ack.rpc_id(1, int(pending_command.get("round_id", app.local_round_id)), "POST_END", int(pending_command.get("command_id", 0)), "rejections_received")
-					pending_command.clear()
+					post_end_command_active = false
 
 @rpc("authority", "call_remote", "reliable")
 func combat_test_command(round_id: int, received_stage: String, received_command_id: int, payload: Dictionary) -> void:
@@ -247,6 +253,8 @@ func combat_test_ack(round_id: int, received_stage: String, received_command_id:
 	if not multiplayer.is_server() or app.mode != "server": return
 	var sender := multiplayer.get_remote_sender_id()
 	if sender not in peers or round_id != expected_round_id or received_stage != stage or received_command_id != command_id: return
+	var expected_event := "ready" if stage == "INITIAL" else "command_received"
+	if event != expected_event: return
 	if not expected_peers.has(sender) or acknowledgements.has(sender): return
 	acknowledgements[sender] = true
 	print("COMBAT_STAGE_ACK stage=%s peer_id=%d event=%s count=%d expected=%d" % [stage, sender, event, acknowledgements.size(), expected_peers.size()])
@@ -257,7 +265,7 @@ func _try_run_client_command() -> void:
 	var command := str(pending_command["command"]); var payload: Dictionary = pending_command["payload"]
 	var received_command_id := int(pending_command["command_id"]); var round_id := int(pending_command["round_id"])
 	var own_id := multiplayer.get_unique_id()
-	if command != "INITIAL" and command != "POST_END":
+	if command != "INITIAL":
 		processed_commands[received_command_id] = true
 		combat_test_ack.rpc_id(1, round_id, command, received_command_id, "command_received")
 	if command == "INITIAL":
@@ -277,6 +285,7 @@ func _try_run_client_command() -> void:
 		app.request_reload.rpc_id(1, payload["sequence"])
 	elif command == "POST_END":
 		post_end_rejections = 0
+		post_end_command_active = true
 		app.request_pickup.rpc_id(1, "weapon_0", payload["sequence"])
 		app.request_fire.rpc_id(1, payload["sequence"], Vector3.ZERO, Vector3.FORWARD)
 		app.request_reload.rpc_id(1, payload["sequence"])
@@ -292,6 +301,7 @@ func _enter(next: String, recipients: Array, payload: Dictionary = {}) -> void:
 	current_expected_action = _expected_action_for_stage(next)
 	current_shot_events = 0
 	current_shot_hit = false
+	current_hit_peer_id = 0
 	print("COMBAT_STAGE_ENTER stage=%s previous=%s round_id=%d now=%d" % [stage, previous_stage, expected_round_id, stage_started_msec])
 	for peer_id in recipients:
 		expected_peers[int(peer_id)] = true
@@ -317,7 +327,16 @@ func _prepare_ammo() -> void:
 	action_results.clear(); _enter_wait("WAIT_AMMO_READY")
 
 func _prepare_lane() -> void:
-	_set_position(shooter, Vector3(8, 1, 8)); _set_position(target, Vector3(8, 1, 2)); app.authoritative_world.states[shooter]["yaw"] = 0.0
+	var safe_positions := [Vector3(-8, 1, -8), Vector3(-8, 1, 8)]
+	var safe_index := 0
+	for peer_id in peers:
+		if int(peer_id) == shooter or int(peer_id) == target: continue
+		_set_position(int(peer_id), safe_positions[safe_index])
+		safe_index += 1
+	_set_position(shooter, Vector3(8, 1, 8))
+	_set_position(target, Vector3(8, 1, 2))
+	app.authoritative_world.states[shooter]["yaw"] = 0.0
+	lane_prepared_msec = Time.get_ticks_msec()
 
 func _prepare_wall() -> void:
 	_set_position(shooter, Vector3(0, 1, 5)); _set_position(target, Vector3(0, 1, -5)); app.authoritative_world.states[shooter]["yaw"] = 0.0
@@ -359,10 +378,12 @@ func cancel_pending(reason: String) -> void:
 func _log_fire_one_state() -> void:
 	if shooter <= 0 or target <= 0: return
 	var inventory: Dictionary = app.combat_authority.inventory.get_inventory(shooter)
-	var state := "round=%d stage=%s command=%d peer=%d sequence=%d results=%d accepted=%s magazine=%d target_health=%d shot_events=%d hit=%s" % [
-		expected_round_id, stage, command_id, shooter, current_sequence, action_results.size(),
+	var geometry := _ray_candidate_diagnostics()
+	var state := "round=%d stage=%s command=%d peer=%d expected_target=%d actual_target=%d sequence=%d results=%d accepted=%s magazine=%d target_health=%d shot_events=%d hit=%s origin=%s direction=%s yaw=%.3f candidates=%s positions=%s" % [
+		expected_round_id, stage, command_id, shooter, target, current_hit_peer_id, current_sequence, action_results.size(),
 		str(_single_action_accepted()), int(inventory.get("magazine", -1)),
-		int(app.combat_authority.health.get(target, -1)), current_shot_events, str(current_shot_hit)]
+		int(app.combat_authority.health.get(target, -1)), current_shot_events, str(current_shot_hit),
+		geometry["origin"], geometry["direction"], float(app.authoritative_world.states[shooter]["yaw"]), geometry["candidates"], geometry["positions"]]
 	if state != last_fire_one_diagnostic:
 		last_fire_one_diagnostic = state
 		print("COMBAT_FIRE_ONE_STATE %s" % state)
@@ -387,6 +408,61 @@ static func matching_results(history: Array, round_id: int, expected_stage: Stri
 				and str(entry.get("action", "")) == action and int(entry.get("sequence", -1)) == sequence:
 			matches.append(entry)
 	return matches
+
+static func validate_test_lane(states: Dictionary, alive: Dictionary, shooter_id: int, target_id: int) -> String:
+	if not states.has(shooter_id) or not states.has(target_id): return "missing_actor"
+	var shooter_position: Vector3 = states[shooter_id]["position"]
+	var target_position: Vector3 = states[target_id]["position"]
+	if shooter_position != Vector3(8, 1, 8) or target_position != Vector3(8, 1, 2): return "position_not_applied"
+	if absf(float(states[shooter_id]["yaw"])) > 0.0001: return "yaw_not_applied"
+	var bystanders: Array = []
+	for peer_id in states:
+		if int(peer_id) != shooter_id and int(peer_id) != target_id: bystanders.append(int(peer_id))
+	bystanders.sort()
+	if bystanders.size() != 2: return "invalid_bystander_count"
+	var expected_safe := [Vector3(-8, 1, -8), Vector3(-8, 1, 8)]
+	for index in bystanders.size():
+		if states[bystanders[index]]["position"] != expected_safe[index]: return "bystander_position_not_applied"
+	for peer_id in states:
+		if (states[peer_id]["velocity"] as Vector3).length_squared() > 0.000001: return "participant_moving"
+		if (states[peer_id]["input"] as Vector2).length_squared() > 0.000001: return "participant_input_active"
+	var origin := shooter_position + Vector3.UP * ArenaRules.EYE_HEIGHT
+	var target_distance := ArenaRules.ray_player(origin, Vector3.FORWARD, 20.0, target_position)
+	if target_distance < 0.0: return "target_not_intersected"
+	for peer_id in states:
+		if int(peer_id) == shooter_id or int(peer_id) == target_id or not bool(alive.get(peer_id, false)): continue
+		var candidate_position: Vector3 = states[peer_id]["position"]
+		if candidate_position == shooter_position or candidate_position == target_position: return "overlapping_participant"
+		var distance := ArenaRules.ray_player(origin, Vector3.FORWARD, 20.0, candidate_position)
+		if distance >= 0.0 and distance <= target_distance: return "intermediate_participant"
+	return ""
+
+static func post_end_complete(acks: Dictionary, results: Array, expected: Array, round_id: int, expected_command_id: int, sequence: int) -> bool:
+	if acks.size() != expected.size(): return false
+	for peer_id in expected:
+		if not acks.has(peer_id): return false
+	var seen := {}
+	for result in results:
+		if int(result.get("round_id", -1)) != round_id or str(result.get("stage", "")) != "POST_END" \
+				or int(result.get("command_id", -1)) != expected_command_id or int(result.get("sequence", -1)) != sequence \
+				or bool(result.get("accepted", true)) or str(result.get("reason", "")) != "round_not_active":
+			return false
+		var peer_id := int(result.get("peer_id", 0)); var action := str(result.get("action", ""))
+		if peer_id not in expected or action not in ["pickup", "fire", "reload"]: return false
+		var key := "%d:%s" % [peer_id, action]
+		if seen.has(key): return false
+		seen[key] = true
+	return seen.size() == expected.size() * 3
+
+func _ray_candidate_diagnostics() -> Dictionary:
+	var origin: Vector3 = app.authoritative_world.states[shooter]["position"] + Vector3.UP * ArenaRules.EYE_HEIGHT
+	var candidates := {}; var positions := {}
+	for peer_id in peers:
+		var position: Vector3 = app.authoritative_world.states[peer_id]["position"]
+		positions[int(peer_id)] = position
+		if int(peer_id) != shooter and app.round_authority.is_alive(int(peer_id)):
+			candidates[int(peer_id)] = ArenaRules.ray_player(origin, Vector3.FORWARD, 20.0, position)
+	return {"origin": origin, "direction": Vector3.FORWARD, "candidates": candidates, "positions": positions}
 
 func _has_rejection() -> bool:
 	for result in action_results:
