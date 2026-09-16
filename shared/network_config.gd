@@ -31,3 +31,13 @@ static func float_argument(arguments: Dictionary, key: String, fallback: float) 
 
 static func bool_argument(arguments: Dictionary, key: String) -> bool:
 	return str(arguments.get(key, "false")) == "true"
+
+static func should_poll_human_input(
+	is_joined: bool,
+	expected_test_clients: int,
+	is_round_test: bool,
+	is_combat_test: bool,
+	has_graphical_arena: bool
+) -> bool:
+	return is_joined and expected_test_clients == 0 and not is_round_test \
+		and not is_combat_test and has_graphical_arena

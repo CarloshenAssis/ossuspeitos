@@ -94,6 +94,6 @@ COMPLETED="$(sed -n 's/.*COMBAT_CLIENT_TEST_OK id=client-\([1-4]\).*/\1/p' "$TMP
 assert_equal four-completed-clients "$(wc -l <<<"$COMPLETED" | tr -d ' ')" 4
 assert_no_grep no-role-leak 'peer_id=[0-9]+.*role=|ASSASSIN|DETECTIVE|VICTIM' "$TMP_DIR"/*.log
 assert_no_grep no-private-payload 'health.*weapon_id|magazine.*reserve' "$TMP_DIR"/client-*.log
-assert_no_grep no-timeout-or-websocket-error 'COMBAT_TEST_STAGE_TIMEOUT|COMBAT_NETWORK_TEST_FAILURE|ready_state != STATE_OPEN' "$TMP_DIR"/*.log
+assert_no_grep no-timeout-or-unexpected-runtime-error 'COMBAT_TEST_STAGE_TIMEOUT|COMBAT_NETWORK_TEST_FAILURE|ready_state != STATE_OPEN|The InputMap action .* doesn.t exist|Trying to call an RPC via a multiplayer peer which is not connected|SCRIPT ERROR' "$TMP_DIR"/*.log
 cat "$TMP_DIR/server.log"
 echo 'COMBAT_NETWORK_TEST_OK server=1 clients=4'

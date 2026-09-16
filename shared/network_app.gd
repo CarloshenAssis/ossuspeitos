@@ -7,6 +7,7 @@ var round_authority: RoundAuthority
 var client_label := ""
 var expected_clients := 0
 var joined := false
+var client_connected := false
 var started_at_msec := 0
 var completion_sent := false
 var shutdown_prepare_received := false
@@ -170,7 +171,9 @@ func _process(_delta: float) -> void:
 		return
 	if not joined and Time.get_ticks_msec() - started_at_msec > int(NetworkConfig.CONNECT_TIMEOUT_SECONDS * 1000.0):
 		fail("CLIENT_TIMEOUT id=%s" % client_label)
-	if joined and expected_clients == 0 and not round_test_mode:
+	if NetworkConfig.should_poll_human_input(
+			joined, expected_clients, round_test_mode,
+			combat_network_test != null, arena_view != null):
 		input_accumulator += _delta
 		if input_accumulator >= 0.05:
 			input_accumulator = 0.0
@@ -237,16 +240,25 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	publish_client_count()
 
 func _on_connected_to_server() -> void:
+	client_connected = true
 	print("CLIENT_CONNECTED id=%s peer_id=%d" % [client_label, multiplayer.get_unique_id()])
 	request_join.rpc_id(1, NetworkConfig.PROTOCOL_VERSION, client_label)
 
 func _on_connection_failed() -> void:
+	client_connected = false
+	joined = false
 	fail("CLIENT_CONNECTION_FAILED id=%s" % client_label)
 
 func _on_server_disconnected() -> void:
+	client_connected = false
+	joined = false
 	if shutdown_prepare_received:
 		print("CLIENT_SHUTDOWN_COMPLETE id=%s" % client_label)
 		get_tree().quit(0)
+		return
+	if combat_network_test != null:
+		combat_network_test.call("cancel_pending", "server_disconnected")
+		fail("CLIENT_SERVER_DISCONNECTED id=%s" % client_label)
 		return
 	if not joined or expected_clients > 0:
 		fail("CLIENT_SERVER_DISCONNECTED id=%s" % client_label)
@@ -323,7 +335,7 @@ func _try_start_test_movement() -> void:
 			_send_input(test_direction, 0.0)
 
 func _send_input(move: Vector2, yaw_delta: float) -> void:
-	if shutdown_prepare_received:
+	if shutdown_prepare_received or not client_connected:
 		return
 	input_sequence += 1
 	submit_input.rpc_id(1, input_sequence, move, yaw_delta)
@@ -783,6 +795,7 @@ func _on_combat_private_state_changed(peer_id: int, state: Dictionary) -> void:
 		combat_private_state.rpc_id(peer_id, state)
 
 func _on_shot_resolved(event: Dictionary) -> void:
+	if combat_network_test != null: combat_network_test.call("observe_server_shot", event)
 	if multiplayer.is_server() and not shutting_down:
 		combat_public_shot.rpc(event)
 

@@ -68,21 +68,23 @@ jobs:
       - name: Validate authoritative weapon and combat rules
         run: |
           set -o pipefail
-          for test in weapon_rules inventory_authority combat_rules combat_authority; do
+          for test in weapon_rules inventory_authority combat_rules combat_authority combat_network_coordinator; do
             godot --headless --path . --script "tests/${test}_test.gd" 2>&1 | tee "$RUNNER_TEMP/godot-network-logs/${test}.log"
           done
           grep -q 'WEAPON_RULES_TEST_OK' "$RUNNER_TEMP/godot-network-logs/weapon_rules.log"
           grep -q 'INVENTORY_AUTHORITY_TEST_OK' "$RUNNER_TEMP/godot-network-logs/inventory_authority.log"
           grep -q 'COMBAT_RULES_TEST_OK' "$RUNNER_TEMP/godot-network-logs/combat_rules.log"
           grep -q 'COMBAT_AUTHORITY_TEST_OK' "$RUNNER_TEMP/godot-network-logs/combat_authority.log"
+          grep -q 'COMBAT_NETWORK_COORDINATOR_TEST_OK' "$RUNNER_TEMP/godot-network-logs/combat_network_coordinator.log"
 
       - name: Run authoritative combat network test
-        env:
-          TEST_LOG_DIR: ${{ runner.temp }}/godot-network-logs/combat-processes
         run: |
           set -o pipefail
-          GODOT_BIN="$(command -v godot)" ./tests/combat_network_test.sh 2>&1 \
-            | tee "$RUNNER_TEMP/godot-network-logs/combat-network.log"
+          for run in 1 2 3 4 5; do
+            TEST_LOG_DIR="$RUNNER_TEMP/godot-network-logs/combat-processes-$run" \
+              GODOT_BIN="$(command -v godot)" ./tests/combat_network_test.sh 2>&1 \
+              | tee "$RUNNER_TEMP/godot-network-logs/combat-network-$run.log"
+          done
 
       - name: Run role privacy network test
         env:

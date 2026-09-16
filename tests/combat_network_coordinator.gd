@@ -9,6 +9,7 @@ var stage := "WAIT_FOR_ACTIVE"
 var stage_started_msec := 0
 var acknowledgements: Dictionary = {}
 var action_results: Array = []
+var action_history: Array = []
 var peers: Array = []
 var shooter := 0
 var target := 0
@@ -30,6 +31,10 @@ var last_rejection_by_peer: Dictionary = {}
 var processed_commands: Dictionary = {}
 var last_wait_log_msec := 0
 var current_sequence := -1
+var current_expected_action := ""
+var last_fire_one_diagnostic := ""
+var current_shot_events := 0
+var current_shot_hit := false
 
 func _ready() -> void:
 	app = get_parent()
@@ -106,7 +111,11 @@ func _server_tick() -> void:
 	if stage == "WAIT_AMMO_READY" and _pickup_action_ready():
 		action_results.clear(); _enter("AMMO", [shooter], {"actor": shooter, "pickup_id": "ammo_0", "sequence": 3}); return
 	if stage == "FIRE_ONE" and _single_action_accepted():
-		if int(app.combat_authority.health.get(target, -1)) != 66: _fail("first damage"); return
+		_log_fire_one_state()
+		var fire_inventory: Dictionary = app.combat_authority.inventory.get_inventory(shooter)
+		if current_shot_events != 1 or not current_shot_hit or int(fire_inventory.get("magazine", -1)) != 5 \
+				or int(app.combat_authority.health.get(target, -1)) != 66:
+			_fail("first fire official outcome mismatch"); return
 		print("COMBAT_FIRE_OK shots=1 ammo_consumed=1 damage=34")
 		action_results.clear(); _enter("REPLAY", [shooter], _fire_payload(1)); return
 	if stage == "REPLAY" and action_results.size() == 1:
@@ -169,13 +178,25 @@ func _server_tick() -> void:
 func observe_server_action(peer_id: int, action: String, sequence: Variant, result: Dictionary) -> void:
 	if app.mode != "server": return
 	var received_sequence := int(sequence) if typeof(sequence) == TYPE_INT else -1
-	if received_sequence != current_sequence or not expected_peers.has(peer_id):
+	if received_sequence != current_sequence or not expected_peers.has(peer_id) \
+			or (not current_expected_action.is_empty() and action != current_expected_action):
 		print("COMBAT_STAGE_ACK stage=%s peer_id=%d event=stale_action_ignored count=%d expected=%d" % [stage, peer_id, action_results.size(), expected_peers.size()])
 		return
-	var entry := {"stage": stage, "command_id": command_id, "peer_id": peer_id, "action": action, "sequence": received_sequence, "accepted": bool(result.get("accepted", false)), "reason": str(result.get("reason", ""))}
+	var entry := {"round_id": expected_round_id, "stage": stage, "command_id": command_id, "peer_id": peer_id, "action": action, "sequence": received_sequence, "accepted": bool(result.get("accepted", false)), "reason": str(result.get("reason", ""))}
+	if not record_correlated_result(action_history, entry):
+		print("COMBAT_STAGE_ACK stage=%s peer_id=%d event=duplicate_action_ignored count=%d expected=%d" % [stage, peer_id, action_results.size(), expected_peers.size()])
+		return
 	action_results.append(entry)
 	if not bool(entry["accepted"]): last_rejection_by_peer[peer_id] = str(entry["reason"])
 	print("COMBAT_STAGE_ACK stage=%s peer_id=%d event=action_%s count=%d expected=%d" % [stage, peer_id, action, action_results.size(), expected_peers.size()])
+	if stage == "FIRE_ONE": _log_fire_one_state()
+
+func observe_server_shot(event: Dictionary) -> void:
+	if app.mode != "server" or stage != "FIRE_ONE": return
+	if int(event.get("round_id", 0)) == expected_round_id and int(event.get("shooter_peer_id", 0)) == shooter:
+		current_shot_events += 1
+		current_shot_hit = bool(event.get("hit_player", false))
+		_log_fire_one_state()
 
 func observe_private_emission(peer_id: int, state: Dictionary) -> void:
 	if app.mode == "server" and peer_id == target and state.has("health"):
@@ -231,6 +252,8 @@ func combat_test_ack(round_id: int, received_stage: String, received_command_id:
 	print("COMBAT_STAGE_ACK stage=%s peer_id=%d event=%s count=%d expected=%d" % [stage, sender, event, acknowledgements.size(), expected_peers.size()])
 
 func _try_run_client_command() -> void:
+	if not app.client_connected or not app.joined or app.shutdown_prepare_received:
+		return
 	var command := str(pending_command["command"]); var payload: Dictionary = pending_command["payload"]
 	var received_command_id := int(pending_command["command_id"]); var round_id := int(pending_command["round_id"])
 	var own_id := multiplayer.get_unique_id()
@@ -263,9 +286,12 @@ func _try_run_client_command() -> void:
 
 func _enter(next: String, recipients: Array, payload: Dictionary = {}) -> void:
 	print("COMBAT_STAGE_EXIT stage=%s result=transition" % stage)
-	previous_stage = stage; stage = next; stage_started_msec = Time.get_ticks_msec(); acknowledgements.clear(); expected_peers.clear()
+	previous_stage = stage; stage = next; stage_started_msec = Time.get_ticks_msec(); acknowledgements.clear(); expected_peers.clear(); action_results.clear()
 	expected_round_id = app.round_authority.round_id; command_id += 1
 	current_sequence = int(payload.get("sequence", -1))
+	current_expected_action = _expected_action_for_stage(next)
+	current_shot_events = 0
+	current_shot_hit = false
 	print("COMBAT_STAGE_ENTER stage=%s previous=%s round_id=%d now=%d" % [stage, previous_stage, expected_round_id, stage_started_msec])
 	for peer_id in recipients:
 		expected_peers[int(peer_id)] = true
@@ -279,10 +305,12 @@ func _enter_wait(next: String) -> void:
 	previous_stage = stage; stage = next; stage_started_msec = Time.get_ticks_msec(); acknowledgements.clear(); expected_peers.clear()
 	expected_round_id = app.round_authority.round_id
 	current_sequence = -1
+	current_expected_action = ""
 	print("COMBAT_STAGE_ENTER stage=%s previous=%s round_id=%d now=%d" % [stage, previous_stage, expected_round_id, stage_started_msec])
 
 func _single_action_accepted() -> bool:
-	return action_results.size() == 1 and bool(action_results[0]["accepted"])
+	return action_results.size() == 1 and bool(action_results[0]["accepted"]) \
+		and (current_expected_action.is_empty() or str(action_results[0]["action"]) == current_expected_action)
 
 func _prepare_ammo() -> void:
 	_set_position(shooter, ArenaRules.PICKUP_POSITIONS[4] + Vector3.UP * 0.75)
@@ -313,9 +341,52 @@ func _pickup_action_ready() -> bool:
 	var last := _last_action("pickup")
 	return last < 0 or Time.get_ticks_msec() >= last + CombatAuthority.ACTION_INTERVAL_MSEC
 
+func _expected_action_for_stage(value: String) -> String:
+	if value in ["CONTEST", "ARM", "AMMO"]: return "pickup"
+	if value in ["FIRE_ONE", "REPLAY", "RATE", "CADENCE", "WALL", "FIRE_TWO", "FIRE_THREE"]: return "fire"
+	if value == "RELOAD": return "reload"
+	return ""
+
 func _fail(reason: String) -> void:
 	push_error("COMBAT_NETWORK_TEST_FAILURE stage=%s reason=%s" % [stage, reason])
 	app.get_tree().quit(1)
+
+func cancel_pending(reason: String) -> void:
+	pending_command.clear()
+	set_process(false)
+	print("COMBAT_TEST_CANCELLED reason=%s" % reason)
+
+func _log_fire_one_state() -> void:
+	if shooter <= 0 or target <= 0: return
+	var inventory: Dictionary = app.combat_authority.inventory.get_inventory(shooter)
+	var state := "round=%d stage=%s command=%d peer=%d sequence=%d results=%d accepted=%s magazine=%d target_health=%d shot_events=%d hit=%s" % [
+		expected_round_id, stage, command_id, shooter, current_sequence, action_results.size(),
+		str(_single_action_accepted()), int(inventory.get("magazine", -1)),
+		int(app.combat_authority.health.get(target, -1)), current_shot_events, str(current_shot_hit)]
+	if state != last_fire_one_diagnostic:
+		last_fire_one_diagnostic = state
+		print("COMBAT_FIRE_ONE_STATE %s" % state)
+
+static func record_correlated_result(history: Array, entry: Dictionary) -> bool:
+	for existing in history:
+		if int(existing.get("round_id", -1)) == int(entry.get("round_id", -2)) \
+				and str(existing.get("stage", "")) == str(entry.get("stage", "!")) \
+				and int(existing.get("command_id", -1)) == int(entry.get("command_id", -2)) \
+				and int(existing.get("peer_id", -1)) == int(entry.get("peer_id", -2)) \
+				and str(existing.get("action", "")) == str(entry.get("action", "!")) \
+				and int(existing.get("sequence", -1)) == int(entry.get("sequence", -2)):
+			return false
+	history.append(entry.duplicate(true))
+	return true
+
+static func matching_results(history: Array, round_id: int, expected_stage: String, expected_command_id: int, peer_id: int, action: String, sequence: int) -> Array:
+	var matches: Array = []
+	for entry in history:
+		if int(entry.get("round_id", -1)) == round_id and str(entry.get("stage", "")) == expected_stage \
+				and int(entry.get("command_id", -1)) == expected_command_id and int(entry.get("peer_id", -1)) == peer_id \
+				and str(entry.get("action", "")) == action and int(entry.get("sequence", -1)) == sequence:
+			matches.append(entry)
+	return matches
 
 func _has_rejection() -> bool:
 	for result in action_results:
