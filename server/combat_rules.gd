@@ -26,7 +26,7 @@ func request_shot(peer_id: int, intent: Variant, context: Variant, now_msec: int
 	return {
 		"accepted": true,
 		"sequence": sequence,
-		"origin": context["position"],
+		"origin": context["eye_position"],
 		"direction": _apply_server_spread(claimed_direction.normalized(), float(definition.spread_radians)),
 		"max_distance": float(definition.range_meters),
 		"damage": float(definition.damage),
@@ -47,7 +47,7 @@ func _validate_request(peer_id: int, intent: Variant, context: Variant, now_msec
 		return "invalid_context"
 	if not context.has("round_active") or typeof(context["round_active"]) != TYPE_BOOL:
 		return "invalid_context"
-	if not context.has("position"):
+	if not context.has("eye_position") or not context.has("yaw"):
 		return "invalid_context"
 	if not bool(context["alive"]):
 		return "player_dead"
@@ -83,10 +83,10 @@ func _validate_request(peer_id: int, intent: Variant, context: Variant, now_msec
 		return "time_rollback"
 	if int(inventory["last_shot_msec"]) >= 0 and now_msec - int(inventory["last_shot_msec"]) < int(definition.fire_interval_msec):
 		return "fire_rate"
-	var origin_error := WeaponRules.validate_origin(intent["origin"], context["position"])
+	var origin_error := WeaponRules.validate_origin(intent["origin"], context["eye_position"])
 	if not origin_error.is_empty():
 		return origin_error
-	return WeaponRules.validate_direction(intent["direction"])
+	return WeaponRules.validate_direction_for_yaw(intent["direction"], context["yaw"])
 
 func _apply_server_spread(direction: Vector3, spread_radians: float) -> Vector3:
 	if spread_radians <= 0.0:

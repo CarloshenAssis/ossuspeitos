@@ -197,6 +197,9 @@ if [[ -n "$ATTACK_COUNT" && "$ATTACK_COUNT" -ge 50 ]]; then
 else
 	check_failed "attacker-sent-its-full-attack-set" "expected at least 50 attacks, got '${ATTACK_COUNT:-none}'"
 fi
+for attack in pickup_before_join fire_before_join reload_before_join pickup_wrong_types fire_wrong_types reload_wrong_type missing_pickup impossible_origin invalid_direction replayed_fire_sequence forge_combat_private_state forge_combat_hit forge_combat_elimination pickup_during_shutdown fire_during_shutdown reload_during_shutdown; do
+	assert_grep "combat-probe-sent-$attack" "ATTACKER_SENT id=attacker attack=$attack" "$TMP_DIR/attacker.log"
+done
 # ACHADO F7 (pré-existente, LOW): `shutdown_ready` não é correlacionado com o
 # `shutdown_prepare` que deveria tê-lo provocado, então o ack não solicitado do
 # peer hostil é aceito assim que o servidor entra em shutdown. A consequência é
@@ -217,6 +220,8 @@ assert_no_grep "no-websocket-state-error" 'ready_state != STATE_OPEN' "$TMP_DIR"
 assert_no_grep "attacker-never-received-a-role" 'ATTACKER_RECEIVED_PRIVATE_ROLE' "$TMP_DIR/attacker.log"
 assert_no_grep "attacker-roster-carries-no-role" 'ATTACKER_ROSTER_HAS_ROLE' "$TMP_DIR/attacker.log"
 assert_no_grep "attacker-public-state-carries-no-role" 'ATTACKER_PUBLIC_STATE_HAS_ROLE' "$TMP_DIR/attacker.log"
+assert_no_grep "attacker-never-received-private-combat-state" 'ATTACKER_UNEXPECTED_PRIVATE_COMBAT_STATE' "$TMP_DIR/attacker.log"
+assert_no_grep "attacker-never-received-hit-confirm" 'ATTACKER_UNEXPECTED_HIT_CONFIRM' "$TMP_DIR/attacker.log"
 assert_no_grep "attacker-log-carries-no-role-name" '(ASSASSIN|DETECTIVE|VICTIM)' "$TMP_DIR/attacker.log"
 assert_grep "attacker-registered-as-late-join" 'ROUND_LATE_JOIN peer_id=[0-9]+ round_id=1 count=1' "$TMP_DIR/server.log"
 
@@ -228,7 +233,7 @@ assert_grep "huge-label-refused" 'JOIN_REJECTED|invalid_client' "$TMP_DIR/attack
 assert_grep "duplicate-session-refused" 'ATTACKER_JOIN_REJECTED id=attacker reason=invalid_client' "$TMP_DIR/attacker.log"
 
 # --- RPC de autoridade não pode ser chamada por um cliente -------------------
-for rpc in round_private_role round_public_state round_roster; do
+for rpc in round_private_role round_public_state round_roster combat_private_state combat_hit_confirmed combat_public_elimination combat_public_shot pickup_public_state combat_action_rejected; do
 	assert_grep "authority-rpc-refused-$rpc" "RPC '$rpc' is not allowed on node .* Mode is 2, authority is 1" "$TMP_DIR/server.log"
 done
 

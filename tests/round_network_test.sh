@@ -141,7 +141,7 @@ RPC_SURFACE="$(awk '
   pending && $0 !~ /^[[:space:]]*(#|$)/ { pending = 0 }
 ' "$ROOT"/shared/*.gd "$ROOT"/client/*.gd "$ROOT"/server/*.gd | sort -u | tr '\n' ' ')"
 echo "RPC_SURFACE $RPC_SURFACE"
-EXPECTED_RPC_SURFACE="client_count_changed client_test_completed input_rejected join_accepted join_rejected request_join round_private_role round_public_state round_role_acknowledged round_roster shutdown_prepare shutdown_ready submit_input world_snapshot "
+EXPECTED_RPC_SURFACE="client_count_changed client_test_completed combat_action_rejected combat_hit_confirmed combat_private_state combat_public_elimination combat_public_shot input_rejected join_accepted join_rejected pickup_public_state request_fire request_join request_pickup request_reload round_private_role round_public_state round_role_acknowledged round_roster shutdown_prepare shutdown_ready submit_input world_snapshot "
 assert_equal "declared-rpc-surface" "$RPC_SURFACE" "$EXPECTED_RPC_SURFACE"
 assert_no_grep "public-roster-has-no-role-field" '"role"' "$ROOT/server/round_authority.gd"
 assert_no_grep "movement-snapshot-has-no-role-field" 'role' "$ROOT/shared/movement_rules.gd"

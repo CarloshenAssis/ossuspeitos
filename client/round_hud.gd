@@ -30,6 +30,7 @@ var _own_peer_id := 0
 var _roster: Array = []
 var _label: Label
 var _background: ColorRect
+var _combat: Dictionary = {}
 
 func _ready() -> void:
 	_background = ColorRect.new()
@@ -54,10 +55,24 @@ func apply_roster(entries: Array) -> void:
 	_roster = entries
 	_render()
 
+func apply_combat_state(payload: Dictionary) -> void:
+	_combat = payload.duplicate(true)
+	_render()
+
 func _render() -> void:
 	if _label == null:
 		return
-	_label.text = "\n".join(compose_lines(_public, _role, _own_peer_id, _roster))
+	var lines := compose_lines(_public, _role, _own_peer_id, _roster)
+	if not _combat.is_empty():
+		lines.append("Vida: %d/100" % int(_combat.get("health", 0)))
+		if int(_combat.get("health", 0)) <= 0:
+			lines.append("ELIMINADO")
+		elif str(_combat.get("weapon_id", "")).is_empty():
+			lines.append("Sem arma")
+		else:
+			lines.append("Munição: %d / %d" % [int(_combat.get("magazine", 0)), int(_combat.get("reserve", 0))])
+			if bool(_combat.get("reloading", false)): lines.append("Recarregando...")
+	_label.text = "\n".join(lines)
 
 ## Composição pura do texto do HUD, a partir exclusivamente do que o servidor
 ## publicou. Estática e sem nó, portanto verificável sem renderização.

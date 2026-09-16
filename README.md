@@ -2,10 +2,9 @@
 
 Protótipo Godot 4 com servidor headless autoritativo e clientes locais conectados
 por WebSocket. O segundo marco adicionou uma arena 3D provisória, movimento em
-primeira pessoa e cápsulas interpoladas para os jogadores remotos. O marco atual
-acrescenta as fundações do ciclo de partida: lobby autoritativo, máquina de
-estados da rodada, papéis secretos, estado vivo/morto, condições de vitória,
-reinício e um HUD provisório.
+primeira pessoa e cápsulas interpoladas para os jogadores remotos. O marco atual liga o primeiro combate jogável às fundações autoritativas:
+uma pistola comum, pickups fixos, vida, munição, recarga, hitscan bloqueado por
+paredes e eliminação.
 
 ## Requisitos
 
@@ -30,7 +29,8 @@ O endereço pode ser alterado com `--url=ws://host:porta`. O servidor aceita
 `--bind=endereço`, `--port=porta` e também a variável de ambiente `PORT`.
 Nos clientes gráficos, use WASD para mover e o mouse para girar a câmera. O
 cliente envia apenas eixos de entrada e variação de rotação; posição e velocidade
-são calculadas, limitadas e publicadas pelo servidor.
+são calculadas, limitadas e publicadas pelo servidor. Durante uma rodada ativa,
+use **E** para coletar, clique esquerdo para atirar e **R** para recarregar.
 
 ## Ciclo de partida
 
@@ -138,6 +138,11 @@ godot4 --headless --path . --script tests/round_hud_test.gd
 godot4 --headless --path . --script tests/round_authority_test.gd
 # regras de movimento
 godot4 --headless --path . --script tests/movement_rules_test.gd
+# arma, inventário, validação de tiro e combate integrado
+godot4 --headless --path . --script tests/weapon_rules_test.gd
+godot4 --headless --path . --script tests/inventory_authority_test.gd
+godot4 --headless --path . --script tests/combat_rules_test.gd
+godot4 --headless --path . --script tests/combat_authority_test.gd
 # sigilo dos papéis com servidor e cinco clientes reais
 ./tests/round_network_test.sh
 # auditoria adversarial: peer hostil contra uma rodada real
@@ -166,15 +171,9 @@ sorteio usa `RandomNumberGenerator.randomize()`: a seed nunca vem do cliente.
 
 ## Limitações deste marco
 
-Ainda **não existem**: armas, tiros, dano jogável, munição, itens no chão,
-inventário, lojas, créditos, arma especial do assassino, Arma do Veredito do
-detetive, ressurreição, corpos, espectador, voz, chat, matchmaking, servidor
-Railway, multiplayer Web público, banco de dados, contas, APK Android, arte
-definitiva, efeitos sonoros e deploy do servidor.
-
-Além disso, neste marco o movimento **não** é bloqueado pela fase da rodada:
-jogadores continuam podendo se mover em `WAITING` e `ENDED`. O bloqueio de ações
-de gameplay por fase entra junto com o combate.
+Ainda **não existem**: lojas, créditos, armas especiais, ressurreição, corpos,
+espectador completo, voz, chat, matchmaking, Railway, Android ou arte definitiva.
+O hitscan atual usa geometria analítica simples, sem headshot, previsão ou lag compensation.
 
 ## Demonstração visual offline
 

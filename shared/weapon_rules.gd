@@ -8,7 +8,8 @@ const MAX_RANGE_METERS := 100_000.0
 const MAX_RELOAD_MSEC := 3_600_000
 const MAX_SPREAD_RADIANS := PI
 const DIRECTION_TOLERANCE := 0.01
-const ORIGIN_TOLERANCE_METERS := 1.5
+const ORIGIN_TOLERANCE_METERS := 0.35
+const MAX_AIM_YAW_RADIANS := deg_to_rad(70.0)
 
 static func validate_definition(definition: Variant) -> String:
 	if not definition is WeaponDefinition:
@@ -74,6 +75,20 @@ static func validate_direction(direction: Variant) -> String:
 		return "non_finite"
 	if absf(direction.length_squared() - 1.0) > DIRECTION_TOLERANCE:
 		return "direction_not_normalized"
+	return ""
+
+static func validate_direction_for_yaw(direction: Variant, official_yaw: Variant) -> String:
+	var reason := validate_direction(direction)
+	if not reason.is_empty():
+		return reason
+	if not is_finite_number(official_yaw):
+		return "invalid_yaw"
+	var horizontal := Vector3(direction.x, 0.0, direction.z)
+	if horizontal.length_squared() < 0.01:
+		return "direction_vertical"
+	var official_forward := Vector3.FORWARD.rotated(Vector3.UP, float(official_yaw))
+	if horizontal.normalized().dot(official_forward) < cos(MAX_AIM_YAW_RADIANS):
+		return "direction_yaw_divergence"
 	return ""
 
 static func is_finite_vector3(value: Vector3) -> bool:

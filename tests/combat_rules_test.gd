@@ -26,7 +26,7 @@ func _intent(sequence: int, origin: Variant = Vector3.ZERO, direction: Variant =
 	return {"sequence": sequence, "origin": origin, "direction": direction}
 
 func _context(alive: bool = true, active: bool = true) -> Dictionary:
-	return {"alive": alive, "round_active": active, "position": Vector3.ZERO}
+	return {"alive": alive, "round_active": active, "eye_position": Vector3.ZERO, "yaw": 0.0}
 
 func _test_valid_and_rate() -> void:
 	var pair := _setup()

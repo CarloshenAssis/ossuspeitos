@@ -8,9 +8,8 @@ const DEFAULT_PORT := 9080
 ## usados pela camada de rede, para que não existam dois valores divergentes.
 const MIN_PLAYERS := RoundRules.MIN_PLAYERS
 const MAX_PLAYERS := RoundRules.MAX_PLAYERS
-## 3: acrescenta o estado público da rodada, o roster seguro e a entrega
-## direcionada do papel. Incompatível com clientes do marco de movimento.
-const PROTOCOL_VERSION := 3
+## 4: adds authoritative basic-combat intentions and public/private combat DTOs.
+const PROTOCOL_VERSION := 4
 const CONNECT_TIMEOUT_SECONDS := 10.0
 
 static func user_arguments() -> Dictionary:
@@ -32,3 +31,13 @@ static func float_argument(arguments: Dictionary, key: String, fallback: float) 
 
 static func bool_argument(arguments: Dictionary, key: String) -> bool:
 	return str(arguments.get(key, "false")) == "true"
+
+static func should_poll_human_input(
+	is_joined: bool,
+	expected_test_clients: int,
+	is_round_test: bool,
+	is_combat_test: bool,
+	has_graphical_arena: bool
+) -> bool:
+	return is_joined and expected_test_clients == 0 and not is_round_test \
+		and not is_combat_test and has_graphical_arena

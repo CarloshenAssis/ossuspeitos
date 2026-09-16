@@ -6,6 +6,10 @@ var avatars: Dictionary = {}
 var targets: Dictionary = {}
 var camera: Camera3D
 var player_rig: Node3D
+var pickup_nodes: Dictionary = {}
+var pickup_states: Dictionary = {}
+var weapon_model: MeshInstance3D
+var hit_marker: Label
 
 func _ready() -> void:
 	_ensure_input_actions()
@@ -15,6 +19,25 @@ func _ready() -> void:
 	camera = Camera3D.new()
 	camera.position.y = 0.7
 	player_rig.add_child(camera)
+	weapon_model = MeshInstance3D.new()
+	var weapon_mesh := BoxMesh.new()
+	weapon_mesh.size = Vector3(0.16, 0.16, 0.65)
+	weapon_model.mesh = weapon_mesh
+	weapon_model.position = Vector3(0.28, -0.22, -0.55)
+	weapon_model.visible = false
+	camera.add_child(weapon_model)
+	var overlay := CanvasLayer.new()
+	add_child(overlay)
+	var crosshair := Label.new()
+	crosshair.text = "+"
+	crosshair.position = Vector2(474, 258)
+	crosshair.add_theme_font_size_override("font_size", 24)
+	overlay.add_child(crosshair)
+	hit_marker = Label.new()
+	hit_marker.text = "✕"
+	hit_marker.position = Vector2(473, 258)
+	hit_marker.modulate = Color(1, 0.25, 0.2, 0)
+	overlay.add_child(hit_marker)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
@@ -84,6 +107,7 @@ func _build_arena() -> void:
 	_add_box(Vector3(12.25, 1.5, 0.0), Vector3(0.5, 3.5, 25.0), Color(0.35, 0.4, 0.5))
 	_add_box(Vector3(0.0, 1.5, -12.25), Vector3(25.0, 3.5, 0.5), Color(0.35, 0.4, 0.5))
 	_add_box(Vector3(0.0, 1.5, 12.25), Vector3(25.0, 3.5, 0.5), Color(0.35, 0.4, 0.5))
+	_add_box(Vector3(0.0, 1.0, 0.0), Vector3(1.0, 2.0, 7.0), Color(0.45, 0.32, 0.25))
 
 func _add_box(box_position: Vector3, size: Vector3, color: Color) -> void:
 	var mesh_instance := MeshInstance3D.new()
@@ -108,3 +132,77 @@ func _create_avatar(peer_id: int, initial_position: Vector3) -> Node3D:
 	avatar.position = initial_position
 	add_child(avatar)
 	return avatar
+
+func camera_origin() -> Vector3:
+	return camera.global_position if camera != null else Vector3.ZERO
+
+func camera_direction() -> Vector3:
+	return -camera.global_transform.basis.z.normalized() if camera != null else Vector3.FORWARD
+
+func apply_combat_state(state: Dictionary) -> void:
+	if weapon_model != null:
+		weapon_model.visible = not str(state.get("weapon_id", "")).is_empty() and int(state.get("health", 0)) > 0
+
+func apply_pickups(entries: Array) -> void:
+	pickup_states.clear()
+	for raw_entry in entries:
+		if typeof(raw_entry) != TYPE_DICTIONARY: continue
+		var entry: Dictionary = raw_entry
+		var pickup_id := str(entry.get("pickup_id", ""))
+		pickup_states[pickup_id] = entry
+		if not pickup_nodes.has(pickup_id):
+			pickup_nodes[pickup_id] = _create_pickup(entry)
+		(pickup_nodes[pickup_id] as Node3D).visible = bool(entry.get("available", false))
+	for pickup_id in pickup_nodes.keys():
+		if not pickup_states.has(pickup_id):
+			(pickup_nodes[pickup_id] as Node).queue_free()
+			pickup_nodes.erase(pickup_id)
+
+func nearest_available_pickup() -> String:
+	if player_rig == null: return ""
+	var nearest := ""
+	var distance := 2.0
+	for pickup_id in pickup_states:
+		var entry: Dictionary = pickup_states[pickup_id]
+		if not bool(entry.get("available", false)): continue
+		var candidate := player_rig.global_position.distance_to(entry["position"])
+		if candidate <= distance:
+			distance = candidate
+			nearest = pickup_id
+	return nearest
+
+func show_shot(payload: Dictionary) -> void:
+	if not payload.has("origin") or not payload.has("end"): return
+	var tracer := MeshInstance3D.new()
+	var start: Vector3 = payload["origin"]
+	var finish: Vector3 = payload["end"]
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.025, 0.025, start.distance_to(finish))
+	tracer.mesh = mesh
+	tracer.position = (start + finish) * 0.5
+	tracer.look_at(finish, Vector3.UP)
+	add_child(tracer)
+	var timer := get_tree().create_timer(0.08)
+	timer.timeout.connect(tracer.queue_free)
+
+func show_hit_marker() -> void:
+	if hit_marker == null: return
+	hit_marker.modulate.a = 1.0
+	var tween := create_tween()
+	tween.tween_property(hit_marker, "modulate:a", 0.0, 0.2)
+
+func set_player_alive(peer_id: int, alive: bool) -> void:
+	if avatars.has(peer_id):
+		(avatars[peer_id] as Node3D).visible = alive
+
+func _create_pickup(entry: Dictionary) -> Node3D:
+	var node := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.5, 0.25, 0.8) if str(entry.get("type", "")) == "weapon" else Vector3(0.5, 0.4, 0.5)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.25, 0.55, 0.95) if str(entry.get("type", "")) == "weapon" else Color(0.95, 0.72, 0.2)
+	mesh.material = material
+	node.mesh = mesh
+	node.position = entry.get("position", Vector3.ZERO)
+	add_child(node)
+	return node
