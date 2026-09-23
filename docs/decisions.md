@@ -386,3 +386,46 @@ medir a frente pela soma dos deslocamentos das peças: as peças simétricas se
 anulam e a cápsula antiga ainda falha. `tests/arena_visuals_test.gd` cobre
 posições, disponibilidade, arma na mão, ausência de colisão e silhueta igual
 para todos, e roda no CI.
+
+## Fase 3: HUD visual dentro da partida
+
+O HUD continua sendo só uma projeção de dados oficiais que o cliente já recebe:
+não há RPC nova nem mudança de regra, autorização, privacidade ou vitória.
+
+**Avisos de combate**
+- Os avisos negativos vêm da recusa oficial (`combat_action_rejected`), que o
+  servidor envia só a quem agiu. Motivos que o jogador pode corrigir viram
+  texto, e o pente vazio diz "R" ou "procure munição" conforme a reserva
+  oficial. Cadência, dados técnicos e rodada encerrada ficam em silêncio.
+- Os avisos positivos ("PISTOLA EQUIPADA", "+6 MUNIÇÃO", "RECARREGADA") vêm da
+  diferença entre dois estados privados oficiais seguidos da mesma rodada.
+
+**Prompt de coleta**
+- Usa o mesmo pickup que E pediria: posição oficial mais estado público dos
+  pickups.
+- O texto segue as regras do servidor: uma arma por vez, munição só com arma e
+  reserva abaixo do máximo.
+
+**Painel da arma e vida**
+- O painel da arma ganhou as balas do pente e uma faixa de recarga que corre sem
+  prometer duração, porque o estado privado só traz `reloading`.
+- A barra de vida ganhou marcas a cada dano de um tiro da pistola.
+- Capacidade, reserva máxima e caixa de munição conferem, em teste, com os
+  valores do servidor.
+
+**Eliminações**
+- O feed usa o evento público `combat_public_elimination` e mostra só o nome,
+  sem autor nem papel, em texto neutro ("fora da rodada").
+- Aparece para vivos e espectadores e é limpo em ENDED e na rodada seguinte,
+  junto com avisos e prompt.
+
+**Correções na ArenaView reveladas pela partida real**
+- O próprio jogador não ganha mais corpo enquanto observa outro.
+- Ao sair do modo espectador, a câmera volta na hora à última posição oficial do
+  próprio jogador, em vez de ficar alguns quadros dentro do corpo do alvo.
+- Quem foi eliminado volta a aparecer quando o roster oficial o marca vivo na
+  rodada seguinte.
+
+`tests/match_hud_test.gd` (nós reais, no CI) cobre a sequência vivo →
+eliminado → espectador → ENDED → nova rodada. `tests/hud_presentation_test.gd`
+mede o layout dos novos elementos em 960×540 e 1920×1080.

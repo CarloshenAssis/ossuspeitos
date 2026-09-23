@@ -19,6 +19,9 @@ var current_zone_name := ""
 ## Distância do topo do chip de região; a demo offline o desce abaixo do banner.
 var region_chip_top := HudStyle.MARGIN
 var gameplay_visuals := true
+var _alive_flags: Dictionary = {}
+## Último estado oficial do próprio jogador (chega em todo snapshot).
+var _local_state: Dictionary = {}
 const ZONE_SIDES := {
 	"center": "C", "north": "N", "south": "S", "west": "O", "east": "L",
 	"northwest": "NO", "northeast": "NE", "southwest": "SO", "southeast": "SE",
@@ -118,22 +121,29 @@ func apply_snapshot(states: Array) -> void:
 		var peer_id := int(state["peer_id"])
 		present[peer_id] = true
 		if spectator_target_peer_id == peer_id:
-			player_rig.position = state["position"]
-			player_rig.rotation.y = float(state["yaw"])
-			_update_zone_label(player_rig.position)
-		if peer_id == local_peer_id and spectator_target_peer_id == 0:
-			player_rig.position = state["position"]
-			player_rig.rotation.y = float(state["yaw"])
-			_update_zone_label(player_rig.position)
+			_place_rig(state)
+		# O próprio jogador nunca tem corpo visível: a câmera fica dentro dele.
+		# Vale também como espectador, senão o corpo criado nessa fase fica em
+		# volta da câmera na rodada seguinte.
+		if peer_id == local_peer_id:
+			_local_state = state
+			if spectator_target_peer_id == 0:
+				_place_rig(state)
 			continue
 		if not avatars.has(peer_id):
 			avatars[peer_id] = _create_avatar(peer_id, state["position"])
+			(avatars[peer_id] as Node3D).visible = bool(_alive_flags.get(peer_id, true))
 		targets[peer_id] = state
 	for peer_id in avatars.keys():
 		if not present.has(peer_id):
 			avatars[peer_id].queue_free()
 			avatars.erase(peer_id)
 			targets.erase(peer_id)
+
+func _place_rig(state: Dictionary) -> void:
+	player_rig.position = state["position"]
+	player_rig.rotation.y = float(state["yaw"])
+	_update_zone_label(player_rig.position)
 
 func _process(delta: float) -> void:
 	var weight := 1.0 - exp(-12.0 * delta)
@@ -343,6 +353,11 @@ func apply_combat_state(state: Dictionary) -> void:
 ## segue posicao/yaw oficiais recebidos em snapshots; nunca envia controle.
 func set_spectator_target(peer_id: int, spectator_active: bool = true) -> void:
 	spectator_target_peer_id = peer_id
+	# Fim do modo espectador: volta já à última posição oficial do próprio
+	# jogador. Esperar o próximo snapshot deixaria a câmera, por alguns quadros,
+	# dentro do corpo (agora visível de novo) de quem era observado.
+	if peer_id == 0 and not _local_state.is_empty():
+		_place_rig(_local_state)
 	if spectator_active:
 		gameplay_visuals = false
 	_refresh_gameplay_visuals()
@@ -404,8 +419,18 @@ func show_hit_marker() -> void:
 	if crosshair != null and crosshair.visible: crosshair.show_hit()
 
 func set_player_alive(peer_id: int, alive: bool) -> void:
+	_alive_flags[peer_id] = alive
 	if avatars.has(peer_id):
 		(avatars[peer_id] as Node3D).visible = alive
+
+## Vivo/eliminado do roster oficial: quem caiu some e, na rodada seguinte,
+## volta a aparecer quando o servidor o marca vivo de novo.
+func apply_roster_alive(entries: Array) -> void:
+	for raw_entry in entries:
+		if typeof(raw_entry) != TYPE_DICTIONARY:
+			continue
+		var entry: Dictionary = raw_entry
+		set_player_alive(int(entry.get("peer_id", 0)), bool(entry.get("alive", true)))
 
 func _create_pickup(entry: Dictionary) -> Node3D:
 	var is_weapon := str(entry.get("type", "")) == "weapon"

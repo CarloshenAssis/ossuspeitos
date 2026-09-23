@@ -29,6 +29,8 @@ func _initialize() -> void:
 	_test_full_round_transitions_and_cleanup()
 	_test_spectator_target_changes()
 	_test_reveal_only_for_the_same_round()
+	_test_combat_notices_come_from_official_events()
+	_test_pickup_prompt_matches_server_rules()
 	if failures > 0:
 		push_error("ROUND_HUD_TEST_FAILED failures=%d checks=%d" % [failures, checks])
 		quit(1)
@@ -117,6 +119,9 @@ func _test_values_match_the_official_rules() -> void:
 	var definition: WeaponDefinition = CombatAuthority.new(RoundAuthority.new(), AuthoritativeWorld.new()).inventory.definitions[CombatAuthority.COMMON_WEAPON_ID]
 	_expect(RoundHud.LOW_HEALTH == int(definition.damage), "low health threshold is one official pistol hit")
 	_expect(RoundHud.WEAPON_NAMES.has(CombatAuthority.COMMON_WEAPON_ID), "the official weapon id has a display name")
+	_expect(RoundHud.MAGAZINE_CAPACITY == int(definition.magazine_capacity), "magazine pips match the official capacity")
+	_expect(RoundHud.MAX_RESERVE == int(definition.max_reserve_ammo), "full-reserve prompt uses the official maximum")
+	_expect(RoundHud.AMMO_BOX_AMOUNT == CombatAuthority.AMMO_BOX_AMOUNT, "ammo prompt shows the official box amount")
 	_expect(RoundHud.REASON_TEXT.has(RoundRules.REASON_ASSASSIN_DOWN) and RoundHud.REASON_TEXT.has(RoundRules.REASON_INNOCENTS_DOWN), "every official win reason has a sentence")
 
 func _test_weapon_panel_follows_official_state() -> void:
@@ -202,6 +207,44 @@ func _test_reveal_only_for_the_same_round() -> void:
 	_expect(gone_model["ended"]["rows"][0]["name"] == "Jogador 42" and gone_model["ended"]["rows"][0]["status"] == "—", "a participant who left keeps a neutral row")
 
 # --- Apoio -------------------------------------------------------------------
+
+func _test_combat_notices_come_from_official_events() -> void:
+	# Recusas oficiais: as que o jogador pode corrigir viram aviso; as demais
+	# (cadência, dados técnicos, rodada) ficam em silêncio.
+	_expect(RoundHud.rejection_notice("fire", "empty_magazine", _combat(1, 100, "common_pistol", 0, 6, false)).contains("R para recarregar"), "empty magazine with reserve asks for R")
+	_expect(RoundHud.rejection_notice("fire", "empty_magazine", _combat(1, 100, "common_pistol", 0, 0, false)) == "Pente vazio · procure munição", "empty magazine without reserve points to ammo")
+	_expect(RoundHud.rejection_notice("reload", "reserve_empty") == "Sem munição na reserva", "empty reserve is explained")
+	_expect(RoundHud.rejection_notice("pickup", "inventory_full") == "Você já tem uma arma", "second weapon is explained")
+	_expect(RoundHud.rejection_notice("pickup", "no_equipped_weapon") == "Pegue uma arma antes da munição", "ammo without weapon is explained")
+	_expect(RoundHud.rejection_notice("fire", "no_equipped_weapon") == "Sem arma", "firing unarmed is explained")
+	for silent in ["fire_rate", "round_not_active", "player_dead", "direction_yaw_divergence", "invalid_origin", "rate_limited", "anything_else"]:
+		_expect(RoundHud.rejection_notice("fire", silent).is_empty(), "reason %s stays silent" % silent)
+	# Avisos positivos: só entre dois estados privados oficiais da mesma rodada.
+	var unarmed := _combat(1, 100, "", 0, 0, false)
+	var armed := _combat(1, 100, "common_pistol", 6, 0, false)
+	_expect(RoundHud.transition_notices(unarmed, armed) == ["PISTOLA EQUIPADA"], "official pickup announces the weapon")
+	_expect(RoundHud.transition_notices(armed, _combat(1, 100, "common_pistol", 6, 6, false)) == ["+6 MUNIÇÃO"], "official ammo pickup announces the amount")
+	_expect(RoundHud.transition_notices(_combat(1, 100, "common_pistol", 0, 6, true), _combat(1, 100, "common_pistol", 6, 0, false)) == ["RECARREGADA"], "finished official reload is announced")
+	_expect(RoundHud.transition_notices(armed, _combat(1, 100, "common_pistol", 5, 0, false)).is_empty(), "a shot is not a notice")
+	_expect(RoundHud.transition_notices({}, armed).is_empty(), "the first state received is not news")
+	_expect(RoundHud.transition_notices(unarmed, _combat(2, 100, "common_pistol", 6, 0, false)).is_empty(), "nothing is announced across rounds")
+	_expect(RoundHud.transition_notices(unarmed, _combat(1, 0, "common_pistol", 6, 0, false)).is_empty(), "nothing is announced to the dead")
+	_expect(RoundHud.transition_notices(armed, _combat(1, 100, "", 0, 0, false)).is_empty(), "losing the weapon is not celebrated")
+
+func _test_pickup_prompt_matches_server_rules() -> void:
+	var unarmed := _combat(1, 100, "", 0, 0, false)
+	var armed := _combat(1, 100, "common_pistol", 6, 6, false)
+	_expect(RoundHud.pickup_prompt("", armed).is_empty(), "nothing in range, no prompt")
+	var take_weapon := RoundHud.pickup_prompt("weapon", unarmed)
+	_expect(bool(take_weapon["key"]) and take_weapon["text"] == "PEGAR PISTOLA", "unarmed near a weapon: E to pick up")
+	_expect(not bool(RoundHud.pickup_prompt("weapon", armed)["key"]), "armed near a weapon: no E (server says inventory_full)")
+	_expect(not bool(RoundHud.pickup_prompt("ammo", unarmed)["key"]), "unarmed near ammo: no E (server says no_equipped_weapon)")
+	var take_ammo := RoundHud.pickup_prompt("ammo", armed)
+	_expect(bool(take_ammo["key"]) and str(take_ammo["text"]).contains("+6"), "armed near ammo: E with the official amount")
+	var full := RoundHud.pickup_prompt("ammo", _combat(1, 100, "common_pistol", 6, 18, false))
+	_expect(not bool(full["key"]) and full["text"] == "Reserva cheia", "full reserve: no E (server says reserve_full)")
+	_expect(RoundHud.pickup_prompt("weapon", _combat(1, 0, "", 0, 0, false)).is_empty(), "the dead see no prompt")
+	_expect(RoundHud.pickup_prompt("weapon", {}).is_empty(), "no official private state, no prompt")
 
 func _pub(state: int, round_id: int) -> Dictionary:
 	return {"state": state, "round_id": round_id, "countdown_msec": 3000, "connected": 4, "participants": 4, "alive": 4,

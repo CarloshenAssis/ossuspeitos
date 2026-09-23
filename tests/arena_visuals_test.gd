@@ -27,6 +27,8 @@ func _process(_delta: float) -> bool:
 	_test_weapon_in_hand_follows_official_inventory()
 	_test_models_are_visual_only()
 	_test_character_does_not_reveal_roles()
+	_test_own_body_never_surrounds_the_camera()
+	_test_eliminated_players_return_next_round()
 	if failures > 0:
 		push_error("ARENA_VISUALS_TEST_FAILED failures=%d checks=%d" % [failures, checks])
 		quit(1)
@@ -112,6 +114,42 @@ func _test_character_does_not_reveal_roles() -> void:
 	_expect(names_first == names_second, "every player uses the same silhouette")
 	first.free()
 	second.free()
+
+func _test_own_body_never_surrounds_the_camera() -> void:
+	var states := [_state(LOCAL, Vector3(0, 1, 0), 0.0), _state(REMOTE, Vector3(3, 1, 3), 0.5), _state(OTHER, Vector3(-3, 1, 3), 1.0)]
+	_arena.apply_snapshot(states)
+	_expect(not _arena.avatars.has(LOCAL), "alive: no body for the local player")
+	# Eliminado e observando outro jogador: o próprio corpo continua sem modelo.
+	_arena.set_spectator_target(REMOTE)
+	_arena.apply_snapshot(states)
+	_expect(not _arena.avatars.has(LOCAL), "spectating: still no body for the local player")
+	_expect(_arena.player_rig.global_position.is_equal_approx(Vector3(3, 1, 3)), "spectating: camera on the authorised target")
+	# Saída do espectador sem novo snapshot: a câmera já volta ao próprio lugar,
+	# nunca fica dentro do corpo do alvo (que volta a ser desenhado).
+	_arena.set_spectator_target(0, false)
+	_expect(_arena.player_rig.global_position.is_equal_approx(Vector3(0, 1, 0)), "leaving spectator returns the camera to the own official position at once")
+	_arena._process(0.1)
+	for peer_id in _arena.avatars:
+		var body: Node3D = _arena.avatars[peer_id]
+		_expect(body.global_position.distance_to(_arena.player_rig.global_position) > 1.0 or not body.visible, "no visible body around the camera after spectating (peer %d)" % peer_id)
+	_arena.apply_snapshot(states)
+	_expect(not _arena.avatars.has(LOCAL), "next round: no body around the local camera")
+
+func _test_eliminated_players_return_next_round() -> void:
+	var states := [_state(LOCAL, Vector3(0, 1, 0), 0.0), _state(REMOTE, Vector3(3, 1, 3), 0.5), _state(OTHER, Vector3(-3, 1, 3), 1.0)]
+	_arena.apply_snapshot(states)
+	_arena.set_player_alive(REMOTE, false)
+	_expect(not (_arena.avatars[REMOTE] as Node3D).visible, "public elimination hides the body")
+	_arena.apply_roster_alive([{"peer_id": REMOTE, "alive": false}, {"peer_id": OTHER, "alive": true}])
+	_expect(not (_arena.avatars[REMOTE] as Node3D).visible and (_arena.avatars[OTHER] as Node3D).visible, "roster keeps the eliminated body hidden")
+	_arena.apply_roster_alive([{"peer_id": REMOTE, "alive": true}, {"peer_id": OTHER, "alive": true}])
+	_expect((_arena.avatars[REMOTE] as Node3D).visible, "new round roster brings the player back")
+	# Quem entra na tela depois (sem corpo ainda) nasce já com o estado oficial.
+	_arena.apply_snapshot([_state(LOCAL, Vector3(0, 1, 0), 0.0)])
+	_arena.apply_roster_alive([{"peer_id": REMOTE, "alive": false}])
+	_arena.apply_snapshot(states)
+	_expect(not (_arena.avatars[REMOTE] as Node3D).visible, "a body created later honours the official elimination")
+	_arena.apply_roster_alive([{"peer_id": REMOTE, "alive": true}])
 
 func _combat(weapon_id: String, health: int) -> Dictionary:
 	return {"round_id": 1, "health": health, "weapon_id": weapon_id, "magazine": 6, "reserve": 0, "reloading": false}

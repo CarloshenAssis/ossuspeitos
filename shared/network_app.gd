@@ -463,6 +463,7 @@ func world_snapshot(states: Array) -> void:
 		return
 	if arena_view != null:
 		arena_view.apply_snapshot(states)
+		_update_pickup_prompt()
 	if spectator_reveal_test_mode and local_eliminated and not spectator_test_follow_confirmed:
 		for raw_spectator_state in states:
 			if int((raw_spectator_state as Dictionary).get("peer_id", 0)) == _spectator_target():
@@ -841,6 +842,8 @@ func round_roster(entries: Array) -> void:
 			print("CLIENT_ROSTER_REJECTED id=%s reason=role_field" % client_label)
 			return
 		local_roster_peers.append(int(entry.get("peer_id", 0)))
+	if arena_view != null:
+		arena_view.apply_roster_alive(entries)
 	if round_hud != null:
 		round_hud.call("apply_roster", entries)
 
@@ -964,6 +967,18 @@ func _update_round_hud() -> void:
 	round_hud.call("apply_spectator_state", local_eliminated, local_spectator_targets, _spectator_target())
 	round_hud.call("apply_final_reveal", local_final_reveal)
 
+## Prompt de coleta: o mesmo pickup que E pediria (posição oficial + estado
+## público dos pickups). O HUD decide o texto com o inventário privado oficial.
+func _update_pickup_prompt() -> void:
+	if round_hud == null or arena_view == null:
+		return
+	var pickup_type := ""
+	if _client_can_gameplay():
+		var pickup_id: String = arena_view.nearest_available_pickup()
+		if not pickup_id.is_empty():
+			pickup_type = str((arena_view.pickup_states[pickup_id] as Dictionary).get("type", ""))
+	round_hud.call("set_nearby_pickup", pickup_type)
+
 func _client_can_gameplay() -> bool:
 	return int(local_round_public.get("state", RoundState.WAITING)) == RoundState.ACTIVE \
 		and not local_eliminated and int(local_combat_state.get("health", 0)) > 0 \
@@ -1050,6 +1065,7 @@ func pickup_public_state(payload: Array) -> void:
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "pickups", payload)
 	if arena_view != null:
 		arena_view.apply_pickups(payload)
+		_update_pickup_prompt()
 
 @rpc("authority", "call_remote", "reliable")
 func combat_public_shot(payload: Dictionary) -> void:
@@ -1064,6 +1080,7 @@ func combat_public_elimination(peer_id: int) -> void:
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "elimination", peer_id)
 	if arena_view != null:
 		arena_view.set_player_alive(peer_id, false)
+	if round_hud != null: round_hud.call("apply_elimination", peer_id)
 
 @rpc("authority", "call_remote", "reliable")
 func combat_hit_confirmed() -> void:
@@ -1075,6 +1092,8 @@ func combat_hit_confirmed() -> void:
 func combat_action_rejected(action: String, sequence: int, reason: String) -> void:
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "rejection", {"action": action, "sequence": sequence, "reason": reason})
 	print("COMBAT_REJECTED id=%s action=%s sequence=%d reason=%s" % [client_label, action, sequence, reason])
+	if round_hud != null and not multiplayer.is_server() and multiplayer.get_remote_sender_id() == 1:
+		round_hud.call("show_rejection", action, reason)
 
 func _on_pickups_changed(snapshot: Array) -> void:
 	if multiplayer.is_server() and not shutting_down:
