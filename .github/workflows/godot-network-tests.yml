@@ -100,6 +100,13 @@ jobs:
           grep -q 'SPECTATOR_REVEAL_AUTHORITY_TEST_OK' "$RUNNER_TEMP/godot-network-logs/spectator_reveal_authority.log"
           grep -q 'SPECTATOR_REVEAL_CLIENT_TEST_OK' "$RUNNER_TEMP/godot-network-logs/spectator_reveal_client.log"
 
+      - name: Validate remote avatar facing
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/avatar_facing_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/avatar-facing.log"
+          grep -q 'AVATAR_FACING_TEST_OK' "$RUNNER_TEMP/godot-network-logs/avatar-facing.log"
+
       - name: Run spectator and final reveal network test
         run: |
           set -o pipefail

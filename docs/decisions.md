@@ -329,3 +329,24 @@ de regra.
 - A checagem de layout (`tests/hud_presentation_test.gd`) precisa de
   renderização real (xvfb). Em headless ela é pulada com marcador explícito, e
   por isso esse teste ainda não está no CI.
+
+## Correção: frente visível do avatar remoto
+
+Quem estava sem arma parecia "olhar fixo" para os outros jogadores. A causa não
+estava na rede nem na autoridade:
+
+- o servidor aplica o yaw com ou sem arma;
+- o snapshot leva esse yaw;
+- o cliente já girava o nó do avatar para o valor oficial.
+
+O problema era o modelo: uma cápsula simétrica em Y, que não tem frente, então a
+rotação aplicada não aparecia. Com arma, os traçados dos disparos davam a
+impressão de direção.
+
+A correção adiciona ao avatar remoto um visor, uma malha sem colisão em -Z local
+(a mesma convenção da câmera), que herda o yaw oficial do nó. O disparo continua
+usando a direção da câmera local, que segue o yaw oficial do snapshot. A
+autoridade valida o disparo pelo seu próprio yaw, então nada visual altera o
+raycast. Em primeira pessoa como espectador, o visor do alvo observado fica
+oculto para não aparecer colado à lente. `tests/avatar_facing_test.gd` mede a
+frente visível no mundo, e não só `rotation.y`, e roda no CI.

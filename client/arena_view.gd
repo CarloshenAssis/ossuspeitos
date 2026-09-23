@@ -40,6 +40,9 @@ const FLOOR_COLOR := Color(0.1, 0.11, 0.13)
 const WEAPON_PICKUP_COLOR := Color(0.25, 0.95, 1.0)
 const AMMO_PICKUP_COLOR := Color(1.0, 0.3, 0.4)
 const ZONE_TILE_HEIGHT := 0.02
+## Visor na frente da cápsula remota (raio 0,45 m): altura dos olhos, saliente.
+const AVATAR_VISOR_SIZE := Vector3(0.5, 0.16, 0.14)
+const AVATAR_VISOR_OFFSET := Vector3(0.0, 0.55, -0.42)
 
 func _ready() -> void:
 	_ensure_input_actions()
@@ -146,6 +149,11 @@ func _process(delta: float) -> void:
 		var state: Dictionary = targets[peer_id]
 		avatar.position = avatar.position.lerp(state["position"], weight)
 		avatar.rotation.y = lerp_angle(avatar.rotation.y, float(state["yaw"]), weight)
+		# Em primeira pessoa como espectador, a câmera fica dentro do alvo:
+		# o visor dele ficaria colado à lente.
+		var visor := avatar.get_node_or_null("FacingVisor") as Node3D
+		if visor != null:
+			visor.visible = peer_id != spectator_target_peer_id
 
 func _build_arena() -> void:
 	var environment := WorldEnvironment.new()
@@ -318,6 +326,21 @@ func _create_avatar(peer_id: int, initial_position: Vector3) -> Node3D:
 	mesh.material = material
 	avatar.mesh = mesh
 	avatar.position = initial_position
+	# A cápsula é simétrica em Y: sem uma frente visível, o yaw oficial aplicado
+	# ao nó não aparece (o corpo desarmado "olha fixo"). O visor marca a frente
+	# (-Z local, a mesma convenção da câmera) e herda a rotação do avatar. É só
+	# malha, sem colisão: disparo e acerto seguem a direção oficial da câmera e
+	# a autoridade do servidor, nunca este nó.
+	var visor := MeshInstance3D.new()
+	visor.name = "FacingVisor"
+	var visor_mesh := BoxMesh.new()
+	visor_mesh.size = AVATAR_VISOR_SIZE
+	var visor_material := StandardMaterial3D.new()
+	visor_material.albedo_color = Color(0.08, 0.09, 0.11)
+	visor_mesh.material = visor_material
+	visor.mesh = visor_mesh
+	visor.position = AVATAR_VISOR_OFFSET
+	avatar.add_child(visor)
 	add_child(avatar)
 	return avatar
 
