@@ -81,6 +81,13 @@ jobs:
             | tee "$RUNNER_TEMP/godot-web-logs/round-authority.log"
           grep -q 'ROUND_AUTHORITY_TEST_OK' "$RUNNER_TEMP/godot-web-logs/round-authority.log"
 
+      - name: Validate arena layout
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/arena_layout_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/arena-layout.log"
+          grep -q 'ARENA_LAYOUT_TEST_OK' "$RUNNER_TEMP/godot-web-logs/arena-layout.log"
+
       - name: Validate authoritative weapon and combat rules
         run: |
           set -o pipefail
