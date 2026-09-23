@@ -17,6 +17,10 @@ signal roles_ready(round_id: int, participant_ids: Array)
 ## Estado oficial de vida mudou. `alive` é público; o papel não acompanha.
 signal alive_changed(round_id: int, peer_id: int, alive: bool)
 signal round_ended(round_id: int, winning_team: int, reason: String)
+## Resultado final sanitizado, criado somente depois da transicao para ENDED.
+signal reveal_ready(round_id: int, result: Dictionary)
+## Solicita que a rede atualize, em privado, os alvos dos participantes mortos.
+signal spectator_targets_changed(round_id: int)
 signal round_reset(round_id: int)
 signal invalid_transition(from_state: int, to_state: int)
 
@@ -25,6 +29,9 @@ var state := RoundState.WAITING
 var round_id := 0
 var winning_team := Role.TEAM_NONE
 var winner_reason := ""
+## DTO publico final. Vazio em WAITING, COUNTDOWN e ACTIVE.
+var final_reveal: Dictionary = {}
+var _revealed_round_id := 0
 var invalid_transition_count := 0
 ## peer_id -> true. Congelado na transição para ACTIVE.
 var participants: Dictionary = {}
@@ -141,6 +148,35 @@ func role_counts() -> Dictionary:
 func has_roles() -> bool:
 	return not _roles.is_empty()
 
+## Copia defensiva do resultado final. Nunca produz uma revelacao fora de ENDED.
+func get_final_reveal() -> Dictionary:
+	if state != RoundState.ENDED:
+		return {}
+	return final_reveal.duplicate(true)
+
+## DTO privado calculado exclusivamente a partir do estado oficial. Jogadores
+## vivos, desconectados ou fora da rodada não recebem estado de espectador.
+func get_spectator_state(peer_id: int) -> Dictionary:
+	if state != RoundState.ACTIVE or not participants.has(peer_id) \
+			or not lobby.has(peer_id) or is_alive(peer_id):
+		return {}
+	var targets: Array = []
+	for raw_target in participants.keys():
+		var target := int(raw_target)
+		if target != peer_id and lobby.has(target) and is_alive(target):
+			targets.append(target)
+	targets.sort()
+	return {
+		"round_id": round_id,
+		"targets": targets.duplicate(),
+	}
+
+func can_spectate(peer_id: int, target_peer_id: int) -> bool:
+	var spectator_state := get_spectator_state(peer_id)
+	if spectator_state.is_empty():
+		return false
+	return target_peer_id in (spectator_state["targets"] as Array)
+
 # --- Estado vivo/morto -------------------------------------------------------
 
 func is_participant(peer_id: int) -> bool:
@@ -231,17 +267,21 @@ func _evaluate_lobby(now_msec: int) -> void:
 func _begin_countdown(now_msec: int) -> void:
 	if not _transition(RoundState.COUNTDOWN):
 		return
-	round_id += 1
 	# A contagem regressiva nunca carrega estado de rodada. Hoje só se chega
 	# aqui a partir de WAITING, já limpo, mas ENDED->COUNTDOWN é uma transição
 	# declarada válida: limpar aqui garante que nenhum papel da rodada anterior
 	# sobreviva caso esse caminho passe a ser usado.
 	_roles.clear()
+	final_reveal.clear()
+	_revealed_round_id = 0
 	_eliminations.clear()
 	participants.clear()
 	alive.clear()
 	winning_team = Role.TEAM_NONE
 	winner_reason = ""
+	# O estado secreto e a marca de publicacao anteriores ja foram apagados
+	# quando o novo identificador passa a existir.
+	round_id += 1
 	_countdown_round_id = round_id
 	_countdown_deadline_msec = now_msec + int(_countdown_seconds * 1000.0)
 	_published_countdown_seconds = -1
@@ -271,6 +311,8 @@ func _begin_active(now_msec: int) -> void:
 	alive.clear()
 	_eliminations.clear()
 	_roles = roles
+	final_reveal.clear()
+	_revealed_round_id = 0
 	for peer_id in frozen:
 		participants[int(peer_id)] = true
 		alive[int(peer_id)] = true
@@ -290,6 +332,7 @@ func _set_alive(peer_id: int, value: bool, cause: String, instigator_peer_id: in
 			"instigator": instigator_peer_id,
 		}
 	alive_changed.emit(round_id, peer_id, value)
+	spectator_targets_changed.emit(round_id)
 
 func _evaluate_victory(now_msec: int) -> void:
 	if state != RoundState.ACTIVE:
@@ -304,11 +347,34 @@ func _end_round(team: int, reason: String, now_msec: int) -> void:
 		return
 	winning_team = team
 	winner_reason = reason
+	_build_final_reveal_once()
 	_reset_round_id = round_id
 	_reset_deadline_msec = now_msec + int(_round_end_delay_seconds * 1000.0)
 	_published_countdown_seconds = -1
 	state_changed.emit(state, round_id)
 	round_ended.emit(round_id, winning_team, winner_reason)
+	reveal_ready.emit(round_id, get_final_reveal())
+
+func _build_final_reveal_once() -> void:
+	if state != RoundState.ENDED or _revealed_round_id == round_id:
+		return
+	# Allowlist publica exata. Nenhuma tabela interna e retornada diretamente.
+	var revealed_players: Array = []
+	var sorted_peers := participants.keys()
+	sorted_peers.sort()
+	for raw_peer_id in sorted_peers:
+		var peer_id := int(raw_peer_id)
+		revealed_players.append({
+			"peer_id": peer_id,
+			"role": Role.to_label(int(_roles.get(peer_id, Role.NONE))),
+		})
+	final_reveal = {
+		"round_id": round_id,
+		"winner": Role.team_to_label(winning_team),
+		"reason": winner_reason,
+		"players": revealed_players,
+	}
+	_revealed_round_id = round_id
 
 ## Apaga papéis, vivos, resultado, eliminações e prazos da rodada anterior e
 ## devolve o lobby ao ciclo. Nenhum callback atrasado da rodada anterior
@@ -326,6 +392,8 @@ func reset_for_next_round(now_msec: int) -> void:
 	if not _transition(RoundState.WAITING):
 		return
 	_roles.clear()
+	final_reveal.clear()
+	_revealed_round_id = 0
 	_eliminations.clear()
 	participants.clear()
 	alive.clear()
@@ -343,6 +411,8 @@ func reset_for_next_round(now_msec: int) -> void:
 ## Limpeza terminal, usada no encerramento do servidor.
 func clear() -> void:
 	_roles.clear()
+	final_reveal.clear()
+	_revealed_round_id = 0
 	_eliminations.clear()
 	participants.clear()
 	alive.clear()

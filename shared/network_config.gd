@@ -8,8 +8,8 @@ const DEFAULT_PORT := 9080
 ## usados pela camada de rede, para que não existam dois valores divergentes.
 const MIN_PLAYERS := RoundRules.MIN_PLAYERS
 const MAX_PLAYERS := RoundRules.MAX_PLAYERS
-## 4: adds authoritative basic-combat intentions and public/private combat DTOs.
-const PROTOCOL_VERSION := 4
+## 5: adds private spectator targets and the sanitized final role reveal.
+const PROTOCOL_VERSION := 5
 const CONNECT_TIMEOUT_SECONDS := 10.0
 
 static func user_arguments() -> Dictionary:

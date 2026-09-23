@@ -141,9 +141,12 @@ RPC_SURFACE="$(awk '
   pending && $0 !~ /^[[:space:]]*(#|$)/ { pending = 0 }
 ' "$ROOT"/shared/*.gd "$ROOT"/client/*.gd "$ROOT"/server/*.gd | sort -u | tr '\n' ' ')"
 echo "RPC_SURFACE $RPC_SURFACE"
-EXPECTED_RPC_SURFACE="client_count_changed client_test_completed combat_action_rejected combat_hit_confirmed combat_private_state combat_public_elimination combat_public_shot input_rejected join_accepted join_rejected pickup_public_state request_fire request_join request_pickup request_reload round_private_role round_public_state round_role_acknowledged round_roster shutdown_prepare shutdown_ready submit_input world_snapshot "
+EXPECTED_RPC_SURFACE="client_count_changed client_test_completed combat_action_rejected combat_hit_confirmed combat_private_state combat_public_elimination combat_public_shot input_rejected join_accepted join_rejected pickup_public_state request_fire request_join request_pickup request_reload round_final_reveal round_private_role round_private_spectator_targets round_public_state round_role_acknowledged round_roster shutdown_prepare shutdown_ready spectator_reveal_received spectator_test_followed submit_input world_snapshot "
 assert_equal "declared-rpc-surface" "$RPC_SURFACE" "$EXPECTED_RPC_SURFACE"
-assert_no_grep "public-roster-has-no-role-field" '"role"' "$ROOT/server/round_authority.gd"
+# Restringe a revisão estática ao construtor do roster público. O mesmo arquivo
+# também contém o DTO de reveal pós-ENDED, onde `role` é legítimo e obrigatório.
+assert_no_grep "public-roster-has-no-role-field" '"role"' \
+  <(sed -n '/^func public_roster()/,/^# --- Transições/p' "$ROOT/server/round_authority.gd")
 assert_no_grep "movement-snapshot-has-no-role-field" 'role' "$ROOT/shared/movement_rules.gd"
 assert_no_grep "offline-demo-has-no-role" 'Role\.|role' "$ROOT/client/visual_demo.gd"
 

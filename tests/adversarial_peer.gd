@@ -47,6 +47,8 @@ func run_preauth_attacks() -> void:
 	# Tentativa de se passar pelo servidor numa RPC de autoridade.
 	_send("forge_public_state", func(): round_public_state.rpc_id(1, {"state": RoundState.ACTIVE, "winning_team": Role.TEAM_ASSASSIN}))
 	_send("forge_private_role", func(): round_private_role.rpc_id(1, 1, Role.ASSASSIN))
+	_send("forge_final_reveal", func(): round_final_reveal.rpc_id(1, {"round_id": 1, "players": []}))
+	_send("forge_spectator_targets", func(): round_private_spectator_targets.rpc_id(1, 1, [1]))
 	_send("forge_roster", func(): round_roster.rpc_id(1, [{"peer_id": 1, "role": Role.ASSASSIN}]))
 	_send("forge_combat_private_state", func(): combat_private_state.rpc_id(1, {"health": 999}))
 	_send("forge_combat_hit", func(): combat_hit_confirmed.rpc_id(1))
@@ -146,10 +148,18 @@ func request_pickup(_pickup_id: Variant, _sequence: Variant) -> void:
 func request_reload(_sequence: Variant) -> void:
 	pass
 
+@rpc("authority", "call_remote", "reliable")
+func round_final_reveal(_payload: Dictionary) -> void:
+	print("ATTACKER_UNEXPECTED_FINAL_REVEAL")
+
 @rpc("any_peer", "call_remote", "reliable")
 func round_private_role(_round_id, _role) -> void:
 	# Um peer que não participa da rodada jamais deveria chegar aqui.
 	print("ATTACKER_RECEIVED_PRIVATE_ROLE id=%s" % label)
+
+@rpc("authority", "call_remote", "reliable")
+func round_private_spectator_targets(_round_id: int, _targets: Array) -> void:
+	print("ATTACKER_UNEXPECTED_SPECTATOR_TARGETS")
 
 @rpc("any_peer", "call_remote", "reliable")
 func round_public_state(payload) -> void:
@@ -179,6 +189,14 @@ func shutdown_prepare() -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func shutdown_ready() -> void:
+	pass
+
+@rpc("any_peer", "call_remote", "reliable")
+func spectator_reveal_received() -> void:
+	pass
+
+@rpc("any_peer", "call_remote", "reliable")
+func spectator_test_followed() -> void:
 	pass
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")

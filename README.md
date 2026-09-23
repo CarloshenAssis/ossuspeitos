@@ -31,6 +31,8 @@ Nos clientes gráficos, use WASD para mover e o mouse para girar a câmera. O
 cliente envia apenas eixos de entrada e variação de rotação; posição e velocidade
 são calculadas, limitadas e publicadas pelo servidor. Durante uma rodada ativa,
 use **E** para coletar, clique esquerdo para atirar e **R** para recarregar.
+Quando eliminado oficialmente, o cliente para de enviar gameplay e **Q/E**
+alternam localmente entre jogadores vivos autorizados pelo servidor.
 
 ## Ciclo de partida
 
@@ -127,6 +129,21 @@ servidor headless nunca carrega essa cena — os marcadores
 `SERVER_UI hud=false arena=false display=headless` e `CLIENT_UI ...` são
 derivados do estado real dos nós e verificados pelos testes.
 
+### Espectador básico e revelação final
+
+Ao eliminar um participante, o servidor bloqueia movimento, pickup, tiro e
+recarga e envia **somente a ele** a lista dos participantes vivos, conectados e
+pertencentes à rodada. A seleção Q/E é puramente local e a câmera segue posição
+e yaw oficiais dos snapshots; não há RPC de seleção arbitrária, câmera livre,
+controle do alvo, killcam, respawn ou chat de mortos. Sem alvo, o HUD mostra
+`Aguardando fim da rodada`.
+
+Papéis alheios seguem ausentes em `WAITING`, `COUNTDOWN` e `ACTIVE`. Somente
+depois da transição oficial para `ENDED`, cada participante conectado recebe uma
+allowlist com `round_id`, equipe vencedora, razão e participantes/papéis finais.
+Vida, inventário, munição e seed nunca integram esse resultado. O reset limpa a
+revelação e o mapa de papéis antes da rodada seguinte.
+
 ## Testes
 
 ```bash
@@ -143,6 +160,10 @@ godot4 --headless --path . --script tests/weapon_rules_test.gd
 godot4 --headless --path . --script tests/inventory_authority_test.gd
 godot4 --headless --path . --script tests/combat_rules_test.gd
 godot4 --headless --path . --script tests/combat_authority_test.gd
+# espectador privado, revelação final e apresentação
+godot4 --headless --path . --script tests/spectator_reveal_authority_test.gd
+godot4 --headless --path . --script tests/spectator_reveal_client_test.gd
+./tests/spectator_reveal_network_test.sh
 # sigilo dos papéis com servidor e cinco clientes reais
 ./tests/round_network_test.sh
 # auditoria adversarial: peer hostil contra uma rodada real
@@ -172,7 +193,7 @@ sorteio usa `RandomNumberGenerator.randomize()`: a seed nunca vem do cliente.
 ## Limitações deste marco
 
 Ainda **não existem**: lojas, créditos, armas especiais, ressurreição, corpos,
-espectador completo, voz, chat, matchmaking, Railway, Android ou arte definitiva.
+espectador com câmera livre, voz, chat, matchmaking, Railway, Android ou arte definitiva.
 O hitscan atual usa geometria analítica simples, sem headshot, previsão ou lag compensation.
 
 ## Demonstração visual offline
@@ -187,7 +208,9 @@ godot4 --path . -- --mode=demo
 
 Esse modo não cria transporte, não conecta a um servidor, não instancia a
 autoridade de movimento e não é acionado como fallback de falhas multiplayer. O
-cliente real continua enviando apenas comandos de entrada ao servidor.
+cliente real continua enviando apenas comandos de entrada ao servidor. A demo
+continua mostrando somente **OFFLINE / SEM SERVIDOR** e nunca simula papéis,
+eliminação autoritativa, espectador ou revelação final.
 
 ## Build Web como artifact
 
