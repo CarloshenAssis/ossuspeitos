@@ -24,6 +24,8 @@ const PATROL_SPEED := 1.6
 func _ready() -> void:
 	arena_view = ArenaView.new()
 	arena_view.local_peer_id = LOCAL_DEMO_PEER_ID
+	# O banner OFFLINE ocupa o topo à esquerda; o chip de região fica logo abaixo.
+	arena_view.region_chip_top = 100.0
 	add_child(arena_view)
 	_add_demo_banner()
 	print("DEMO_READY simulated_players=%d network=disabled" % SIMULATED_PLAYER_COUNT)
