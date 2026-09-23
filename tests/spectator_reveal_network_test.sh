@@ -32,7 +32,10 @@ wait_marker() { local p=$1 f=$2 pid=$3; for _ in {1..600}; do grep -qE -- "$p" "
 PIDS+=("$!"); NAMES+=(server); SERVER_PID=$!
 wait_marker 'SERVER_READY' "$TMP_DIR/server.log" "$SERVER_PID"
 for id in 1 2 3 4; do
-  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=client --client-id="client-$id" \
+  # Nomes exclusivos deste harness evitam acionar a sonda legada client-1,
+  # que tenta RPC client->client com relay desabilitado e testa apenas um peer
+  # local desconhecido. A privacidade aqui e validada pelo caminho conectado.
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=client --client-id="spectator-$id" \
     --url="ws://127.0.0.1:$PORT" --spectator-reveal-test=true >"$TMP_DIR/client-$id.log" 2>&1 &
   PIDS+=("$!"); NAMES+=("client-$id")
 done
@@ -42,9 +45,35 @@ kill "$WATCHDOG_PID" 2>/dev/null || true; wait "$WATCHDOG_PID" 2>/dev/null || tr
 for i in "${!STATUSES[@]}"; do assert_equal "process-${NAMES[$i]}" "${STATUSES[$i]}" 0; done
 [[ ! -f "$TMP_DIR/timeout.log" ]] || fail 1
 
-assert_equal four-joins "$(grep -c 'CLIENT_JOINED id=client-' "$TMP_DIR/server.log")" 4
+assert_equal four-joins "$(grep -c 'CLIENT_JOINED id=spectator-' "$TMP_DIR/server.log")" 4
+JOINED_PEERS="$(sed -n 's/.*CLIENT_JOINED id=spectator-[1-4] peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -n -u)"
+assert_equal four-unique-connected-participants "$(wc -l <<<"$JOINED_PEERS" | tr -d ' ')" 4
 assert_equal four-private-roles "$(grep -h -c 'CLIENT_PRIVATE_ROLE_RECEIVED' "$TMP_DIR"/client-*.log | awk '{s+=$1} END{print s}')" 4
-assert_equal one-private-spectator "$(grep -l 'SPECTATOR_TARGETS_PRIVATE_OK' "$TMP_DIR"/client-*.log | wc -l | tr -d ' ')" 1
+for id in 1 2 3 4; do
+  assert_equal "client-$id-only-own-role" "$(grep -c 'CLIENT_PRIVATE_ROLE_RECEIVED' "$TMP_DIR/client-$id.log")" 1
+done
+
+mapfile -t SPECTATOR_LOGS < <(grep -l 'SPECTATOR_TARGETS_PRIVATE_OK' "$TMP_DIR"/client-*.log)
+assert_equal spectator-private-updates-only-to-eliminated "${#SPECTATOR_LOGS[@]}" 1
+SPECTATOR_LOG="${SPECTATOR_LOGS[0]}"
+mapfile -t TARGET_COUNTS < <(sed -n 's/.*SPECTATOR_TARGETS_PRIVATE_OK.*targets=\([0-9][0-9]*\).*/\1/p' "$SPECTATOR_LOG")
+assert_equal spectator-private-update-count "${#TARGET_COUNTS[@]}" 2
+assert_equal spectator-first-live-target-count "${TARGET_COUNTS[0]}" 3
+assert_equal spectator-targets-refresh-after-elimination "${TARGET_COUNTS[1]}" 2
+assert_equal no-identical-spectator-refresh "$(printf '%s\n' "${TARGET_COUNTS[@]}" | sort -u | wc -l | tr -d ' ')" 2
+
+SPECTATOR_NUMBER="$(basename "$SPECTATOR_LOG" .log | sed 's/client-//')"
+SPECTATOR_PEER="$(sed -n "s/.*CLIENT_JOINED id=spectator-$SPECTATOR_NUMBER peer_id=\([0-9][0-9]*\).*/\1/p" "$TMP_DIR/server.log")"
+mapfile -t ELIMINATED_PEERS < <(sed -n 's/.*ROUND_ALIVE_CHANGED.*peer_id=\([0-9][0-9]*\).*alive=false.*/\1/p' "$TMP_DIR/server.log")
+assert_equal two-official-eliminations "${#ELIMINATED_PEERS[@]}" 2
+assert_equal spectator-is-first-officially-eliminated "$SPECTATOR_PEER" "${ELIMINATED_PEERS[0]}"
+[[ "${ELIMINATED_PEERS[1]}" != "$SPECTATOR_PEER" ]] && ok refreshed-target-is-not-spectator || fail 1
+assert_equal refresh-excludes-newly-eliminated "${TARGET_COUNTS[1]}" "$((4 - ${#ELIMINATED_PEERS[@]}))"
+for peer_id in "${ELIMINATED_PEERS[@]}"; do
+  grep -qx "$peer_id" <<<"$JOINED_PEERS" && ok "eliminated-peer-$peer_id-was-connected-participant" || fail 1
+done
+assert_no_grep living-clients-receive-no-spectator-state 'SPECTATOR_TARGETS_PRIVATE_OK' \
+  $(printf '%s\n' "$TMP_DIR"/client-*.log | grep -vFx "$SPECTATOR_LOG")
 assert_grep spectator-follow 'SPECTATOR_FOLLOW_OK' "$TMP_DIR"/client-*.log
 assert_grep actions-blocked 'SPECTATOR_ACTIONS_BLOCKED' "$TMP_DIR/server.log"
 assert_equal four-reveals "$(grep -h -c 'ROUND_REVEAL_OK players=4' "$TMP_DIR"/client-*.log | awk '{s+=$1} END{print s}')" 4
@@ -58,6 +87,7 @@ assert_grep shutdown-complete 'SERVER_SHUTDOWN_COMPLETE closed=4' "$TMP_DIR/serv
 assert_no_grep no-private-fields-in-reveal 'ROUND_REVEAL.*(health|inventory|magazine|reserve|seed)' "$TMP_DIR"/*.log
 assert_no_grep no-role-before-ended 'CLIENT_ROUND_STATE.*state=(WAITING|COUNTDOWN|ACTIVE).*role=' "$TMP_DIR"/*.log
 assert_no_grep no-peer-role-association 'peer_id=[0-9]+.*(ASSASSIN|DETECTIVE|VICTIM)|(ASSASSIN|DETECTIVE|VICTIM).*peer_id=[0-9]+' "$TMP_DIR"/*.log
+assert_no_grep no-role-forgery-delivered 'ROLE_SPOOF_REJECTED|CLIENT_PRIVATE_ROLE_RECEIVED.*count=[2-9]' "$TMP_DIR"/*.log
 assert_no_grep no-runtime-errors 'SCRIPT ERROR|ready_state != STATE_OPEN|Trying to call an RPC via a multiplayer peer which is not connected|SERVER_SHUTDOWN_TIMEOUT' "$TMP_DIR"/*.log
 cat "$TMP_DIR/server.log"
 echo 'SPECTATOR_REVEAL_NETWORK_TEST_OK clients=4'
