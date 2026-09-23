@@ -1,0 +1,47 @@
+ARMED MYSTERY - TESTE LOCAL NO WINDOWS
+=====================================
+
+Build de teste. Não é um lançamento: arte provisória e sem assinatura digital.
+
+ARQUIVOS
+- ArmedMystery.exe ......... o jogo (os dados já vêm dentro do .exe).
+- ArmedMystery.console.exe . o mesmo jogo, mas abre um console com o log.
+                             Use-o se algo der errado.
+
+ABRIR
+1. Extraia o ZIP inteiro numa pasta (não rode de dentro do ZIP).
+2. Dê dois cliques em ArmedMystery.exe.
+   O Windows pode mostrar "O Windows protegeu o computador" porque o
+   executável não é assinado: clique em "Mais informações" > "Executar assim mesmo".
+
+PARTIDA COM 4 JOGADORES NO MESMO PC
+A rodada só começa com pelo menos 4 jogadores.
+1. Abra o ArmedMystery.exe 4 vezes (4 janelas).
+2. Na 1ª janela: "Criar partida local" (porta 9080). Ela vira o anfitrião.
+3. Nas outras 3: "Entrar em partida" com endereço 127.0.0.1 e porta 9080.
+   Cada janela já vem com um nome diferente (jogador-NNNN).
+
+PARTIDA NA REDE LOCAL (LAN)
+1. No PC anfitrião, marque "Permitir jogadores da rede local (LAN)" antes
+   de "Criar partida local". O endereço da sala aparece no canto da tela.
+2. Se o Firewall do Windows perguntar, permita em "Redes privadas".
+3. Nos outros PCs: "Entrar em partida" com o IP mostrado (ex.: 192.168.0.10).
+Sem essa opção, a sala só aceita conexões deste mesmo PC.
+
+CONTROLES
+- WASD: mover · mouse: girar (clique na janela para capturar o mouse)
+- Clique esquerdo: atirar · R: recarregar · E: pegar arma/munição
+- Eliminado: Q/E trocam o jogador observado
+- Esc: soltar o mouse · F10: sair da partida e voltar ao menu
+
+AO FECHAR
+Fechar a janela do anfitrião (ou apertar F10 nela) encerra a sala e desconecta
+os demais, que voltam ao menu. Se o jogo do anfitrião travar, o servidor da
+sala se encerra sozinho cerca de 20 segundos depois de ficar vazio.
+
+PROBLEMAS COMUNS
+- "A porta 9080 já está em uso": outra sala já está aberta. Feche-a ou use
+  outra porta (a mesma porta em quem cria e em quem entra).
+- "Não foi possível conectar": confira IP e porta, se a sala foi criada e,
+  na LAN, se o anfitrião marcou a opção LAN e liberou o firewall.
+- Log do servidor da sala: %APPDATA%\Godot\app_userdata\Armed Mystery\hosted-server.log

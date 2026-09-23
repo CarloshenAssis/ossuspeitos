@@ -1,0 +1,136 @@
+name: Godot Windows playtest build
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  export-windows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Godot with export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: true
+
+      - name: Create output directories
+        run: mkdir -p build/windows build/package "$RUNNER_TEMP/godot-windows-logs"
+
+      - name: Validate project
+        run: |
+          set -o pipefail
+          godot --headless --path . --editor --quit 2>&1 \
+            | tee "$RUNNER_TEMP/godot-windows-logs/parser.log"
+
+      - name: Validate desktop menu and local session rules
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/desktop_session_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-windows-logs/desktop-session.log"
+          grep -q 'DESKTOP_SESSION_TEST_OK' "$RUNNER_TEMP/godot-windows-logs/desktop-session.log"
+
+      - name: Run local match through the menu (project)
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/godot-windows-logs/local-match-project
+        run: |
+          set -o pipefail
+          GAME_BIN="$(command -v godot)" ./tests/desktop_local_match_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/godot-windows-logs/local-match-project.log"
+
+      - name: Export Windows Desktop
+        run: |
+          set -o pipefail
+          godot --headless --path . --export-release "Windows Desktop" build/windows/ArmedMystery.exe 2>&1 \
+            | tee "$RUNNER_TEMP/godot-windows-logs/export.log"
+
+      - name: Verify Windows files
+        run: |
+          for file in build/windows/ArmedMystery.exe build/windows/ArmedMystery.console.exe; do
+            if [[ ! -s "$file" ]]; then
+              echo "Missing or empty Windows export file: $file" >&2
+              exit 1
+            fi
+            echo "WINDOWS_ARTIFACT_CHECK file=$file bytes=$(stat -c %s "$file")"
+          done
+          # O jogo embute os dados no .exe; um executável sem eles teria só o template.
+          if [[ "$(stat -c %s build/windows/ArmedMystery.exe)" -le 1000000 ]]; then
+            echo "Windows executable is unexpectedly small" >&2
+            exit 1
+          fi
+
+      - name: Package test ZIP
+        run: |
+          cp build/windows/ArmedMystery.exe build/windows/ArmedMystery.console.exe build/package/
+          cp docs/windows-playtest.txt build/package/LEIA-ME.txt
+          (cd build/package && zip -9 -r ../armed-mystery-windows-playtest.zip .)
+          unzip -l build/armed-mystery-windows-playtest.zip
+          test -s build/armed-mystery-windows-playtest.zip
+
+      - name: Upload Windows playtest ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: armed-mystery-windows-playtest
+          path: build/armed-mystery-windows-playtest.zip
+          if-no-files-found: error
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-windows-export-logs
+          path: ${{ runner.temp }}/godot-windows-logs
+          if-no-files-found: warn
+
+  smoke-windows:
+    needs: export-windows
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download Windows playtest ZIP
+        uses: actions/download-artifact@v4
+        with:
+          name: armed-mystery-windows-playtest
+          path: artifact
+
+      - name: Unpack
+        shell: bash
+        run: |
+          mkdir -p playtest
+          unzip -o artifact/armed-mystery-windows-playtest.zip -d playtest
+          ls -la playtest
+          test -s playtest/ArmedMystery.exe
+          test -s playtest/ArmedMystery.console.exe
+          test -s playtest/LEIA-ME.txt
+
+      # Mesmo fluxo do jogador, com o executável exportado e sem o projeto:
+      # menu -> servidor headless em processo separado -> três clientes pelo menu.
+      - name: Run local match through the exported Windows build
+        shell: bash
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/windows-local-match
+        run: |
+          set -o pipefail
+          GAME_BIN="$PWD/playtest/ArmedMystery.console.exe" GAME_PATH= ./tests/desktop_local_match_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/windows-local-match.log"
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-local-match-logs
+          path: ${{ runner.temp }}/windows-local-match
+          if-no-files-found: warn
