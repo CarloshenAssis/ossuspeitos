@@ -14,7 +14,7 @@ func add_player(peer_id: int) -> Dictionary:
 		"position": spawn,
 		"spawn_position": spawn,
 		"velocity": Vector3.ZERO,
-		"yaw": 0.0,
+		"yaw": MovementRules.spawn_yaw(spawn),
 		"input": Vector2.ZERO,
 		"last_sequence": -1,
 		"last_input_msec": 0,

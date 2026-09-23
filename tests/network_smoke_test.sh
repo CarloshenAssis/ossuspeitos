@@ -202,12 +202,16 @@ if awk '
 else
 	check_failed "authoritative-speed-limit" "max speed missing or greater than 5.001"
 fi
-if awk -F'[=, ]+' '
+# O limite vem da regra oficial, para o teste não divergir quando a arena muda.
+ARENA_LIMIT="$(sed -n 's/^const ARENA_HALF_EXTENT := \([0-9.]*\).*/\1/p' "$ROOT/shared/movement_rules.gd")"
+[[ -n "$ARENA_LIMIT" ]] || { echo "ARENA_HALF_EXTENT not found" >&2; exit 1; }
+if awk -F'[=, ]+' -v limit="$ARENA_LIMIT" '
   /PLAYER_STATE/ {
     for (field = 1; field <= NF; field++) {
       if ($field == "position") {
         x = $(field + 1); y = $(field + 2); z = $(field + 3)
-        if (x < -11.501 || x > 11.501 || y < 0.999 || y > 1.001 || z < -11.501 || z > 11.501) exit 1
+        bound = limit + 0.001
+        if (x < -bound || x > bound || y < 0.999 || y > 1.001 || z < -bound || z > bound) exit 1
         found++
       }
     }
