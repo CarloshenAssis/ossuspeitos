@@ -91,16 +91,17 @@ func _remote_facing(yaw: float) -> Vector3:
 	for _i in 30: _arena._process(0.1)
 	return _visible_front(_arena.avatars[REMOTE])
 
-## Direção horizontal da geometria que se afasta do eixo do corpo. Só a cápsula
-## (simétrica) não tem frente: devolve zero e as checagens falham.
+## Direção horizontal para onde a geometria do corpo aponta: soma dos
+## deslocamentos de todas as peças em relação ao eixo. Peças simétricas
+## (braços, pernas, chapéu) se anulam e sobra a frente (visor, lapelas). Uma
+## cápsula sozinha, sem frente, dá zero e as checagens falham.
 func _visible_front(avatar: Node3D) -> Vector3:
-	var best := Vector3.ZERO
+	var sum := Vector3.ZERO
 	for node in avatar.find_children("*", "MeshInstance3D", true, false):
 		var offset: Vector3 = (node as Node3D).global_position - avatar.global_position
 		offset.y = 0.0
-		if offset.length() > best.length():
-			best = offset
-	return best.normalized() if best.length() > 0.1 else Vector3.ZERO
+		sum += offset
+	return sum.normalized() if sum.length() > 0.1 else Vector3.ZERO
 
 func _visor(peer_id: int) -> Node3D:
 	var avatar: Node3D = _arena.avatars.get(peer_id)
