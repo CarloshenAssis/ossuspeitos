@@ -224,3 +224,81 @@ Cores e placas por região, o indicador **Região** do HUD e as luzes coloridas
 sem sombra são apresentação pura. A demo Web continua **OFFLINE / SEM SERVIDOR**:
 mostra a nova arena e usa a mesma colisão para a caminhada local, sem simular
 rodada, combate ou rede.
+
+## Correção: encerramento correlacionado por geração e token
+
+O `shutdown_ready` não tinha argumentos, e o servidor aceitava qualquer ready de
+um peer esperado assim que entrava em shutdown (achado F4/F7 da auditoria). No
+teste adversarial, o join do atacante tardio inicia o encerramento. O ready
+"não solicitado" que ele envia ao ser aceito era contado como legítimo, e o
+servidor podia fechar antes de o atacante processar a preparação. Isso gerava a
+falha intermitente `combat-probe-sent-pickup_during_shutdown` no CI.
+
+`ShutdownHandshake` (headless, em `server/`) agora abre uma geração por
+tentativa. Ele sorteia um token por peer no instante em que registra o envio da
+`shutdown_prepare(generation, token)` para aquele peer. Uma
+`shutdown_ready(generation, token)` só conta se:
+
+- o remetente vem de `get_remote_sender_id()`;
+- o peer é esperado e continua no lobby;
+- a preparação dele já foi enviada;
+- a geração é a corrente;
+- o token é exatamente o entregue a ele;
+- ainda não houve confirmação desse peer.
+
+Confirmações antecipadas, adivinhadas, obsoletas, duplicadas, de tipo errado ou
+de peers não esperados são recusadas. Cada motivo é registrado uma vez por peer
+e nenhum avança a contagem. O cliente só confirma uma preparação vinda da
+autoridade, uma única vez, e para de enviar RPC depois dela. Um peer esperado
+que se desconecta durante o encerramento deixa de ser aguardado, e os demais
+concluem sem cair no timeout. O protocolo passa à versão 6.
+
+O teste adversarial agora fixa a ordem que antes era sorte: o atacante só entra
+depois das quatro confirmações de papel, e processa a preparação com meio
+segundo de atraso. Com o protocolo antigo, esse cenário falha em 3 de 3
+execuções. `shutdown_handshake_test.gd` cobre cada motivo de recusa de forma
+determinística.
+
+## Teste local no PC: menu, servidor hospedado e build Windows
+
+O jogo exportado para Windows (feature `desktop_playtest`) e a execução gráfica
+sem argumentos abrem um menu. A demo Web tem a feature `visual_demo`, avaliada
+antes, e continua OFFLINE / SEM SERVIDOR.
+
+"Criar partida local" nunca instancia autoridade no processo do jogador. O
+`DesktopSession` confere a porta e inicia o mesmo executável com
+`--headless -- --mode=server --status-file=... --hosted=true`. O servidor grava
+`ready` ou `error:unable_to_listen` nesse arquivo, e só com `ready` o menu
+conecta a janela do anfitrião como cliente comum em loopback. Assim a sala nunca
+é declarada criada antes de o servidor realmente escutar. A escuta é em
+`127.0.0.1` por padrão; `0.0.0.0` só com a opção LAN marcada. Um segundo
+"Criar" na mesma porta cai em porta ocupada, e o mesmo processo não inicia um
+segundo servidor.
+
+Não sobra processo órfão:
+
+- voltar ao menu, sair, fechar a janela ou encerrar a árvore mata o servidor que
+  aquele processo hospeda;
+- se o jogo do anfitrião morrer sem conseguir isso, o servidor `--hosted` se
+  encerra sozinho após 20 s com o lobby vazio.
+
+Quando o anfitrião sai, os demais recebem a desconexão e voltam ao menu. O
+encerramento em duas fases continua sendo usado nos testes. Na sessão de PC o
+anfitrião derruba o processo, o que é aceitável porque a partida acaba com ele.
+
+No modo interativo, falha de conexão, recusa, timeout e desconexão levam de
+volta ao menu (recarregando a cena), em vez de encerrar o processo. Os clientes
+de teste headless mantêm o comportamento anterior. O projeto passa a dar flush
+no stdout a cada `print` (`application/run/flush_stdout_on_print`): sem isso,
+os templates release retêm os marcadores de log, e o log do servidor hospedado
+ficaria incompleto se o processo fosse encerrado.
+
+O preset "Windows Desktop" embute os dados no `.exe` e gera também o wrapper
+`.console.exe`. Ele exclui `tests/` e `build/` e não altera o recurso do
+executável (sem rcedit/assinatura). O PCK inclui os scripts do servidor, porque
+o mesmo executável é o servidor hospedado. Ele não contém segredos e não deve
+ser tratado como proteção. O workflow *Godot Windows playtest build* exporta no
+Ubuntu, publica o ZIP como artifact do PR (sem release) e roda
+`desktop_local_match_test.sh` contra o `.exe` exportado num runner
+`windows-latest`, sem o projeto. As condições do deploy do GitHub Pages não
+mudaram.

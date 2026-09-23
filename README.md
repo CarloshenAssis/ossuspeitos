@@ -34,6 +34,34 @@ use **E** para coletar, clique esquerdo para atirar e **R** para recarregar.
 Quando eliminado oficialmente, o cliente para de enviar gameplay e **Q/E**
 alternam localmente entre jogadores vivos autorizados pelo servidor.
 
+## Teste local no PC (build Windows)
+
+Cada PR gera o artifact **armed-mystery-windows-playtest** no workflow
+*Godot Windows playtest build* (Actions → execução do PR → Artifacts). O ZIP
+traz `ArmedMystery.exe` (dados embutidos), `ArmedMystery.console.exe` (mesmo
+jogo, com console de log) e `LEIA-ME.txt`. Não há release automático.
+
+Ao abrir o jogo sem argumentos aparece o menu:
+
+1. **Criar partida local**: inicia a autoridade num processo headless separado,
+   do mesmo executável. Só depois de o servidor confirmar que abriu a porta,
+   esta janela entra como cliente comum. A sala escuta só em `127.0.0.1`; ela
+   aceita a rede local apenas com **Permitir jogadores da rede local (LAN)**
+   marcado. Endereço e porta ficam no canto da tela. Porta ocupada gera um
+   erro claro, e nenhuma sala é criada.
+2. **Entrar em partida**: endereço IPv4 ou nome do PC, mais a porta.
+   Endereço inválido, falha de conexão, recusa do servidor e desconexão voltam
+   ao menu com a mensagem correspondente.
+3. **Sair**.
+
+Para testar 4 jogadores num só PC, abra o jogo 4 vezes: uma janela cria e três
+entram em `127.0.0.1:9080`. Cada janela já vem com um nome distinto. **F10**
+sai da partida. Fechar a janela do anfitrião (ou F10 nela) encerra o servidor
+da sala. Se o jogo do anfitrião morrer sem conseguir fazer isso, o servidor se
+encerra sozinho 20 s depois de ficar vazio.
+
+Pelo código-fonte, `godot4 --path .` sem argumentos abre o mesmo menu.
+
 ## Arena graybox
 
 A arena mede 29 × 29 m entre os muros e tem simetria rotacional de 90°, para nenhum spawn
@@ -198,6 +226,14 @@ godot4 --headless --path . --script tests/spectator_reveal_client_test.gd
 ./tests/round_adversarial_test.sh
 # regressão de movimento com servidor e quatro clientes reais
 ./tests/network_smoke_test.sh
+# encerramento em duas fases: geração e token por peer
+godot4 --headless --path . --script tests/shutdown_handshake_test.gd
+# menu do PC: validação, porta ocupada e textos
+godot4 --headless --path . --script tests/desktop_session_test.gd
+# partida pelo menu: servidor hospedado + 3 clientes, falhas e fechamento
+./tests/desktop_local_match_test.sh
+# o mesmo contra um executável exportado (sem o projeto)
+GAME_BIN=caminho/ArmedMystery.console.exe GAME_PATH= ./tests/desktop_local_match_test.sh
 ```
 
 O teste de movimento abre uma porta local aleatória, inicia cinco processos

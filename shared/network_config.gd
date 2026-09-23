@@ -9,7 +9,9 @@ const DEFAULT_PORT := 9080
 const MIN_PLAYERS := RoundRules.MIN_PLAYERS
 const MAX_PLAYERS := RoundRules.MAX_PLAYERS
 ## 5: adds private spectator targets and the sanitized final role reveal.
-const PROTOCOL_VERSION := 5
+## 6: shutdown_prepare/shutdown_ready carry the shutdown generation and a
+## per-peer token, so only a confirmation of a received preparation counts.
+const PROTOCOL_VERSION := 6
 const CONNECT_TIMEOUT_SECONDS := 10.0
 
 static func user_arguments() -> Dictionary:

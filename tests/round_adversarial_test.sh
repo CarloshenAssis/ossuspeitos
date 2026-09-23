@@ -103,7 +103,7 @@ fi
 # Todo dicionário indexado por peer_id limpo no encerramento também precisa ser
 # limpo na desconexão, senão um ciclo de reconexões cresce sem limite.
 DISCONNECT_BLOCK="$(awk '/^func _on_peer_disconnected/,/^$/' "$ROOT/shared/network_app.gd")"
-for registry in completed_peers impossible_input_rejected_peers round_ack_peers round_late_join_peers; do
+for registry in completed_peers impossible_input_rejected_peers round_ack_peers round_late_join_peers shutdown_ready_rejections_logged; do
 	if grep -q "${registry}\.erase(peer_id)" <<<"$DISCONNECT_BLOCK"; then
 		check_ok "per-peer-registry-cleared-on-disconnect-$registry"
 	else
@@ -160,6 +160,11 @@ WATCHDOG_PID=$!
 # O peer hostil só entra com a rodada já ACTIVE: ele é um join tardio e não pode
 # se tornar participante nem receber papel.
 wait_for_marker 'ROUND_STATE state=ACTIVE' "$TMP_DIR/server.log" "$SERVER_PID"
+# Ordem fixa: o atacante só entra depois das quatro confirmações de papel. Assim
+# o próprio `request_join` dele dispara o shutdown e o `shutdown_ready` não
+# solicitado que ele envia ao ser aceito sempre chega com o encerramento já em
+# curso — exatamente a corrida que antes era intermitente no CI.
+wait_for_marker 'CLIENT_PRIVATE_ROLE_ACK peer_id=[0-9]+ count=4' "$TMP_DIR/server.log" "$SERVER_PID"
 "$GODOT_BIN" --headless --path "$ROOT" --script tests/adversarial_client.gd -- \
   --client-id=attacker --url="ws://127.0.0.1:$PORT" --quit-after-msec=45000 \
   >"$TMP_DIR/attacker.log" 2>&1 &
@@ -200,12 +205,34 @@ fi
 for attack in pickup_before_join fire_before_join reload_before_join pickup_wrong_types fire_wrong_types reload_wrong_type missing_pickup impossible_origin invalid_direction replayed_fire_sequence forge_combat_private_state forge_combat_hit forge_combat_elimination pickup_during_shutdown fire_during_shutdown reload_during_shutdown; do
 	assert_grep "combat-probe-sent-$attack" "ATTACKER_SENT id=attacker attack=$attack" "$TMP_DIR/attacker.log"
 done
-# ACHADO F7 (pré-existente, LOW): `shutdown_ready` não é correlacionado com o
-# `shutdown_prepare` que deveria tê-lo provocado, então o ack não solicitado do
-# peer hostil é aceito assim que o servidor entra em shutdown. A consequência é
-# auto-infligida — o servidor pode fechar antes que esse peer processe o
-# prepare —, por isso o marcador do atacante é opcional aqui. O que não pode
-# variar é o handshake dos clientes legítimos, afirmado logo abaixo.
+# Encerramento correlacionado (antes o achado F7): cada `shutdown_prepare` leva
+# geração e token por peer, e só a confirmação que devolve exatamente o que o
+# servidor enviou àquele remetente conta. O atacante entra por último, é lento
+# para processar a preparação e antes disso envia confirmações adivinhadas;
+# nenhuma pode encerrar a sessão dele antes das sondas acima.
+ATTACKER_PEER="$(sed -n 's/.*CLIENT_JOINED id=attacker peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | head -1)"
+if [[ -n "$ATTACKER_PEER" ]]; then check_ok "attacker-peer-id-known"; else check_failed "attacker-peer-id-known" "no CLIENT_JOINED for attacker"; fi
+assert_equal "attacker-processed-the-preparation-once" "$(grep -c 'ATTACKER_SHUTDOWN_PREPARE id=attacker' "$TMP_DIR/attacker.log")" "1"
+assert_grep "shutdown-prepare-sent-to-everyone" 'SERVER_SHUTDOWN_PREPARE_SENT generation=1 peers=5' "$TMP_DIR/server.log"
+# unexpected_peer: antes do join; token_mismatch: antecipada/adivinhada ou
+# trocada; invalid: tipos errados; stale_generation: geração anterior;
+# duplicate: repetição da confirmação já aceita.
+for reason in unexpected_peer token_mismatch invalid stale_generation duplicate; do
+	assert_grep "attacker-own-ready-rejected-$reason" "SHUTDOWN_READY_REJECTED peer_id=$ATTACKER_PEER reason=$reason" "$TMP_DIR/server.log"
+done
+assert_equal "exactly-five-accepted-readies" "$(grep -c 'CLIENT_SHUTDOWN_READY peer_id=' "$TMP_DIR/server.log")" "5"
+assert_equal "attacker-ready-accepted-once" "$(grep -c "CLIENT_SHUTDOWN_READY peer_id=$ATTACKER_PEER " "$TMP_DIR/server.log")" "1"
+# Ordem no log do servidor: a confirmação antecipada do atacante foi recusada
+# antes da aceita, e a aceita só aparece depois da recusa da geração obsoleta
+# (enviada já com a preparação em mãos).
+EARLY_LINE="$(grep -n "SHUTDOWN_READY_REJECTED peer_id=$ATTACKER_PEER reason=token_mismatch" "$TMP_DIR/server.log" | head -1 | cut -d: -f1)"
+STALE_LINE="$(grep -n "SHUTDOWN_READY_REJECTED peer_id=$ATTACKER_PEER reason=stale_generation" "$TMP_DIR/server.log" | head -1 | cut -d: -f1)"
+ACCEPTED_LINE="$(grep -n "CLIENT_SHUTDOWN_READY peer_id=$ATTACKER_PEER " "$TMP_DIR/server.log" | head -1 | cut -d: -f1)"
+if [[ -n "$EARLY_LINE" && -n "$STALE_LINE" && -n "$ACCEPTED_LINE" && "$EARLY_LINE" -lt "$STALE_LINE" && "$STALE_LINE" -lt "$ACCEPTED_LINE" ]]; then
+	check_ok "attacker-ready-counted-only-after-its-preparation"
+else
+	check_failed "attacker-ready-counted-only-after-its-preparation" "early=$EARLY_LINE stale=$STALE_LINE accepted=$ACCEPTED_LINE"
+fi
 for id in 1 2 3 4; do
 	assert_equal "legit-client-$id-single-shutdown-prepare" "$(grep -c "CLIENT_SHUTDOWN_PREPARE id=client-$id" "$TMP_DIR/client-$id.log")" "1"
 	assert_equal "legit-client-$id-single-shutdown-complete" "$(grep -c "CLIENT_SHUTDOWN_COMPLETE id=client-$id" "$TMP_DIR/client-$id.log")" "1"
