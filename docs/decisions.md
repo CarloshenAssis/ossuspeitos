@@ -184,3 +184,43 @@ Servidor headless segue sem apresentação e a demo offline não simula esses
 estados. O protocolo passa à versão 5. As validações específicas são os testes
 `spectator_reveal_authority_test.gd`, `spectator_reveal_client_test.gd` e
 `spectator_reveal_network_test.sh` (servidor + quatro clientes).
+
+## Marco 6: arena graybox jogável
+
+A arena passou a ser uma única lista de AABBs em `ArenaRules.BLOCKERS`, usada
+pelo hitscan de `CombatAuthority`, pela nova colisão de movimento e pela
+apresentação. `ArenaView` gera exatamente uma mesh por bloco, com o mesmo centro
+e tamanho; qualquer outra mesh é decoração plana de piso (faixas de região e
+marcas de spawn, no máximo 2 cm) e as placas ficam coladas nos muros externos.
+O teste `arena_layout_test.gd` instancia a arena do cliente e compara nó a nó.
+
+Não há pulo nem mira vertical: o tiro sai horizontal no olho oficial (1,7 m).
+Por isso os blocos têm três alturas bem separadas do olho: parede 3,0 m e
+cobertura 2,4 m bloqueiam visão e tiro; caixote baixo 1,0 m bloqueia passagem,
+mas visão e tiro passam por cima. Todo bloco nasce no piso, então nada passa por
+baixo. A hitbox oficial do corpo foi centrada na posição oficial, como a cápsula
+do cliente (0–2 m); como todo tiro é horizontal a 1,7 m, isso não muda nenhum
+acerto, só elimina a divergência entre corpo visível e corpo atingível.
+
+O movimento autoritativo agora colide com os blocos: cada eixo é resolvido em
+separado (permite deslizar em parede), o passo é subdividido em trechos de até
+0,2 m (menores que o bloco mais fino, 0,5 m) e um corpo teleportado para dentro
+de um bloco não fica preso. O limite do corpo passou a 14 m, meio metro antes
+da face interna dos muros externos (14,5 m).
+
+O layout tem simetria rotacional de 90°: pátio central com monumento, quatro
+bordas com uma arma e cobertura em cata-vento, e quatro salas de canto com porta
+diagonal. Os quatro primeiros spawns ficam nas salas; os demais atrás de
+coberturas largas nas bordas, e todos nascem olhando para o centro. Os testes
+exigem: nenhum spawn sobre pickup ou preso, passos livres em oito direções,
+nenhum par de spawns com linha de tiro pelo hitscan oficial, todo pickup
+coletável pelo caminho oficial e alcançável de todo spawn mesmo com qualquer um
+dos cinco corredores principais selado, e lados opostos conectados por pátio,
+corredor leste e corredor oeste isoladamente. As faixas usadas pelos testes de
+combate existentes foram preservadas; o teste de fumaça passou a ler o limite
+da arena da regra oficial em vez de repetir o valor antigo.
+
+Cores e placas por região, o indicador **Região** do HUD e as luzes coloridas
+sem sombra são apresentação pura. A demo Web continua **OFFLINE / SEM SERVIDOR**:
+mostra a nova arena e usa a mesma colisão para a caminhada local, sem simular
+rodada, combate ou rede.
