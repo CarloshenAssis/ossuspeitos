@@ -23,7 +23,7 @@ func run_preauth_attacks() -> void:
 	# RPC sensível antes de existir sessão para o remetente.
 	_send("submit_input_before_join", func(): submit_input.rpc_id(1, 1, Vector2.ZERO, 0.0))
 	_send("ack_before_join", func(): round_role_acknowledged.rpc_id(1, 1))
-	_send("shutdown_ready_before_join", func(): shutdown_ready.rpc_id(1))
+	_send("shutdown_ready_before_join", func(): shutdown_ready.rpc_id(1, 1, 1))
 	_send("test_completed_before_join", func(): client_test_completed.rpc_id(1))
 	_send("pickup_before_join", func(): request_pickup.rpc_id(1, "weapon_0", 1))
 	_send("fire_before_join", func(): request_fire.rpc_id(1, 1, Vector3.ZERO, Vector3.FORWARD))
@@ -66,7 +66,11 @@ func run_session_attacks() -> void:
 	_send("ack_forged_round_huge", func(): round_role_acknowledged.rpc_id(1, 9223372036854775807))
 	_send("ack_wrong_type", func(): round_role_acknowledged.rpc_id(1, {"round_id": 1}))
 	_send("rejoin_same_peer", func(): request_join.rpc_id(1, NetworkConfig.PROTOCOL_VERSION, "second-session"))
-	_send("shutdown_ready_unsolicited", func(): shutdown_ready.rpc_id(1))
+	# Confirmações antecipadas: o atacante ainda não recebeu a preparação, então
+	# só pode adivinhar geração e token. Nenhuma delas pode contar.
+	_send("shutdown_ready_unsolicited", func(): shutdown_ready.rpc_id(1, 1, 0))
+	_send("shutdown_ready_guessed_token", func(): shutdown_ready.rpc_id(1, 1, 123456789))
+	_send("shutdown_ready_wrong_types", func(): shutdown_ready.rpc_id(1, "1", [0]))
 	_send("test_completed_unsolicited", func(): client_test_completed.rpc_id(1))
 	_send("missing_pickup", func(): request_pickup.rpc_id(1, "does_not_exist", 2))
 	_send("impossible_origin", func(): request_fire.rpc_id(1, 2, Vector3(999, 999, 999), Vector3.FORWARD))
@@ -180,15 +184,25 @@ func round_roster(entries) -> void:
 			return
 
 @rpc("any_peer", "call_remote", "reliable")
-func shutdown_prepare() -> void:
+func shutdown_prepare(generation, token) -> void:
+	# Peer lento: processa a preparação meio segundo depois. Um servidor que
+	# aceitasse o ready não solicitado fecharia a sessão antes deste ponto.
+	await get_tree().create_timer(0.5).timeout
 	print("ATTACKER_SHUTDOWN_PREPARE id=%s" % label)
 	_send("pickup_during_shutdown", func(): request_pickup.rpc_id(1, "weapon_0", 63))
 	_send("fire_during_shutdown", func(): request_fire.rpc_id(1, 63, Vector3.ZERO, Vector3.FORWARD))
 	_send("reload_during_shutdown", func(): request_reload.rpc_id(1, 63))
-	shutdown_ready.rpc_id(1)
+	if typeof(generation) != TYPE_INT or typeof(token) != TYPE_INT:
+		return
+	# Geração obsoleta e token trocado, com o token real já em mãos.
+	_send("shutdown_ready_stale_generation", func(): shutdown_ready.rpc_id(1, int(generation) - 1, token))
+	_send("shutdown_ready_wrong_token", func(): shutdown_ready.rpc_id(1, generation, int(token) ^ 1))
+	shutdown_ready.rpc_id(1, generation, token)
+	# Duplicada no mesmo quadro: chega antes do fechamento adiado do servidor.
+	_send("shutdown_ready_duplicate", func(): shutdown_ready.rpc_id(1, generation, token))
 
 @rpc("any_peer", "call_remote", "reliable")
-func shutdown_ready() -> void:
+func shutdown_ready(_generation, _token) -> void:
 	pass
 
 @rpc("any_peer", "call_remote", "reliable")

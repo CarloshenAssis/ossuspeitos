@@ -26,8 +26,10 @@ var client_movement_observed := false
 var impossible_input_rejected_peers: Dictionary = {}
 var test_direction := Vector2.ZERO
 var test_roster_ready := false
-var shutdown_expected_peers: Dictionary = {}
-var shutdown_ready_peers: Dictionary = {}
+## Encerramento em duas fases, correlacionado por geração e token por peer.
+var shutdown_handshake := ShutdownHandshake.new()
+## peer_id -> motivos de recusa já registrados, para não repetir log por pacote.
+var shutdown_ready_rejections_logged: Dictionary = {}
 var server_peer_closing := false
 var server_terminal := false
 var shutdown_prepare_timer: Timer
@@ -254,6 +256,11 @@ func _on_peer_disconnected(peer_id: int) -> void:
 		lobby.remove(peer_id)
 	print("CLIENT_LEFT peer_id=%d count=%d" % [peer_id, lobby.size()])
 	if shutting_down:
+		# Quem sai durante o encerramento não vai mais confirmar: deixa de ser
+		# esperado, e os demais podem concluir sem cair no timeout.
+		shutdown_handshake.forget_peer(peer_id)
+		shutdown_ready_rejections_logged.erase(peer_id)
+		_maybe_close_after_shutdown_ready()
 		return
 	completed_peers.erase(peer_id)
 	impossible_input_rejected_peers.erase(peer_id)
@@ -465,35 +472,59 @@ func _begin_server_shutdown(peer_ids: Array) -> void:
 	if shutting_down:
 		return
 	shutting_down = true
-	for peer_id in peer_ids:
-		shutdown_expected_peers[int(peer_id)] = true
-	print("SERVER_TEST_OK clients=%d" % shutdown_expected_peers.size())
-	for peer_id in shutdown_expected_peers:
-		shutdown_prepare.rpc_id(peer_id)
+	var generation := shutdown_handshake.begin(peer_ids)
+	print("SERVER_TEST_OK clients=%d" % shutdown_handshake.expected_count())
+	for peer_id in shutdown_handshake.expected.keys():
+		# O token só existe depois de registrado o envio para este peer; nenhuma
+		# confirmação anterior pode conhecê-lo.
+		var token := shutdown_handshake.prepare_token_for(int(peer_id))
+		shutdown_prepare.rpc_id(int(peer_id), generation, token)
+	print("SERVER_SHUTDOWN_PREPARE_SENT generation=%d peers=%d" % [generation, shutdown_handshake.sent_tokens.size()])
 	shutdown_prepare_timer.start(2.0)
 
+## Preparação de encerramento. Só vem da autoridade; o cliente confirma uma única
+## vez, devolvendo exatamente a geração e o token que recebeu.
 @rpc("authority", "call_remote", "reliable")
-func shutdown_prepare() -> void:
-	if shutdown_prepare_received:
+func shutdown_prepare(generation: int, token: int) -> void:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
+		return
+	if shutdown_prepare_received or generation <= 0 or token == 0 or not client_connected:
 		return
 	shutdown_prepare_received = true
 	print("CLIENT_SHUTDOWN_PREPARE id=%s" % client_label)
-	shutdown_ready.rpc_id(1)
+	shutdown_ready.rpc_id(1, generation, token)
 
+## Argumentos sem tipo: um valor hostil vira recusa registrada, não erro de RPC.
 @rpc("any_peer", "call_remote", "reliable")
-func shutdown_ready() -> void:
-	if not multiplayer.is_server() or not shutting_down or server_peer_closing:
+func shutdown_ready(generation: Variant, token: Variant) -> void:
+	if not multiplayer.is_server() or server_peer_closing or server_terminal:
 		return
 	var sender := multiplayer.get_remote_sender_id()
-	if not shutdown_expected_peers.has(sender) or not lobby.has(sender) or shutdown_ready_peers.has(sender):
+	var reason := ShutdownHandshake.REASON_UNEXPECTED_PEER
+	if lobby.has(sender):
+		reason = shutdown_handshake.accept_ready(sender, generation, token)
+	if not reason.is_empty():
+		_log_shutdown_ready_rejection(sender, reason)
 		return
-	shutdown_ready_peers[sender] = true
-	print("CLIENT_SHUTDOWN_READY peer_id=%d count=%d" % [sender, shutdown_ready_peers.size()])
-	if shutdown_ready_peers.size() >= shutdown_expected_peers.size():
-		_cancel_shutdown_prepare_timeout()
-		print("SERVER_SHUTDOWN_READY clients=%d" % shutdown_ready_peers.size())
-		if combat_network_test != null: print("COMBAT_SHUTDOWN_READY clients=%d" % shutdown_ready_peers.size())
-		call_deferred("_close_server_peer")
+	print("CLIENT_SHUTDOWN_READY peer_id=%d count=%d" % [sender, shutdown_handshake.ready_count()])
+	_maybe_close_after_shutdown_ready()
+
+func _maybe_close_after_shutdown_ready() -> void:
+	if not shutting_down or server_peer_closing or not shutdown_handshake.is_complete():
+		return
+	_cancel_shutdown_prepare_timeout()
+	print("SERVER_SHUTDOWN_READY clients=%d" % shutdown_handshake.ready_count())
+	if combat_network_test != null: print("COMBAT_SHUTDOWN_READY clients=%d" % shutdown_handshake.ready_count())
+	call_deferred("_close_server_peer")
+
+## Uma linha por peer e motivo: um peer hostil não transforma spam em log.
+func _log_shutdown_ready_rejection(sender: int, reason: String) -> void:
+	var logged: Dictionary = shutdown_ready_rejections_logged.get(sender, {})
+	if logged.has(reason) or shutdown_ready_rejections_logged.size() > RoundRules.MAX_PLAYERS * 4:
+		return
+	logged[reason] = true
+	shutdown_ready_rejections_logged[sender] = logged
+	print("SHUTDOWN_READY_REJECTED peer_id=%d reason=%s" % [sender, reason])
 
 func _cancel_shutdown_prepare_timeout() -> void:
 	if shutdown_prepare_timer == null:
@@ -505,7 +536,7 @@ func _close_server_peer() -> void:
 		return
 	server_peer_closing = true
 	server_terminal = true
-	closed_session_count = shutdown_expected_peers.size()
+	closed_session_count = shutdown_handshake.expected_count()
 	if round_authority != null:
 		round_authority.clear()
 	lobby.clear()
@@ -515,8 +546,8 @@ func _close_server_peer() -> void:
 		combat_authority.clear_round()
 	completed_peers.clear()
 	impossible_input_rejected_peers.clear()
-	shutdown_ready_peers.clear()
-	shutdown_expected_peers.clear()
+	shutdown_handshake.clear()
+	shutdown_ready_rejections_logged.clear()
 	round_ack_peers.clear()
 	round_late_join_peers.clear()
 	multiplayer.multiplayer_peer.close()
@@ -525,9 +556,9 @@ func _close_server_peer() -> void:
 	get_tree().quit(0)
 
 func _server_shutdown_timeout() -> void:
-	if server_terminal or shutdown_ready_peers.size() >= shutdown_expected_peers.size():
+	if server_terminal or shutdown_handshake.is_complete():
 		return
-	print("SERVER_SHUTDOWN_TIMEOUT ready=%d remaining=%d" % [shutdown_ready_peers.size(), lobby.size()])
+	print("SERVER_SHUTDOWN_TIMEOUT ready=%d remaining=%d" % [shutdown_handshake.ready_count(), lobby.size()])
 	get_tree().quit(1)
 
 # --- Ciclo de partida --------------------------------------------------------
@@ -713,7 +744,7 @@ func round_final_reveal(payload: Dictionary) -> void:
 	local_final_reveal = payload.duplicate(true)
 	print("ROUND_REVEAL_OK players=%d" % players.size())
 	print("ROUND_REVEAL_PRIVACY_OK")
-	if spectator_reveal_test_mode: spectator_reveal_received.rpc_id(1)
+	if spectator_reveal_test_mode and not shutdown_prepare_received: spectator_reveal_received.rpc_id(1)
 	_update_round_hud()
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -765,7 +796,7 @@ func round_private_role(round_id: int, role: int) -> void:
 	# O valor do papel nunca vai para o log; só a confirmação de recebimento.
 	print("CLIENT_PRIVATE_ROLE_RECEIVED id=%s count=%d" % [client_label, local_role_receipts])
 	_update_round_hud()
-	if round_test_mode:
+	if round_test_mode and not shutdown_prepare_received:
 		_run_role_privacy_probes()
 		round_role_acknowledged.rpc_id(1, round_id)
 

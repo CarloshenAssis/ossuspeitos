@@ -65,6 +65,13 @@ jobs:
             | tee "$RUNNER_TEMP/godot-network-logs/round-authority.log"
           grep -q 'ROUND_AUTHORITY_TEST_OK' "$RUNNER_TEMP/godot-network-logs/round-authority.log"
 
+      - name: Validate shutdown handshake
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/shutdown_handshake_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/shutdown-handshake.log"
+          grep -q 'SHUTDOWN_HANDSHAKE_TEST_OK' "$RUNNER_TEMP/godot-network-logs/shutdown-handshake.log"
+
       - name: Validate arena layout
         run: |
           set -o pipefail

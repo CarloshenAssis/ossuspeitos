@@ -224,3 +224,37 @@ Cores e placas por região, o indicador **Região** do HUD e as luzes coloridas
 sem sombra são apresentação pura. A demo Web continua **OFFLINE / SEM SERVIDOR**:
 mostra a nova arena e usa a mesma colisão para a caminhada local, sem simular
 rodada, combate ou rede.
+
+## Correção: encerramento correlacionado por geração e token
+
+O `shutdown_ready` não tinha argumentos, e o servidor aceitava qualquer ready de
+um peer esperado assim que entrava em shutdown (achado F4/F7 da auditoria). No
+teste adversarial, o join do atacante tardio inicia o encerramento. O ready
+"não solicitado" que ele envia ao ser aceito era contado como legítimo, e o
+servidor podia fechar antes de o atacante processar a preparação. Isso gerava a
+falha intermitente `combat-probe-sent-pickup_during_shutdown` no CI.
+
+`ShutdownHandshake` (headless, em `server/`) agora abre uma geração por
+tentativa. Ele sorteia um token por peer no instante em que registra o envio da
+`shutdown_prepare(generation, token)` para aquele peer. Uma
+`shutdown_ready(generation, token)` só conta se:
+
+- o remetente vem de `get_remote_sender_id()`;
+- o peer é esperado e continua no lobby;
+- a preparação dele já foi enviada;
+- a geração é a corrente;
+- o token é exatamente o entregue a ele;
+- ainda não houve confirmação desse peer.
+
+Confirmações antecipadas, adivinhadas, obsoletas, duplicadas, de tipo errado ou
+de peers não esperados são recusadas. Cada motivo é registrado uma vez por peer
+e nenhum avança a contagem. O cliente só confirma uma preparação vinda da
+autoridade, uma única vez, e para de enviar RPC depois dela. Um peer esperado
+que se desconecta durante o encerramento deixa de ser aguardado, e os demais
+concluem sem cair no timeout. O protocolo passa à versão 6.
+
+O teste adversarial agora fixa a ordem que antes era sorte: o atacante só entra
+depois das quatro confirmações de papel, e processa a preparação com meio
+segundo de atraso. Com o protocolo antigo, esse cenário falha em 3 de 3
+execuções. `shutdown_handshake_test.gd` cobre cada motivo de recusa de forma
+determinística.
