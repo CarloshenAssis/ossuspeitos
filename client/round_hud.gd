@@ -14,6 +14,8 @@ extends CanvasLayer
 ## - inferior direito: arma, carregador/reserva e recarga oficiais;
 ## - eliminado: faixa no topo e alvo observado + Q/E embaixo, sem dados de combate;
 ## - fim da rodada: tela cheia com vencedor, motivo e papéis revelados.
+## - inferior central (vivo): avisos de combate e o prompt de coleta (E);
+## - superior esquerdo (abaixo da região): eliminações públicas, só nomes.
 
 const MODE_LOBBY := "lobby"
 const MODE_ALIVE := "alive"
@@ -27,6 +29,31 @@ const HEALTH_BAR_MAX := 100
 ## Um tiro da pistola comum tira 34: com 34 ou menos, o próximo acerto mata.
 const LOW_HEALTH := 34
 const WEAPON_NAMES := {"common_pistol": "PISTOLA"}
+## Mesmos valores da pistola comum e da caixa de munição do servidor
+## (`CombatAuthority`); o teste do HUD confere que não divergem. Servem só para
+## desenhar as balas do pente e escrever o prompt de coleta.
+const MAGAZINE_CAPACITY := 6
+const MAX_RESERVE := 18
+const AMMO_BOX_AMOUNT := 6
+## Avisos curtos de combate e eliminações públicas: tempo na tela.
+const NOTICE_MSEC := 1800
+const FEED_MSEC := 5000
+const FEED_MAX := 3
+const FEED_TOP_OFFSET := 44.0
+## Recusas do servidor que viram aviso. As demais (cadência, dados técnicos,
+## rodada encerrada) ficam em silêncio: não são erro do jogador.
+const REJECTION_TEXT := {
+	"empty_magazine": "Pente vazio · R para recarregar",
+	"reloading": "Recarregando…",
+	"already_reloading": "Recarregando…",
+	"magazine_full": "Pente já está cheio",
+	"reserve_empty": "Sem munição na reserva",
+	"reserve_full": "Reserva cheia",
+	"inventory_full": "Você já tem uma arma",
+	"out_of_range": "Longe demais do item",
+	"item_unavailable": "Alguém pegou antes",
+	"item_not_found": "Alguém pegou antes",
+}
 const REASON_TEXT := {
 	RoundRules.REASON_ASSASSIN_DOWN: "O assassino foi eliminado.",
 	RoundRules.REASON_INNOCENTS_DOWN: "Todos os inocentes foram eliminados.",
@@ -46,6 +73,9 @@ var _damage_tween: Tween
 ## Painéis de canto e o preset de cada um; reancorados a cada desenho para
 ## encolher quando o texto diminui (um Control não encolhe sozinho).
 var _anchored: Array = []
+var _notices: Array = []
+var _feed: Array = []
+var _nearby_pickup := ""
 var _last_health := -1
 var _last_health_round := 0
 var model: Dictionary = {}
@@ -64,6 +94,15 @@ var _weapon_panel: PanelContainer
 var _weapon_title: Label
 var _weapon_ammo: Label
 var _weapon_hint: Label
+var _ammo_pips: HBoxContainer
+var _reload_track: Control
+var _reload_sweep: ColorRect
+var _feedback_column: VBoxContainer
+var _notice_box: VBoxContainer
+var _prompt_panel: PanelContainer
+var _prompt_key: PanelContainer
+var _prompt_label: Label
+var _feed_box: VBoxContainer
 var _eliminated_band: PanelContainer
 var _observe_panel: PanelContainer
 var _observe_caption: Label
@@ -84,6 +123,12 @@ func _ready() -> void:
 # --- Entradas (sempre dados oficiais) ------------------------------------------
 
 func apply_round_state(payload: Dictionary, role: int, round_id: int, own_peer_id: int) -> void:
+	# Outra rodada ou fora de ACTIVE: nenhum aviso, eliminação ou prompt antigo.
+	if int(payload.get("state", RoundState.WAITING)) != RoundState.ACTIVE \
+			or int(payload.get("round_id", 0)) != int(_public.get("round_id", 0)):
+		_notices.clear()
+		_feed.clear()
+		_nearby_pickup = ""
 	_public = payload
 	_role = role
 	_round_id = round_id
@@ -97,6 +142,11 @@ func apply_roster(entries: Array) -> void:
 func apply_combat_state(payload: Dictionary) -> void:
 	var previous_health := _last_health
 	var previous_round := _last_health_round
+	for text in transition_notices(_combat, payload):
+		_push_notice(text, HudStyle.BONE)
+	# O pedido de recarga virou recarga oficial: o aviso de pente vazio caducou.
+	if bool(payload.get("reloading", false)):
+		_notices = _notices.filter(func(notice): return not str(notice["text"]).begins_with("Pente vazio"))
 	_combat = payload.duplicate(true)
 	if _combat.is_empty() or int(_combat.get("round_id", 0)) != previous_round:
 		_clear_damage_flash()
@@ -119,6 +169,110 @@ func apply_final_reveal(payload: Dictionary) -> void:
 func set_session_info(text: String) -> void:
 	_session_info = text
 	_render()
+
+## Recusa oficial de uma ação do próprio jogador (`combat_action_rejected`).
+func show_rejection(action: String, reason: String) -> void:
+	var text := rejection_notice(action, reason, _combat)
+	if not text.is_empty():
+		_push_notice(text, HudStyle.AMBER)
+		_render()
+
+## Eliminação pública (`combat_public_elimination`): só o nome, sem autor nem papel.
+func apply_elimination(peer_id: int) -> void:
+	if peer_id == _own_peer_id or int(_public.get("state", RoundState.WAITING)) != RoundState.ACTIVE:
+		return
+	_feed.append({"text": "✕  %s — fora da rodada" % public_label(_roster, peer_id), "until": Time.get_ticks_msec() + FEED_MSEC})
+	while _feed.size() > FEED_MAX:
+		_feed.pop_front()
+	_render()
+
+## Tipo do pickup disponível ao alcance ("weapon", "ammo" ou ""), calculado pela
+## arena com a posição oficial e o estado público dos pickups.
+func set_nearby_pickup(pickup_type: String) -> void:
+	if pickup_type == _nearby_pickup:
+		return
+	_nearby_pickup = pickup_type
+	_render()
+
+func _push_notice(text: String, color: Color) -> void:
+	for notice in _notices:
+		if str(notice["text"]) == text:
+			notice["until"] = Time.get_ticks_msec() + NOTICE_MSEC
+			return
+	_notices.append({"text": text, "color": color, "until": Time.get_ticks_msec() + NOTICE_MSEC})
+	while _notices.size() > 2:
+		_notices.pop_front()
+
+func _process(_delta: float) -> void:
+	var now := Time.get_ticks_msec()
+	var expired := false
+	for list in [_notices, _feed]:
+		for index in range((list as Array).size() - 1, -1, -1):
+			if int(list[index]["until"]) <= now:
+				(list as Array).remove_at(index)
+				expired = true
+	if expired:
+		_render()
+	# Recarga sem prazo oficial: faixa que corre enquanto `reloading` for true,
+	# sem prometer quanto falta.
+	if _reload_track != null and _reload_track.visible:
+		var width := _reload_track.size.x
+		var phase := fmod(float(now) / 700.0, 1.0)
+		_reload_sweep.size = Vector2(width * 0.35, _reload_track.size.y)
+		_reload_sweep.position.x = (width * 1.35) * phase - width * 0.35
+
+# --- Avisos (modelo puro) ---------------------------------------------------------
+
+static func rejection_notice(action: String, reason: String, combat: Dictionary = {}) -> String:
+	# Sem reserva oficial, R não resolve: aponta para a munição do mapa.
+	if reason == "empty_magazine" and not combat.is_empty() and int(combat.get("reserve", 0)) <= 0:
+		return "Pente vazio · procure munição"
+	if reason == "no_equipped_weapon":
+		return "Pegue uma arma antes da munição" if action == "pickup" else "Sem arma"
+	return str(REJECTION_TEXT.get(reason, ""))
+
+## Avisos positivos a partir de duas versões seguidas do estado privado
+## oficial. Nada entre rodadas diferentes nem no primeiro estado recebido.
+static func transition_notices(before: Dictionary, after: Dictionary) -> Array:
+	var result: Array = []
+	if before.is_empty() or after.is_empty() or int(before.get("round_id", -1)) != int(after.get("round_id", -2)):
+		return result
+	if int(after.get("health", 0)) <= 0:
+		return result
+	var weapon_before := str(before.get("weapon_id", ""))
+	var weapon_after := str(after.get("weapon_id", ""))
+	if weapon_before.is_empty() and not weapon_after.is_empty():
+		result.append("%s EQUIPADA" % str(WEAPON_NAMES.get(weapon_after, weapon_after.to_upper())))
+		return result
+	if weapon_after.is_empty():
+		return result
+	var reserve_before := int(before.get("reserve", 0))
+	var reserve_after := int(after.get("reserve", 0))
+	var reloaded := bool(before.get("reloading", false)) and not bool(after.get("reloading", false)) \
+		and int(after.get("magazine", 0)) > int(before.get("magazine", 0))
+	if reloaded:
+		result.append("RECARREGADA")
+	elif reserve_after > reserve_before:
+		result.append("+%d MUNIÇÃO" % (reserve_after - reserve_before))
+	return result
+
+## Prompt de coleta para o pickup ao alcance, coerente com o que o servidor
+## aceita: uma arma por vez, munição só com arma e reserva abaixo do máximo.
+static func pickup_prompt(pickup_type: String, combat: Dictionary) -> Dictionary:
+	if pickup_type.is_empty() or combat.is_empty() or int(combat.get("health", 0)) <= 0:
+		return {}
+	var armed := not str(combat.get("weapon_id", "")).is_empty()
+	if pickup_type == "weapon":
+		if armed:
+			return {"key": false, "text": "Você já tem uma arma", "kind": "weapon"}
+		return {"key": true, "text": "PEGAR PISTOLA", "kind": "weapon"}
+	if pickup_type == "ammo":
+		if not armed:
+			return {"key": false, "text": "Munição · pegue uma arma antes", "kind": "ammo"}
+		if int(combat.get("reserve", 0)) >= MAX_RESERVE:
+			return {"key": false, "text": "Reserva cheia", "kind": "ammo"}
+		return {"key": true, "text": "PEGAR MUNIÇÃO  +%d" % AMMO_BOX_AMOUNT, "kind": "ammo"}
+	return {}
 
 # --- Modelo puro ----------------------------------------------------------------
 
@@ -355,6 +509,52 @@ func _render() -> void:
 		_weapon_hint.text = str(weapon["hint"])
 		_weapon_hint.visible = not _weapon_hint.text.is_empty()
 		_weapon_hint.add_theme_color_override("font_color", HudStyle.AMBER if bool(weapon["armed"]) else HudStyle.MUTED)
+		_ammo_pips.visible = bool(weapon["armed"])
+		var magazine := int(weapon.get("magazine", 0))
+		for index in _ammo_pips.get_child_count():
+			var pip := _ammo_pips.get_child(index) as ColorRect
+			var loaded := index < magazine
+			pip.color = (HudStyle.COPPER if magazine <= 2 else HudStyle.BONE) if loaded else HudStyle.LINE
+		_reload_track.visible = bool(weapon.get("reloading", false))
+
+	var alive := mode == MODE_ALIVE
+	var prompt := pickup_prompt(_nearby_pickup, _combat) if alive else {}
+	_prompt_panel.visible = not prompt.is_empty()
+	if not prompt.is_empty():
+		var accent := HudStyle.CYAN if str(prompt["kind"]) == "weapon" else HudStyle.COPPER
+		_prompt_key.visible = bool(prompt["key"])
+		(_prompt_key.get_theme_stylebox("panel") as StyleBoxFlat).border_color = accent
+		(_prompt_key.get_child(0) as Label).add_theme_color_override("font_color", accent)
+		_prompt_label.text = str(prompt["text"])
+		_prompt_label.add_theme_color_override("font_color", HudStyle.BONE if bool(prompt["key"]) else HudStyle.MUTED)
+	for child in _notice_box.get_children():
+		# Remove já: `queue_free` só sai no fim do quadro e o painel seria
+		# ancorado com o tamanho dos avisos antigos somados aos novos.
+		_notice_box.remove_child(child)
+		child.queue_free()
+	if alive:
+		for notice in _notices:
+			# Fundo escuro próprio: legível sobre qualquer cor da arena.
+			var pill := HudStyle.panel(Color(0.063, 0.071, 0.086, 0.78), Color(0, 0, 0, 0), 0)
+			pill.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			var line := HudStyle.label(str(notice["text"]), 15, notice["color"])
+			line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			pill.add_child(line)
+			_notice_box.add_child(pill)
+	_notice_box.visible = alive and not _notices.is_empty()
+	_feedback_column.visible = _notice_box.visible or _prompt_panel.visible
+
+	for child in _feed_box.get_children():
+		# Remove já: `queue_free` só sai no fim do quadro e o painel seria
+		# ancorado com o tamanho dos avisos antigos somados aos novos.
+		_feed_box.remove_child(child)
+		child.queue_free()
+	for entry in _feed:
+		var chip := HudStyle.panel(Color(0.063, 0.071, 0.086, 0.7), Color(0, 0, 0, 0), 0)
+		chip.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		chip.add_child(HudStyle.label(str(entry["text"]), 13, HudStyle.BONE))
+		_feed_box.add_child(chip)
+	_feed_box.visible = (mode == MODE_ALIVE or mode == MODE_SPECTATOR) and not _feed.is_empty()
 
 	var spectator: Dictionary = model["spectator"]
 	_eliminated_band.visible = mode == MODE_SPECTATOR
@@ -375,6 +575,9 @@ func _render() -> void:
 		_render_reveal_rows(ended)
 	for entry in _anchored:
 		HudStyle.anchor_corner(entry[0], entry[1])
+	# Feed logo abaixo do chip de região da arena (canto superior esquerdo).
+	_feed_box.offset_top += FEED_TOP_OFFSET
+	_feed_box.offset_bottom += FEED_TOP_OFFSET
 
 func _render_reveal_rows(ended: Dictionary) -> void:
 	for child in _ended_rows.get_children():
@@ -485,6 +688,13 @@ func _build() -> void:
 	_health_bar.add_theme_stylebox_override("background", track)
 	_health_bar.add_theme_stylebox_override("fill", fill)
 	_health_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Marcas a cada dano de um tiro da pistola: quantos acertos ainda aguenta.
+	_health_bar.draw.connect(func():
+		var step := float(LOW_HEALTH) / float(HEALTH_BAR_MAX) * _health_bar.size.x
+		var x := step
+		while x < _health_bar.size.x - 1.0:
+			_health_bar.draw_line(Vector2(x, 0), Vector2(x, _health_bar.size.y), HudStyle.INK, 2.0)
+			x += step)
 	health_box.add_child(_health_bar)
 	_health_panel.add_child(health_box)
 	left.add_child(_health_panel)
@@ -502,8 +712,32 @@ func _build() -> void:
 	_weapon_ammo.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_weapon_hint = HudStyle.label("", 13, HudStyle.AMBER)
 	_weapon_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_ammo_pips = HBoxContainer.new()
+	_ammo_pips.alignment = BoxContainer.ALIGNMENT_END
+	_ammo_pips.add_theme_constant_override("separation", 3)
+	for index in MAGAZINE_CAPACITY:
+		var pip := ColorRect.new()
+		pip.custom_minimum_size = Vector2(5, 12)
+		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_ammo_pips.add_child(pip)
+	_reload_track = Control.new()
+	_reload_track.custom_minimum_size = Vector2(150, 3)
+	_reload_track.clip_contents = true
+	_reload_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var reload_bg := ColorRect.new()
+	reload_bg.color = HudStyle.LINE
+	reload_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	reload_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reload_track.add_child(reload_bg)
+	_reload_sweep = ColorRect.new()
+	_reload_sweep.color = HudStyle.AMBER
+	_reload_sweep.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_reload_track.add_child(_reload_sweep)
+	_reload_track.visible = false
 	weapon_box.add_child(_weapon_title)
 	weapon_box.add_child(_weapon_ammo)
+	weapon_box.add_child(_ammo_pips)
+	weapon_box.add_child(_reload_track)
 	weapon_box.add_child(_weapon_hint)
 	_weapon_panel.add_child(weapon_box)
 	root.add_child(_weapon_panel)
@@ -544,6 +778,35 @@ func _build() -> void:
 	_observe_panel.add_child(observe_row)
 	root.add_child(_observe_panel)
 	_anchor(_observe_panel, Control.PRESET_CENTER_BOTTOM)
+
+	# Inferior central (vivo): avisos curtos e prompt de coleta, abaixo da área
+	# livre da mira. O painel de observação usa o mesmo lugar só no espectador.
+	_feedback_column = VBoxContainer.new()
+	_feedback_column.add_theme_constant_override("separation", 6)
+	_feedback_column.alignment = BoxContainer.ALIGNMENT_END
+	_feedback_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_notice_box = VBoxContainer.new()
+	_notice_box.add_theme_constant_override("separation", 2)
+	_notice_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_feedback_column.add_child(_notice_box)
+	_prompt_panel = HudStyle.panel(Color(0.063, 0.071, 0.086, 0.85))
+	_prompt_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var prompt_row := HBoxContainer.new()
+	prompt_row.add_theme_constant_override("separation", 8)
+	_prompt_key = HudStyle.key_cap("E")
+	prompt_row.add_child(_prompt_key)
+	_prompt_label = HudStyle.label("", 15)
+	prompt_row.add_child(_prompt_label)
+	_prompt_panel.add_child(prompt_row)
+	_feedback_column.add_child(_prompt_panel)
+	root.add_child(_feedback_column)
+	_anchor(_feedback_column, Control.PRESET_CENTER_BOTTOM)
+
+	_feed_box = VBoxContainer.new()
+	_feed_box.add_theme_constant_override("separation", 2)
+	_feed_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_feed_box)
+	_anchor(_feed_box, Control.PRESET_TOP_LEFT)
 
 	# Fim da rodada: tela cheia (não há controle do personagem nesta fase).
 	_ended_screen = ColorRect.new()

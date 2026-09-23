@@ -126,7 +126,13 @@ func _test_layout_keeps_the_center_free() -> void:
 	_hud.apply_combat_state(_combat(2, 32, "common_pistol", 0, 6, true))
 	var crosshair_center := _arena.crosshair.get_global_rect().get_center()
 	_expect(crosshair_center.distance_to(viewport_rect.get_center()) < 1.0, "crosshair sits on the true screen centre (%s vs %s)" % [str(crosshair_center), str(viewport_rect.get_center())])
-	var alive_panels := {"status": _hud._status_panel, "role": _hud._role_panel, "health": _hud._health_panel, "weapon": _hud._weapon_panel, "region": _arena.region_chip}
+	# Avisos, prompt de coleta e eliminações também ficam fora do centro.
+	_hud.set_nearby_pickup("ammo")
+	_hud.show_rejection("reload", "reserve_empty")
+	_hud.apply_elimination(7)
+	var alive_panels := {"status": _hud._status_panel, "role": _hud._role_panel, "health": _hud._health_panel, "weapon": _hud._weapon_panel, "region": _arena.region_chip,
+		"feedback": _hud._feedback_column, "feed": _hud._feed_box}
+	_expect(_hud._feedback_column.visible and _hud._feed_box.visible, "feedback column and feed are on screen for the layout check")
 	_check_panels(alive_panels, viewport_rect)
 	# Conteúdo menor encolhe o painel (um Control não encolhe sozinho).
 	_hud.apply_combat_state(_combat(2, 32, "", 0, 0, false))

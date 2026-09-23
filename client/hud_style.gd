@@ -13,6 +13,9 @@ const MUTED := Color("#A3A6AC")
 const AMBER := Color("#F2B84B")
 const RED := Color("#E5484D")
 const BLUE := Color("#5BA7F7")
+## Mesmos acentos dos objetos da arena (`ArenaModels`): arma fria, munição cobre.
+const CYAN := ArenaModels.WEAPON_GLOW
+const COPPER := ArenaModels.AMMO_GLOW
 const PANEL := Color(0.063, 0.071, 0.086, 0.72)
 const MARGIN := 16.0
 

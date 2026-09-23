@@ -114,6 +114,13 @@ jobs:
             | tee "$RUNNER_TEMP/godot-network-logs/arena-visuals.log"
           grep -q 'ARENA_VISUALS_TEST_OK' "$RUNNER_TEMP/godot-network-logs/arena-visuals.log"
 
+      - name: Validate match HUD transitions
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/match_hud_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/match-hud.log"
+          grep -q 'MATCH_HUD_TEST_OK' "$RUNNER_TEMP/godot-network-logs/match-hud.log"
+
       - name: Run spectator and final reveal network test
         run: |
           set -o pipefail
