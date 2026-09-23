@@ -19,26 +19,34 @@ func _test_eliminated_hud() -> void:
 		{"peer_id": 8, "label": "Beto", "connected": true, "participant": true, "alive": true}]
 	var text := "\n".join(RoundHud.compose_lines(_public(RoundState.ACTIVE), Role.VICTIM, 7, roster,
 		{"eliminated": true, "targets": [8], "target": 8}, {}))
-	_expect(text.contains("ELIMINADO") and text.contains("Q/E para observar jogadores vivos"), "eliminated HUD is explicit")
-	_expect(text.contains("ESPECTANDO: Beto"), "HUD presents the authorized public target")
+	_expect(text.contains("ELIMINADO") and text.contains("Q / E trocar jogador"), "eliminated HUD is explicit")
+	_expect(text.contains("OBSERVANDO · 1/1") and text.contains("Beto"), "HUD presents the authorized public target")
 	var empty := "\n".join(RoundHud.compose_lines(_public(RoundState.ACTIVE), Role.VICTIM, 7, roster,
 		{"eliminated": true, "targets": [], "target": 0}, {}))
-	_expect(empty.contains("Aguardando fim da rodada"), "empty target list is presented safely")
+	_expect(empty.contains("AGUARDANDO FIM DA RODADA"), "empty target list is presented safely")
 
+## Formato exato que `RoundAuthority._build_final_reveal_once()` publica e que
+## `NetworkApp.round_final_reveal()` aceita: papel como texto e sem rótulo; os
+## nomes vêm do roster público.
 func _test_reveal_hud_and_reset() -> void:
-	var reveal := {"round_id": 4, "winning_team": Role.TEAM_INNOCENTS, "reason": "assassin_down", "players": [
-		{"peer_id": 7, "label": "Ana", "role": Role.ASSASSIN},
-		{"peer_id": 8, "label": "Beto", "role": Role.DETECTIVE},
-		{"peer_id": 9, "label": "Caio", "role": Role.VICTIM}]}
+	var reveal := {"round_id": 4, "winner": "INNOCENTS", "reason": "assassin_down", "players": [
+		{"peer_id": 7, "role": "ASSASSIN"},
+		{"peer_id": 8, "role": "DETECTIVE"},
+		{"peer_id": 9, "role": "VICTIM"}]}
+	var roster := [{"peer_id": 7, "label": "Ana", "connected": true, "participant": true, "alive": false},
+		{"peer_id": 8, "label": "Beto", "connected": true, "participant": true, "alive": true},
+		{"peer_id": 9, "label": "Caio", "connected": true, "participant": true, "alive": true}]
 	var ended := _public(RoundState.ENDED)
 	ended["round_id"] = 4
 	ended["winning_team"] = Role.TEAM_INNOCENTS
 	ended["winner_reason"] = "assassin_down"
-	var text := "\n".join(RoundHud.compose_lines(ended, Role.VICTIM, 9, [], {}, reveal))
-	_expect(text.contains("PAPÉIS REVELADOS") and text.contains("[!] Ana — Assassino"), "ended HUD highlights revealed roles")
-	_expect(text.contains("Razão: assassin_down") and text.contains("Retornando ao lobby"), "ended HUD presents reason and lobby return")
-	var waiting := "\n".join(RoundHud.compose_lines(_public(RoundState.WAITING), Role.NONE, 9, [], {}, reveal))
-	_expect(not waiting.contains("PAPÉIS REVELADOS") and not waiting.contains("Ana"), "next round hides prior reveal")
+	var text := "\n".join(RoundHud.compose_lines(ended, Role.VICTIM, 9, roster, {}, reveal))
+	_expect(text.contains("PAPÉIS REVELADOS"), "ended HUD shows the reveal")
+	_expect(text.contains("Ana  ◆ ASSASSINO  Eliminado"), "ended HUD names the assassin from the real payload")
+	_expect(text.contains("Beto  ▲ DETETIVE  Vivo") and text.contains("Caio (VOCÊ)  ● VÍTIMA  Vivo"), "ended HUD shows every revealed role and marks the local player")
+	_expect(text.contains("O assassino foi eliminado.") and text.contains("retornando ao lobby"), "ended HUD presents reason and lobby return")
+	var waiting := "\n".join(RoundHud.compose_lines(_public(RoundState.WAITING), Role.NONE, 9, roster, {}, reveal))
+	_expect(not waiting.contains("PAPÉIS REVELADOS") and not waiting.contains("ASSASSINO"), "next round hides prior reveal")
 
 func _test_client_security_surface() -> void:
 	var source := FileAccess.get_file_as_string("res://shared/network_app.gd")

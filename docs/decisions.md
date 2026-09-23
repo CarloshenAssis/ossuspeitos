@@ -302,3 +302,30 @@ Ubuntu, publica o ZIP como artifact do PR (sem release) e roda
 `desktop_local_match_test.sh` contra o `.exe` exportado num runner
 `windows-latest`, sem o projeto. As condições do deploy do GitHub Pages não
 mudaram.
+
+## HUD de partida (vivo, espectador, fim de rodada)
+
+O HUD (`client/round_hud.gd`) é uma projeção pura dos dados oficiais que o
+cliente já recebe. `RoundHud.view_model(...)` monta o que aparece a partir
+desses dados, e os nós só desenham o resultado. Não houve RPC nova nem mudança
+de regra.
+
+- Papel, vida, arma e munição aparecem só quando o `round_id` do dado privado é
+  o da rodada pública atual. Ao voltar para WAITING/COUNTDOWN, o cliente limpa
+  o estado de combate local. Assim, uma rodada nova nunca mostra valores da
+  anterior.
+- Espectador: o alvo é o que o servidor autorizou
+  (`round_private_spectator_targets`) e Q/E só alternam entre esses alvos.
+  Mira, arma e painéis privados ficam ocultos.
+- Fim de rodada: vencedor e motivo vêm do estado público `ENDED`. Os papéis só
+  aparecem com o `round_final_reveal` da mesma rodada, e os nomes vêm do roster.
+- A recarga aparece apenas como texto ("RECARREGANDO"). O estado privado só traz
+  `reloading: bool`, sem prazo, então não há barra de progresso.
+- A cor e o tamanho da vida baixa derivam de `CombatAuthority.MAX_HEALTH` e do
+  dano da pistola, e há teste que confere os dois.
+- O layout é desenhado em 960×540 com `stretch/mode=canvas_items` e
+  `aspect=expand`, e escala para 1920×1080. Os painéis ficam nos cantos e na
+  faixa superior/inferior, e o centro da tela fica livre para a mira.
+- A checagem de layout (`tests/hud_presentation_test.gd`) precisa de
+  renderização real (xvfb). Em headless ela é pulada com marcador explícito, e
+  por isso esse teste ainda não está no CI.

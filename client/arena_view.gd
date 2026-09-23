@@ -9,11 +9,20 @@ var player_rig: Node3D
 var pickup_nodes: Dictionary = {}
 var pickup_states: Dictionary = {}
 var weapon_model: MeshInstance3D
-var hit_marker: Label
-var crosshair: Label
+var crosshair: Crosshair
 var spectator_target_peer_id := 0
-var zone_label: Label
+## Chip da região (canto superior esquerdo): lado + nome, na cor do mapa.
+var region_chip: PanelContainer
+var region_side: Label
+var region_name: Label
 var current_zone_name := ""
+## Distância do topo do chip de região; a demo offline o desce abaixo do banner.
+var region_chip_top := HudStyle.MARGIN
+var gameplay_visuals := true
+const ZONE_SIDES := {
+	"center": "C", "north": "N", "south": "S", "west": "O", "east": "L",
+	"northwest": "NO", "northeast": "NE", "southwest": "SO", "southeast": "SE",
+}
 
 ## Cores de orientação por região. Apresentação pura: a geometria e os nomes
 ## vêm de `ArenaRules`, a mesma fonte que o servidor usa para colisão e tiro.
@@ -42,29 +51,47 @@ func _ready() -> void:
 	player_rig.add_child(camera)
 	weapon_model = MeshInstance3D.new()
 	var weapon_mesh := BoxMesh.new()
-	weapon_mesh.size = Vector3(0.16, 0.16, 0.65)
+	# Arma na mão discreta e escura, no canto inferior direito da visão: não
+	# cobre o centro nem o painel de munição.
+	weapon_mesh.size = Vector3(0.07, 0.09, 0.34)
+	var weapon_material := StandardMaterial3D.new()
+	weapon_material.albedo_color = Color(0.2, 0.21, 0.24)
+	weapon_material.roughness = 0.6
+	weapon_mesh.material = weapon_material
 	weapon_model.mesh = weapon_mesh
-	weapon_model.position = Vector3(0.28, -0.22, -0.55)
+	weapon_model.position = Vector3(0.24, -0.2, -0.5)
 	weapon_model.visible = false
 	camera.add_child(weapon_model)
 	var overlay := CanvasLayer.new()
 	add_child(overlay)
-	crosshair = Label.new()
-	crosshair.text = "+"
-	crosshair.position = Vector2(474, 258)
-	crosshair.add_theme_font_size_override("font_size", 24)
-	overlay.add_child(crosshair)
-	hit_marker = Label.new()
-	hit_marker.text = "✕"
-	hit_marker.position = Vector2(473, 258)
-	hit_marker.modulate = Color(1, 0.25, 0.2, 0)
-	overlay.add_child(hit_marker)
-	zone_label = Label.new()
-	zone_label.position = Vector2(724, 16)
-	zone_label.add_theme_font_size_override("font_size", 18)
-	zone_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	zone_label.add_theme_constant_override("outline_size", 6)
-	overlay.add_child(zone_label)
+	var overlay_root := Control.new()
+	overlay_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(overlay_root)
+	crosshair = Crosshair.new()
+	overlay_root.add_child(crosshair)
+	region_chip = HudStyle.panel()
+	var chip_row := HBoxContainer.new()
+	chip_row.add_theme_constant_override("separation", 8)
+	region_side = HudStyle.label("", 12, HudStyle.INK)
+	region_side.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	region_side.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	region_side.custom_minimum_size = Vector2(24, 20)
+	var side_box := PanelContainer.new()
+	side_box.add_theme_stylebox_override("panel", HudStyle.panel_style(HudStyle.MUTED, HudStyle.MUTED, 0))
+	(side_box.get_theme_stylebox("panel") as StyleBoxFlat).content_margin_left = 2.0
+	(side_box.get_theme_stylebox("panel") as StyleBoxFlat).content_margin_right = 2.0
+	(side_box.get_theme_stylebox("panel") as StyleBoxFlat).content_margin_top = 0.0
+	(side_box.get_theme_stylebox("panel") as StyleBoxFlat).content_margin_bottom = 0.0
+	side_box.add_child(region_side)
+	chip_row.add_child(side_box)
+	region_name = HudStyle.label("", 15)
+	chip_row.add_child(region_name)
+	region_chip.add_child(chip_row)
+	region_chip.visible = false
+	overlay_root.add_child(region_chip)
+	HudStyle.anchor_corner(region_chip, Control.PRESET_TOP_LEFT)
+	region_chip.offset_top = region_chip_top
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
@@ -266,11 +293,20 @@ func _add_box(box_position: Vector3, size: Vector3, color: Color) -> MeshInstanc
 	return mesh_instance
 
 func _update_zone_label(position: Vector3) -> void:
-	var zone_name := ArenaRules.zone_name_at(position)
-	if zone_name == current_zone_name or zone_label == null:
+	var zone := ArenaRules.zone_at(position)
+	var zone_name := str(zone.get("name", ""))
+	if zone_name == current_zone_name or region_chip == null:
 		return
 	current_zone_name = zone_name
-	zone_label.text = "Região: %s" % zone_name if not zone_name.is_empty() else ""
+	region_chip.visible = not zone_name.is_empty()
+	region_name.text = zone_name.to_upper()
+	region_side.text = str(ZONE_SIDES.get(str(zone.get("id", "")), "?"))
+	# Reancora ao tamanho mínimo: nome curto depois de um longo encolhe o chip.
+	HudStyle.anchor_corner(region_chip, Control.PRESET_TOP_LEFT)
+	region_chip.offset_top = region_chip_top
+	region_chip.offset_bottom = region_chip_top + region_chip.get_combined_minimum_size().y
+	var side_style := (region_side.get_parent() as PanelContainer).get_theme_stylebox("panel") as StyleBoxFlat
+	side_style.bg_color = zone_color(position).lightened(0.25)
 
 func _create_avatar(peer_id: int, initial_position: Vector3) -> Node3D:
 	var avatar := MeshInstance3D.new()
@@ -291,16 +327,30 @@ func camera_origin() -> Vector3:
 func camera_direction() -> Vector3:
 	return -camera.global_transform.basis.z.normalized() if camera != null else Vector3.FORWARD
 
+var _combat_has_weapon := false
+
 func apply_combat_state(state: Dictionary) -> void:
-	if weapon_model != null:
-		weapon_model.visible = not str(state.get("weapon_id", "")).is_empty() and int(state.get("health", 0)) > 0
+	_combat_has_weapon = not str(state.get("weapon_id", "")).is_empty() and int(state.get("health", 0)) > 0
+	_refresh_gameplay_visuals()
 
 ## Seleciona apenas um ID previamente autorizado pela camada de rede. A camera
 ## segue posicao/yaw oficiais recebidos em snapshots; nunca envia controle.
 func set_spectator_target(peer_id: int, spectator_active: bool = true) -> void:
 	spectator_target_peer_id = peer_id
-	if crosshair != null: crosshair.visible = not spectator_active
-	if weapon_model != null and spectator_active: weapon_model.visible = false
+	if spectator_active:
+		gameplay_visuals = false
+	_refresh_gameplay_visuals()
+
+## Mira e arma na mão só enquanto a camada de rede diz que o jogador pode agir
+## (vivo, participante, rodada ACTIVE). Fora disso — espectador, lobby, fim da
+## rodada — nada de mira nem arma, e nenhum dado de combate antigo aparece.
+func set_gameplay_visuals(active: bool) -> void:
+	gameplay_visuals = active
+	_refresh_gameplay_visuals()
+
+func _refresh_gameplay_visuals() -> void:
+	if crosshair != null: crosshair.visible = gameplay_visuals
+	if weapon_model != null: weapon_model.visible = gameplay_visuals and _combat_has_weapon
 
 func apply_pickups(entries: Array) -> void:
 	pickup_states.clear()
@@ -345,10 +395,7 @@ func show_shot(payload: Dictionary) -> void:
 	timer.timeout.connect(tracer.queue_free)
 
 func show_hit_marker() -> void:
-	if hit_marker == null: return
-	hit_marker.modulate.a = 1.0
-	var tween := create_tween()
-	tween.tween_property(hit_marker, "modulate:a", 0.0, 0.2)
+	if crosshair != null and crosshair.visible: crosshair.show_hit()
 
 func set_player_alive(peer_id: int, alive: bool) -> void:
 	if avatars.has(peer_id):

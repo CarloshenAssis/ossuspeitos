@@ -67,7 +67,6 @@ var spectator_reveal_acks: Dictionary = {}
 ## de encerrar o processo quando a conexão falha ou termina.
 var desktop_menu: DesktopMenu
 var interactive_session := false
-var session_label: Label
 var hosting_pending := false
 var hosting_deadline_msec := 0
 var pending_player_name := ""
@@ -735,7 +734,12 @@ func round_public_state(payload: Dictionary) -> void:
 		local_spectator_targets.clear()
 		local_spectator_index = -1
 		local_eliminated = false
-		if arena_view != null: arena_view.set_spectator_target(0, false)
+		# Nova rodada: nada do combate anterior (vida, arma, munição) sobrevive
+		# até o servidor mandar o estado privado desta rodada.
+		local_combat_state.clear()
+		if arena_view != null:
+			arena_view.set_spectator_target(0, false)
+			arena_view.apply_combat_state(local_combat_state)
 	print("CLIENT_ROUND_STATE id=%s state=%s round_id=%d players=%d countdown=%d" % [
 		client_label, RoundState.to_label(state), int(payload.get("round_id", 0)),
 		int(payload.get("connected", 0)), int(payload.get("countdown_msec", 0))])
@@ -951,6 +955,8 @@ func _first_remote_roster_peer() -> int:
 	return 0
 
 func _update_round_hud() -> void:
+	if arena_view != null:
+		arena_view.set_gameplay_visuals(_client_can_gameplay())
 	if round_hud == null:
 		return
 	round_hud.call("apply_round_state", local_round_public, local_role, local_round_id, multiplayer.get_unique_id())
@@ -960,7 +966,8 @@ func _update_round_hud() -> void:
 
 func _client_can_gameplay() -> bool:
 	return int(local_round_public.get("state", RoundState.WAITING)) == RoundState.ACTIVE \
-		and not local_eliminated and int(local_combat_state.get("health", 0)) > 0
+		and not local_eliminated and int(local_combat_state.get("health", 0)) > 0 \
+		and int(local_combat_state.get("round_id", 0)) == int(local_round_public.get("round_id", -1))
 
 func _spectator_target() -> int:
 	if local_spectator_index < 0 or local_spectator_index >= local_spectator_targets.size(): return 0
@@ -1187,18 +1194,12 @@ func _start_interactive_client(player_name: String, url: String) -> void:
 	_show_session_label(url)
 
 func _show_session_label(url: String) -> void:
-	if DisplayServer.get_name() == "headless":
+	if DisplayServer.get_name() == "headless" or round_hud == null:
 		return
-	var layer := CanvasLayer.new()
-	add_child(layer)
-	session_label = Label.new()
-	session_label.position = Vector2(16, 470)
-	session_label.add_theme_font_size_override("font_size", 15)
-	session_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	session_label.add_theme_constant_override("outline_size", 6)
+	# Endereço da sala e atalhos ficam no painel de estado do HUD (canto
+	# superior direito), longe do centro e dos painéis de vida e arma.
 	var where := DesktopSession.hosted_address_text() if DesktopSession.is_hosting() else "Conectado a %s" % url.trim_prefix("ws://")
-	session_label.text = "%s\nClique: capturar mouse · Esc: soltar · F10: sair para o menu" % where
-	layer.add_child(session_label)
+	round_hud.call("set_session_info", "%s\nEsc: soltar mouse · F10: sair para o menu" % where)
 
 ## Volta ao menu com uma mensagem. Fecha a conexão, encerra o servidor que este
 ## processo hospeda (se houver) e recarrega a cena limpa.
