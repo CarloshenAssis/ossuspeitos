@@ -578,8 +578,9 @@ func _on_spectator_targets_changed(changed_round_id: int) -> void:
 	for raw_peer_id in round_authority.participants.keys():
 		var peer_id := int(raw_peer_id)
 		if lobby.has(peer_id) and not round_authority.is_alive(peer_id):
-			round_private_spectator_targets.rpc_id(peer_id, changed_round_id,
-				round_authority.spectator_targets_for(peer_id))
+			var spectator_state := round_authority.get_spectator_state(peer_id)
+			if not spectator_state.is_empty():
+				round_private_spectator_targets.rpc_id(peer_id, spectator_state)
 
 func _on_round_ended(round_id: int, winning_team: int, reason: String) -> void:
 	# `state_changed` já publicou o payload com o resultado; aqui só registramos.
@@ -655,9 +656,14 @@ func round_public_state(payload: Dictionary) -> void:
 	_update_round_hud()
 
 @rpc("authority", "call_remote", "reliable")
-func round_private_spectator_targets(target_round_id: int, targets: Array) -> void:
+func round_private_spectator_targets(payload: Dictionary) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
 		return
+	if payload.keys().size() != 2 or not payload.has("round_id") or not payload.has("targets") \
+			or typeof(payload["round_id"]) != TYPE_INT or typeof(payload["targets"]) != TYPE_ARRAY:
+		return
+	var target_round_id := int(payload["round_id"])
+	var targets: Array = (payload["targets"] as Array).duplicate()
 	if int(local_round_public.get("state", RoundState.WAITING)) != RoundState.ACTIVE \
 			or target_round_id != int(local_round_public.get("round_id", 0)):
 		return
@@ -685,16 +691,25 @@ func round_final_reveal(payload: Dictionary) -> void:
 			or int(payload.get("round_id", 0)) != expected_round or expected_round <= 0 \
 			or local_final_reveal.has("round_id"):
 		return
-	var allowed := ["round_id", "winning_team", "reason", "players"]
+	var allowed := ["round_id", "winner", "reason", "players"]
+	if payload.keys().size() != allowed.size():
+		return
 	for key in payload.keys():
 		if str(key) not in allowed: return
+	if typeof(payload.get("round_id")) != TYPE_INT:
+		return
 	var players: Variant = payload.get("players", [])
 	if typeof(players) != TYPE_ARRAY: return
 	for raw_player in players:
 		if typeof(raw_player) != TYPE_DICTIONARY: return
 		var player: Dictionary = raw_player
-		if player.keys().size() != 3 or not player.has("peer_id") or not player.has("label") \
-				or not player.has("role") or not Role.is_valid(int(player.get("role", Role.NONE))): return
+		if player.keys().size() != 2 or not player.has("peer_id") or not player.has("role") \
+				or typeof(player["peer_id"]) != TYPE_INT or typeof(player["role"]) != TYPE_STRING \
+				or str(player["role"]) not in ["ASSASSIN", "DETECTIVE", "VICTIM"]: return
+	if typeof(payload.get("winner")) != TYPE_STRING \
+			or str(payload["winner"]) not in ["ASSASSIN", "INNOCENTS"] \
+			or typeof(payload.get("reason")) != TYPE_STRING:
+		return
 	local_final_reveal = payload.duplicate(true)
 	print("ROUND_REVEAL_OK players=%d" % players.size())
 	print("ROUND_REVEAL_PRIVACY_OK")
@@ -705,7 +720,7 @@ func round_final_reveal(payload: Dictionary) -> void:
 func spectator_test_followed() -> void:
 	if not multiplayer.is_server() or not spectator_reveal_test_mode: return
 	var sender := multiplayer.get_remote_sender_id()
-	if sender != spectator_test_dead_peer or round_authority.spectator_targets_for(sender).is_empty(): return
+	if sender != spectator_test_dead_peer or round_authority.get_spectator_state(sender).is_empty(): return
 	spectator_test_observed = true
 	_maybe_finish_spectator_probe()
 
