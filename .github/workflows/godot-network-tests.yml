@@ -107,6 +107,13 @@ jobs:
             | tee "$RUNNER_TEMP/godot-network-logs/avatar-facing.log"
           grep -q 'AVATAR_FACING_TEST_OK' "$RUNNER_TEMP/godot-network-logs/avatar-facing.log"
 
+      - name: Validate arena visual models
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/arena_visuals_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/arena-visuals.log"
+          grep -q 'ARENA_VISUALS_TEST_OK' "$RUNNER_TEMP/godot-network-logs/arena-visuals.log"
+
       - name: Run spectator and final reveal network test
         run: |
           set -o pipefail

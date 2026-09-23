@@ -8,7 +8,7 @@ var camera: Camera3D
 var player_rig: Node3D
 var pickup_nodes: Dictionary = {}
 var pickup_states: Dictionary = {}
-var weapon_model: MeshInstance3D
+var weapon_model: Node3D
 var crosshair: Crosshair
 var spectator_target_peer_id := 0
 ## Chip da região (canto superior esquerdo): lado + nome, na cor do mapa.
@@ -37,12 +37,12 @@ const OUTER_WALL_COLOR := Color(0.24, 0.26, 0.31)
 ## Amarelo é exclusivo dos caixotes baixos: "bloqueia passagem, tiro passa por cima".
 const LOW_CRATE_COLOR := Color(1.0, 0.86, 0.1)
 const FLOOR_COLOR := Color(0.1, 0.11, 0.13)
-const WEAPON_PICKUP_COLOR := Color(0.25, 0.95, 1.0)
-const AMMO_PICKUP_COLOR := Color(1.0, 0.3, 0.4)
 const ZONE_TILE_HEIGHT := 0.02
-## Visor na frente da cápsula remota (raio 0,45 m): altura dos olhos, saliente.
-const AVATAR_VISOR_SIZE := Vector3(0.5, 0.16, 0.14)
-const AVATAR_VISOR_OFFSET := Vector3(0.0, 0.55, -0.42)
+const VIEWMODEL_OFFSET := Vector3(0.19, -0.16, -0.5)
+const VIEWMODEL_SCALE := 0.8
+## Giro lento dos pickups disponíveis (só visual; a posição oficial não muda).
+const PICKUP_SPIN_SPEED := 0.9
+var _visual_time := 0.0
 
 func _ready() -> void:
 	_ensure_input_actions()
@@ -52,17 +52,12 @@ func _ready() -> void:
 	camera = Camera3D.new()
 	camera.position.y = ArenaRules.EYE_HEIGHT
 	player_rig.add_child(camera)
-	weapon_model = MeshInstance3D.new()
-	var weapon_mesh := BoxMesh.new()
-	# Arma na mão discreta e escura, no canto inferior direito da visão: não
-	# cobre o centro nem o painel de munição.
-	weapon_mesh.size = Vector3(0.07, 0.09, 0.34)
-	var weapon_material := StandardMaterial3D.new()
-	weapon_material.albedo_color = Color(0.2, 0.21, 0.24)
-	weapon_material.roughness = 0.6
-	weapon_mesh.material = weapon_material
-	weapon_model.mesh = weapon_mesh
-	weapon_model.position = Vector3(0.24, -0.2, -0.5)
+	# Pistola na mão no canto inferior direito da visão: não cobre o centro
+	# nem o painel de munição. Só aparece com arma no inventário oficial.
+	weapon_model = ArenaModels.build_pistol()
+	weapon_model.position = VIEWMODEL_OFFSET
+	weapon_model.scale = Vector3.ONE * VIEWMODEL_SCALE
+	weapon_model.rotation = Vector3(0.04, 0.06, 0.0)
 	weapon_model.visible = false
 	camera.add_child(weapon_model)
 	var overlay := CanvasLayer.new()
@@ -150,10 +145,16 @@ func _process(delta: float) -> void:
 		avatar.position = avatar.position.lerp(state["position"], weight)
 		avatar.rotation.y = lerp_angle(avatar.rotation.y, float(state["yaw"]), weight)
 		# Em primeira pessoa como espectador, a câmera fica dentro do alvo:
-		# o visor dele ficaria colado à lente.
-		var visor := avatar.get_node_or_null("FacingVisor") as Node3D
-		if visor != null:
-			visor.visible = peer_id != spectator_target_peer_id
+		# chapéu, braços e visor dele ficariam colados à lente.
+		var show_model: bool = peer_id != spectator_target_peer_id
+		for part in avatar.get_children():
+			(part as Node3D).visible = show_model
+	_visual_time += delta
+	for pickup_id in pickup_nodes:
+		var spin := (pickup_nodes[pickup_id] as Node3D).get_node_or_null("Spin") as Node3D
+		if spin != null:
+			spin.rotation.y = _visual_time * PICKUP_SPIN_SPEED
+			spin.position.y = sin(_visual_time * 2.0) * 0.03
 
 func _build_arena() -> void:
 	var environment := WorldEnvironment.new()
@@ -317,30 +318,12 @@ func _update_zone_label(position: Vector3) -> void:
 	side_style.bg_color = zone_color(position).lightened(0.25)
 
 func _create_avatar(peer_id: int, initial_position: Vector3) -> Node3D:
-	var avatar := MeshInstance3D.new()
-	var mesh := CapsuleMesh.new()
-	mesh.height = 2.0
-	mesh.radius = 0.45
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color.from_hsv(fmod(float(peer_id) * 0.173, 1.0), 0.7, 0.95)
-	mesh.material = material
-	avatar.mesh = mesh
+	# O nó raiz recebe a posição e o yaw oficiais; o modelo tem a frente em -Z
+	# local (visor, lapelas), a mesma convenção da câmera. É só malha, sem
+	# colisão: disparo e acerto seguem a direção oficial e a autoridade do
+	# servidor, nunca este nó. O modelo é igual para todos os papéis.
+	var avatar := ArenaModels.build_character(peer_id)
 	avatar.position = initial_position
-	# A cápsula é simétrica em Y: sem uma frente visível, o yaw oficial aplicado
-	# ao nó não aparece (o corpo desarmado "olha fixo"). O visor marca a frente
-	# (-Z local, a mesma convenção da câmera) e herda a rotação do avatar. É só
-	# malha, sem colisão: disparo e acerto seguem a direção oficial da câmera e
-	# a autoridade do servidor, nunca este nó.
-	var visor := MeshInstance3D.new()
-	visor.name = "FacingVisor"
-	var visor_mesh := BoxMesh.new()
-	visor_mesh.size = AVATAR_VISOR_SIZE
-	var visor_material := StandardMaterial3D.new()
-	visor_material.albedo_color = Color(0.08, 0.09, 0.11)
-	visor_mesh.material = visor_material
-	visor.mesh = visor_mesh
-	visor.position = AVATAR_VISOR_OFFSET
-	avatar.add_child(visor)
 	add_child(avatar)
 	return avatar
 
@@ -425,18 +408,9 @@ func set_player_alive(peer_id: int, alive: bool) -> void:
 		(avatars[peer_id] as Node3D).visible = alive
 
 func _create_pickup(entry: Dictionary) -> Node3D:
-	var node := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.5, 0.25, 0.8) if str(entry.get("type", "")) == "weapon" else Vector3(0.5, 0.4, 0.5)
-	var material := StandardMaterial3D.new()
-	var color := WEAPON_PICKUP_COLOR if str(entry.get("type", "")) == "weapon" else AMMO_PICKUP_COLOR
-	material.albedo_color = color
-	# Brilho próprio para o pickup se destacar de qualquer região.
-	material.emission_enabled = true
-	material.emission = color
-	material.emission_energy_multiplier = 0.8
-	mesh.material = material
-	node.mesh = mesh
+	var is_weapon := str(entry.get("type", "")) == "weapon"
+	var node := ArenaModels.build_weapon_pickup() if is_weapon else ArenaModels.build_ammo_pickup()
+	# Mesma posição oficial de coleta; o servidor valida a distância por ela.
 	node.position = entry.get("position", Vector3.ZERO)
 	add_child(node)
 	return node

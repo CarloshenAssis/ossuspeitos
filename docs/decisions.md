@@ -350,3 +350,39 @@ autoridade valida o disparo pelo seu próprio yaw, então nada visual altera o
 raycast. Em primeira pessoa como espectador, o visor do alvo observado fica
 oculto para não aparecer colado à lente. `tests/avatar_facing_test.gd` mede a
 frente visível no mundo, e não só `rotation.y`, e roda no CI.
+
+## Fase 2: primeira versão visual dos personagens e objetos
+
+Os modelos são procedurais, montados com primitivas do Godot em
+`client/arena_models.gd`. Não havia modelos externos no repositório, então os
+modelos do Gemini e do Kimi não foram avaliados.
+
+**Troca de modelo.** Para trocar um modelo, basta criar a cena correspondente
+em `res://assets/models/` (`character.tscn`, `pistol.tscn`, `ammo_box.tscn`),
+que é instanciada no lugar da versão procedural. O personagem precisa manter a
+frente em -Z local e um filho `FacingVisor`. Nenhum modelo pode trazer colisão.
+
+**Direção visual.** Silhuetas escuras de sobretudo e chapéu, rosto sem traços e
+um único acento de cor por jogador (cachecol e fita do chapéu), para
+diferenciar pessoas. O modelo é o mesmo para todos os papéis: ele só recebe o
+`peer_id`. A frente aparece pelo visor e pelas lapelas.
+
+- A pistola na mão é a mesma do chão.
+- Pickups de arma têm halo ciano (frio). A caixa de munição tem pontas de latão
+  e halo cobre. O amarelo continua exclusivo dos caixotes baixos.
+- Os pickups giram devagar só no nó visual interno. A posição oficial de coleta
+  não muda.
+
+**O que não mudou.** Colisão, posições de coleta, raycast, dano, munição,
+papéis, privacidade e controles. A arma na mão segue apenas o inventário
+privado oficial (`combat_private_state`). O personagem remoto não mostra arma:
+isso exigiria publicar quem está armado, o que esta fase não altera.
+
+Como espectador em primeira pessoa, o modelo inteiro do alvo fica oculto, para
+não aparecer colado à câmera.
+
+**Testes.** Com um corpo humano simétrico, `tests/avatar_facing_test.gd` passa a
+medir a frente pela soma dos deslocamentos das peças: as peças simétricas se
+anulam e a cápsula antiga ainda falha. `tests/arena_visuals_test.gd` cobre
+posições, disponibilidade, arma na mão, ausência de colisão e silhueta igual
+para todos, e roda no CI.
