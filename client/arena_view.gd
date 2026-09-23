@@ -299,9 +299,12 @@ func _update_zone_label(position: Vector3) -> void:
 		return
 	current_zone_name = zone_name
 	region_chip.visible = not zone_name.is_empty()
-	region_chip.offset_top = region_chip_top
 	region_name.text = zone_name.to_upper()
 	region_side.text = str(ZONE_SIDES.get(str(zone.get("id", "")), "?"))
+	# Reancora ao tamanho mínimo: nome curto depois de um longo encolhe o chip.
+	HudStyle.anchor_corner(region_chip, Control.PRESET_TOP_LEFT)
+	region_chip.offset_top = region_chip_top
+	region_chip.offset_bottom = region_chip_top + region_chip.get_combined_minimum_size().y
 	var side_style := (region_side.get_parent() as PanelContainer).get_theme_stylebox("panel") as StyleBoxFlat
 	side_style.bg_color = zone_color(position).lightened(0.25)
 

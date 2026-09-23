@@ -128,6 +128,16 @@ func _test_layout_keeps_the_center_free() -> void:
 	_expect(crosshair_center.distance_to(viewport_rect.get_center()) < 1.0, "crosshair sits on the true screen centre (%s vs %s)" % [str(crosshair_center), str(viewport_rect.get_center())])
 	var alive_panels := {"status": _hud._status_panel, "role": _hud._role_panel, "health": _hud._health_panel, "weapon": _hud._weapon_panel, "region": _arena.region_chip}
 	_check_panels(alive_panels, viewport_rect)
+	# Conteúdo menor encolhe o painel (um Control não encolhe sozinho).
+	_hud.apply_combat_state(_combat(2, 32, "", 0, 0, false))
+	var tall := _hud._weapon_panel.size
+	_hud.apply_combat_state(_combat(2, 32, "common_pistol", 6, 0, false))
+	var short := _hud._weapon_panel.size
+	_expect(short.x < tall.x and is_equal_approx(_hud._weapon_panel.get_global_rect().end.x, viewport_rect.end.x - HudStyle.MARGIN), "weapon panel shrinks back and stays on the right margin (%s -> %s)" % [str(tall), str(short)])
+	_arena.apply_snapshot([{"peer_id": OWN, "position": Vector3(-10, 1, 10), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
+	var long_chip := _arena.region_chip.size.x
+	_arena.apply_snapshot([{"peer_id": OWN, "position": Vector3(0, 1, 10), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
+	_expect(_arena.region_chip.size.x < long_chip, "region chip shrinks for a shorter zone name (%s -> %s)" % [long_chip, _arena.region_chip.size.x])
 	_hud.apply_roster(_roster_with_dead([OWN]))
 	_hud.apply_spectator_state(true, [7, 8], 7)
 	_check_panels({"eliminated": _hud._eliminated_band, "observe": _hud._observe_panel, "status": _hud._status_panel}, viewport_rect)

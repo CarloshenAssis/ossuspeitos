@@ -43,6 +43,9 @@ var _spectator := {"eliminated": false, "targets": [], "target": 0}
 var _reveal: Dictionary = {}
 var _session_info := ""
 var _damage_tween: Tween
+## Painéis de canto e o preset de cada um; reancorados a cada desenho para
+## encolher quando o texto diminui (um Control não encolhe sozinho).
+var _anchored: Array = []
 var _last_health := -1
 var _last_health_round := 0
 var model: Dictionary = {}
@@ -370,6 +373,8 @@ func _render() -> void:
 		_ended_reason.text = str(ended["reason"])
 		_ended_footer.text = str(ended["footer"])
 		_render_reveal_rows(ended)
+	for entry in _anchored:
+		HudStyle.anchor_corner(entry[0], entry[1])
 
 func _render_reveal_rows(ended: Dictionary) -> void:
 	for child in _ended_rows.get_children():
@@ -417,6 +422,10 @@ func _clear_damage_flash() -> void:
 	if _damage_vignette != null:
 		_damage_vignette.modulate.a = 0.0
 
+func _anchor(control: Control, preset: int) -> void:
+	_anchored.append([control, preset])
+	HudStyle.anchor_corner(control, preset)
+
 func _build() -> void:
 	var root := Control.new()
 	root.name = "HudRoot"
@@ -441,7 +450,7 @@ func _build() -> void:
 	status_box.add_child(_session_label)
 	_status_panel.add_child(status_box)
 	root.add_child(_status_panel)
-	HudStyle.anchor_corner(_status_panel, Control.PRESET_TOP_RIGHT)
+	_anchor(_status_panel, Control.PRESET_TOP_RIGHT)
 
 	# Inferior esquerdo: papel privado + vida.
 	var left := VBoxContainer.new()
@@ -480,7 +489,7 @@ func _build() -> void:
 	_health_panel.add_child(health_box)
 	left.add_child(_health_panel)
 	root.add_child(left)
-	HudStyle.anchor_corner(left, Control.PRESET_BOTTOM_LEFT)
+	_anchor(left, Control.PRESET_BOTTOM_LEFT)
 
 	# Inferior direito: arma e munição oficiais.
 	_weapon_panel = HudStyle.panel()
@@ -498,7 +507,7 @@ func _build() -> void:
 	weapon_box.add_child(_weapon_hint)
 	_weapon_panel.add_child(weapon_box)
 	root.add_child(_weapon_panel)
-	HudStyle.anchor_corner(_weapon_panel, Control.PRESET_BOTTOM_RIGHT)
+	_anchor(_weapon_panel, Control.PRESET_BOTTOM_RIGHT)
 
 	# Eliminado: faixa no topo e observação embaixo, ambas fora do centro.
 	_eliminated_band = HudStyle.panel(Color(0.063, 0.071, 0.086, 0.85), HudStyle.RED, 2)
@@ -512,7 +521,7 @@ func _build() -> void:
 	band.add_child(band_detail)
 	_eliminated_band.add_child(band)
 	root.add_child(_eliminated_band)
-	HudStyle.anchor_corner(_eliminated_band, Control.PRESET_CENTER_TOP)
+	_anchor(_eliminated_band, Control.PRESET_CENTER_TOP)
 
 	_observe_panel = HudStyle.panel(Color(0.063, 0.071, 0.086, 0.85))
 	var observe_row := HBoxContainer.new()
@@ -534,7 +543,7 @@ func _build() -> void:
 	observe_row.add_child(_observe_keys)
 	_observe_panel.add_child(observe_row)
 	root.add_child(_observe_panel)
-	HudStyle.anchor_corner(_observe_panel, Control.PRESET_CENTER_BOTTOM)
+	_anchor(_observe_panel, Control.PRESET_CENTER_BOTTOM)
 
 	# Fim da rodada: tela cheia (não há controle do personagem nesta fase).
 	_ended_screen = ColorRect.new()
