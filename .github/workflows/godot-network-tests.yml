@@ -142,6 +142,21 @@ jobs:
           GODOT_BIN="$(command -v godot)" ./tests/network_smoke_test.sh 2>&1 \
             | tee "$RUNNER_TEMP/godot-network-logs/network-smoke.log"
 
+      - name: Validate desktop menu and local session rules
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/desktop_session_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/desktop-session.log"
+          grep -q 'DESKTOP_SESSION_TEST_OK' "$RUNNER_TEMP/godot-network-logs/desktop-session.log"
+
+      - name: Run local match through the desktop menu
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/godot-network-logs/local-match-processes
+        run: |
+          set -o pipefail
+          GAME_BIN="$(command -v godot)" ./tests/desktop_local_match_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/local-match.log"
+
       - name: Upload failure logs
         if: failure()
         uses: actions/upload-artifact@v4

@@ -63,20 +63,42 @@ var spectator_test_movement_blocked := false
 var spectator_test_follow_confirmed := false
 var spectator_test_blocked: Dictionary = {}
 var spectator_reveal_acks: Dictionary = {}
+## Teste local no PC: menu inicial e cliente interativo que volta ao menu em vez
+## de encerrar o processo quando a conexão falha ou termina.
+var desktop_menu: DesktopMenu
+var interactive_session := false
+var session_label: Label
+var hosting_pending := false
+var hosting_deadline_msec := 0
+var pending_player_name := ""
+var returning_to_menu := false
+var leave_trigger := ""
+## Servidor hospedado pelo menu: grava prontidão num arquivo e se encerra sozinho
+## quando fica vazio, para nunca sobrar processo órfão.
+var status_file_path := ""
+var hosted_server := false
+var hosted_empty_since_msec := 0
+const HOSTED_IDLE_EXIT_MSEC := 20000
 
 func _ready() -> void:
 	arguments = NetworkConfig.user_arguments()
 	mode = str(arguments.get("mode", ""))
 	if mode.is_empty() and OS.has_feature("visual_demo"):
 		mode = "demo"
+	# Build de PC ou execução gráfica sem argumentos: menu de teste local. A demo
+	# Web entra antes (feature `visual_demo`) e continua OFFLINE / SEM SERVIDOR.
+	if mode.is_empty() and (OS.has_feature("desktop_playtest") or DisplayServer.get_name() != "headless"):
+		mode = "menu"
 	if mode == "server":
 		start_server()
 	elif mode == "client":
 		start_client()
 	elif mode == "demo":
 		start_demo()
+	elif mode == "menu":
+		start_menu()
 	else:
-		fail("MODE_REQUIRED use -- --mode=server, -- --mode=client or -- --mode=demo")
+		fail("MODE_REQUIRED use -- --mode=server, -- --mode=client, -- --mode=menu or -- --mode=demo")
 
 func start_demo() -> void:
 	var demo := VisualDemo.new()
@@ -94,8 +116,11 @@ func start_server() -> void:
 	add_child(shutdown_prepare_timer)
 	var port := configured_port()
 	var bind_address := str(arguments.get("bind", NetworkConfig.DEFAULT_BIND_ADDRESS))
+	status_file_path = str(arguments.get("status-file", ""))
+	hosted_server = NetworkConfig.bool_argument(arguments, "hosted")
 	var peer := WebSocketServerTransport.listen(port, bind_address)
 	if peer == null:
+		_write_status_file("error:unable_to_listen")
 		fail("SERVER_ERROR unable_to_listen")
 		return
 	multiplayer.peer_connected.connect(_on_peer_connected)
@@ -110,6 +135,7 @@ func start_server() -> void:
 	print("SERVER_UI hud=%s arena=%s display=%s" % [
 		str(round_hud != null), str(arena_view != null), DisplayServer.get_name()])
 	print("SERVER_READY address=%s port=%d" % [bind_address, port])
+	_write_status_file(DesktopSession.STATUS_READY)
 
 func _start_round_authority() -> void:
 	round_authority = RoundAuthority.new(lobby, NetworkConfig.integer_argument(arguments, "round-seed", 0))
@@ -186,9 +212,16 @@ func _start_combat_network_test() -> void:
 	add_child(combat_network_test)
 
 func _process(_delta: float) -> void:
+	if mode == "menu":
+		_poll_hosting()
+		return
 	if mode != "client":
 		return
-	if not joined and Time.get_ticks_msec() - started_at_msec > int(NetworkConfig.CONNECT_TIMEOUT_SECONDS * 1000.0):
+	if not joined and not returning_to_menu and Time.get_ticks_msec() - started_at_msec > int(NetworkConfig.CONNECT_TIMEOUT_SECONDS * 1000.0):
+		if interactive_session:
+			print("CLIENT_TIMEOUT id=%s" % client_label)
+			_return_to_menu("Tempo esgotado ao conectar em %s." % str(arguments.get("url", "")), "timeout")
+			return
 		fail("CLIENT_TIMEOUT id=%s" % client_label)
 	if NetworkConfig.should_poll_human_input(
 			joined, expected_clients, round_test_mode,
@@ -203,6 +236,8 @@ func _physics_process(delta: float) -> void:
 	if mode != "server" or shutting_down or authoritative_world == null:
 		return
 	var now_msec := Time.get_ticks_msec()
+	if hosted_server:
+		_check_hosted_idle(now_msec)
 	authoritative_world.step(delta, now_msec)
 	if combat_authority != null:
 		combat_authority.tick(now_msec)
@@ -216,6 +251,9 @@ func _physics_process(delta: float) -> void:
 		world_snapshot.rpc(authoritative_world.snapshot())
 
 func _unhandled_input(event: InputEvent) -> void:
+	if interactive_session and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F10:
+		_return_to_menu("Você saiu da partida.", "left")
+		return
 	if mode == "client" and event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		pending_yaw_delta = clampf(pending_yaw_delta - event.relative.x * 0.0025, -MovementRules.MAX_YAW_DELTA, MovementRules.MAX_YAW_DELTA)
 	if mode != "client" or not joined or shutdown_prepare_received or arena_view == null:
@@ -276,11 +314,19 @@ func _on_connected_to_server() -> void:
 func _on_connection_failed() -> void:
 	client_connected = false
 	joined = false
+	if interactive_session:
+		print("CLIENT_CONNECTION_FAILED id=%s" % client_label)
+		_return_to_menu("Não foi possível conectar a %s. Confira endereço, porta e se a partida foi criada." % str(arguments.get("url", "")), "connection_failed")
+		return
 	fail("CLIENT_CONNECTION_FAILED id=%s" % client_label)
 
 func _on_server_disconnected() -> void:
 	client_connected = false
 	joined = false
+	if interactive_session:
+		print("CLIENT_SERVER_DISCONNECTED id=%s" % client_label)
+		_return_to_menu("O servidor encerrou a partida." if shutdown_prepare_received else "Conexão com o servidor perdida. A partida pode ter sido fechada pelo anfitrião.", "server_disconnected")
+		return
 	if shutdown_prepare_received:
 		print("CLIENT_SHUTDOWN_COMPLETE id=%s" % client_label)
 		get_tree().quit(0)
@@ -333,9 +379,20 @@ func join_accepted(peer_id: int) -> void:
 	if arena_view != null:
 		arena_view.local_peer_id = peer_id
 	print("JOIN_ACCEPTED id=%s peer_id=%d" % [client_label, peer_id])
+	if interactive_session and leave_trigger == "joined":
+		call_deferred("_return_to_menu", "Você saiu da partida.", "left")
 
 @rpc("authority", "call_remote", "reliable")
 func join_rejected(reason: String) -> void:
+	if interactive_session:
+		print("JOIN_REJECTED id=%s reason=%s" % [client_label, reason])
+		var messages := {
+			"protocol_version": "Versão diferente do jogo: use o mesmo build do anfitrião.",
+			"room_unavailable": "Sala cheia, em andamento com 8 jogadores ou nome já usado. Tente outro nome.",
+			"invalid_client": "Nome recusado pelo servidor.",
+		}
+		_return_to_menu(str(messages.get(reason, "Entrada recusada pelo servidor.")), "join_rejected")
+		return
 	fail("JOIN_REJECTED id=%s reason=%s" % [client_label, reason])
 
 func publish_client_count() -> void:
@@ -666,6 +723,11 @@ func round_public_state(payload: Dictionary) -> void:
 		return
 	local_round_public = payload
 	var state := int(payload.get("state", RoundState.WAITING))
+	if interactive_session and leave_trigger == "active" and state == RoundState.ACTIVE:
+		# Automação de teste: sai pouco depois, como um jogador faria, sem cortar
+		# o servidor no mesmo quadro em que ele avisa os demais.
+		leave_trigger = ""
+		get_tree().create_timer(1.5).timeout.connect(_return_to_menu.bind("Você saiu da partida.", "left"))
 	if state == RoundState.WAITING or state == RoundState.COUNTDOWN:
 		local_role = Role.NONE
 		local_round_id = 0
@@ -1030,6 +1092,174 @@ func _safe_combat_reason(raw_reason: Variant) -> String:
 	var reason := str(raw_reason)
 	var allowed := ["round_not_active", "unknown_peer", "player_dead", "invalid_sequence", "replay", "sequence_jump", "rate_limited", "invalid_pickup", "item_not_found", "item_unavailable", "out_of_range", "inventory_full", "incompatible_item", "no_equipped_weapon", "reserve_full", "empty_magazine", "reloading", "fire_rate", "invalid_origin", "non_finite", "implausible_origin", "invalid_direction", "direction_not_normalized", "direction_vertical", "direction_yaw_divergence", "magazine_full", "reserve_empty", "already_reloading"]
 	return reason if reason in allowed else "rejected"
+
+# --- Teste local no PC --------------------------------------------------------
+#
+# O menu só coleta dados. "Criar" inicia a autoridade num processo headless
+# separado (mesmo executável) e, quando ele confirma que escuta a porta, este
+# processo vira um cliente comum conectado em loopback. "Entrar" conecta direto.
+# Nenhum caminho daqui instancia RoundAuthority, CombatAuthority ou o mundo.
+
+func start_menu() -> void:
+	desktop_menu = DesktopMenu.new()
+	add_child(desktop_menu)
+	desktop_menu.host_requested.connect(_on_menu_host)
+	desktop_menu.join_requested.connect(_on_menu_join)
+	desktop_menu.quit_requested.connect(_on_menu_quit)
+	desktop_menu.input_rejected.connect(func(_field): _exit_if_menu_test())
+	if not DesktopSession.pending_message.is_empty():
+		print("MENU_SHOWING_MESSAGE after_return=true hosting=%s" % str(DesktopSession.is_hosting()))
+		desktop_menu.set_status(DesktopSession.pending_message, true)
+		DesktopSession.pending_message = ""
+		if NetworkConfig.bool_argument(arguments, "menu-quit-after-reload"):
+			desktop_menu.call_deferred("emit_signal", "quit_requested")
+			return
+	# Automação para testes e atalhos: preenche os campos e aciona o mesmo
+	# handler dos botões. Só uma vez por processo, nunca após voltar ao menu.
+	var auto := str(arguments.get("menu-auto", ""))
+	if auto.is_empty() or DesktopSession.auto_action_consumed:
+		return
+	DesktopSession.auto_action_consumed = true
+	desktop_menu.fill(str(arguments.get("menu-name", "")), str(arguments.get("menu-port", "")),
+		NetworkConfig.bool_argument(arguments, "menu-lan"), str(arguments.get("menu-address", "")),
+		str(arguments.get("menu-port", "")))
+	match auto:
+		"host": desktop_menu.call_deferred("_on_host_pressed")
+		"join": desktop_menu.call_deferred("_on_join_pressed")
+		"quit": desktop_menu.call_deferred("emit_signal", "quit_requested")
+
+func _on_menu_host(player_name: String, port: int, lan: bool) -> void:
+	if hosting_pending:
+		return
+	var error := DesktopSession.start_hosted_server(port, lan)
+	if not error.is_empty():
+		print("MENU_HOST_ERROR reason=%s port=%d" % [error, port])
+		desktop_menu.set_status(DesktopSession.error_message(error, port), true)
+		_exit_if_menu_test()
+		return
+	hosting_pending = true
+	hosting_deadline_msec = Time.get_ticks_msec() + DesktopSession.SERVER_READY_TIMEOUT_MSEC
+	pending_player_name = player_name
+	desktop_menu.set_busy(true)
+	desktop_menu.set_status("Iniciando servidor local na porta %d…" % port)
+
+func _poll_hosting() -> void:
+	if not hosting_pending:
+		return
+	var status := DesktopSession.poll_hosted_server()
+	if status.is_empty() and Time.get_ticks_msec() > hosting_deadline_msec:
+		status = "server_timeout"
+	if status.is_empty():
+		return
+	hosting_pending = false
+	var port := DesktopSession.hosted_port
+	if status != DesktopSession.STATUS_READY:
+		DesktopSession.stop_hosted_server(status)
+		print("MENU_HOST_ERROR reason=%s port=%d" % [status, port])
+		desktop_menu.set_busy(false)
+		desktop_menu.set_status(DesktopSession.error_message(status, port), true)
+		_exit_if_menu_test()
+		return
+	print("MENU_HOST_READY port=%d lan=%s" % [port, str(DesktopSession.hosted_lan)])
+	_start_interactive_client(pending_player_name, DesktopSession.url_for(DesktopSession.LOOPBACK_ADDRESS, port))
+
+func _on_menu_join(player_name: String, address: String, port: int) -> void:
+	if hosting_pending:
+		return
+	_start_interactive_client(player_name, DesktopSession.url_for(address, port))
+
+func _on_menu_quit() -> void:
+	print("MENU_QUIT")
+	DesktopSession.stop_hosted_server("quit")
+	get_tree().quit(0)
+
+func _start_interactive_client(player_name: String, url: String) -> void:
+	if desktop_menu != null:
+		desktop_menu.queue_free()
+		desktop_menu = null
+	interactive_session = true
+	leave_trigger = str(arguments.get("menu-leave-on", ""))
+	arguments["client-id"] = player_name
+	arguments["url"] = url
+	mode = "client"
+	print("MENU_CONNECTING id=%s url=%s" % [player_name, url])
+	start_client()
+	_show_session_label(url)
+
+func _show_session_label(url: String) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	session_label = Label.new()
+	session_label.position = Vector2(16, 470)
+	session_label.add_theme_font_size_override("font_size", 15)
+	session_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	session_label.add_theme_constant_override("outline_size", 6)
+	var where := DesktopSession.hosted_address_text() if DesktopSession.is_hosting() else "Conectado a %s" % url.trim_prefix("ws://")
+	session_label.text = "%s\nClique: capturar mouse · Esc: soltar · F10: sair para o menu" % where
+	layer.add_child(session_label)
+
+## Volta ao menu com uma mensagem. Fecha a conexão, encerra o servidor que este
+## processo hospeda (se houver) e recarrega a cena limpa.
+func _return_to_menu(message: String, reason: String) -> void:
+	if returning_to_menu:
+		return
+	returning_to_menu = true
+	print("MENU_RETURNED reason=%s" % reason)
+	DesktopSession.pending_message = message
+	# Fora do callback de rede que disparou a volta (desconexão, falha, recusa).
+	call_deferred("_finish_return_to_menu", reason)
+
+func _finish_return_to_menu(reason: String) -> void:
+	if multiplayer.multiplayer_peer != null:
+		multiplayer.multiplayer_peer.close()
+	DesktopSession.stop_hosted_server(reason)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if NetworkConfig.bool_argument(arguments, "menu-exit-on-return"):
+		get_tree().quit(0)
+		return
+	multiplayer.multiplayer_peer = null
+	get_tree().reload_current_scene()
+
+## Nos testes automatizados, um erro esperado no menu encerra o processo.
+func _exit_if_menu_test() -> void:
+	if NetworkConfig.bool_argument(arguments, "menu-exit-on-return"):
+		print("MENU_RETURNED reason=menu_error")
+		get_tree().quit(0)
+
+func _write_status_file(status: String) -> void:
+	if status_file_path.is_empty():
+		return
+	var file := FileAccess.open(status_file_path, FileAccess.WRITE)
+	if file != null:
+		file.store_string(status)
+		file.close()
+
+## Servidor hospedado sem ninguém por tempo demais encerra sozinho: cobre o caso
+## de o jogo do anfitrião fechar sem conseguir derrubar o processo.
+func _check_hosted_idle(now_msec: int) -> void:
+	if not lobby.is_empty():
+		hosted_empty_since_msec = 0
+		return
+	if hosted_empty_since_msec == 0:
+		hosted_empty_since_msec = now_msec
+		return
+	if now_msec - hosted_empty_since_msec >= HOSTED_IDLE_EXIT_MSEC:
+		print("SERVER_HOSTED_IDLE_EXIT")
+		if multiplayer.multiplayer_peer != null:
+			multiplayer.multiplayer_peer.close()
+		get_tree().quit(0)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		DesktopSession.stop_hosted_server("window_closed")
+
+func _exit_tree() -> void:
+	# Sair do jogo por qualquer caminho derruba o servidor hospedado; recarregar a
+	# cena para voltar ao menu já o encerrou antes.
+	if not returning_to_menu:
+		DesktopSession.stop_hosted_server("exit")
 
 func fail(message: String) -> void:
 	push_error(message)

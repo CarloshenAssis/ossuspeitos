@@ -1,6 +1,7 @@
 [application]
 config/name="Armed Mystery"
 run/main_scene="res://shared/network_app.tscn"
+run/flush_stdout_on_print=true
 
 [display]
 window/size/viewport_width=960
