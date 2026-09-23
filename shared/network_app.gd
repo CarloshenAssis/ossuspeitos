@@ -48,7 +48,19 @@ var role_spoof_attempted := false
 var ack_replay_attempted := false
 var combat_sequence := {"pickup": 0, "fire": 0, "reload": 0}
 var local_combat_state: Dictionary = {}
+var local_spectator_targets: Array = []
+var local_spectator_index := -1
+var local_eliminated := false
+var local_final_reveal: Dictionary = {}
 var combat_network_test: Node
+var spectator_reveal_test_mode := false
+var spectator_test_started := false
+var spectator_test_dead_peer := 0
+var spectator_test_observed := false
+var spectator_test_movement_blocked := false
+var spectator_test_follow_confirmed := false
+var spectator_test_blocked: Dictionary = {}
+var spectator_reveal_acks: Dictionary = {}
 
 func _ready() -> void:
 	arguments = NetworkConfig.user_arguments()
@@ -70,6 +82,7 @@ func start_demo() -> void:
 	add_child(demo)
 
 func start_server() -> void:
+	spectator_reveal_test_mode = NetworkConfig.bool_argument(arguments, "spectator-reveal-test")
 	authoritative_world = AuthoritativeWorld.new()
 	_start_round_authority()
 	_start_combat_network_test()
@@ -107,6 +120,8 @@ func _start_round_authority() -> void:
 	round_authority.roles_ready.connect(_on_round_roles_ready)
 	round_authority.alive_changed.connect(_on_round_alive_changed)
 	round_authority.round_ended.connect(_on_round_ended)
+	round_authority.reveal_ready.connect(_on_round_reveal_ready)
+	round_authority.spectator_targets_changed.connect(_on_spectator_targets_changed)
 	round_authority.round_reset.connect(_on_round_reset)
 	round_authority.invalid_transition.connect(_on_round_invalid_transition)
 	combat_authority = CombatAuthority.new(round_authority, authoritative_world)
@@ -119,6 +134,8 @@ func start_client() -> void:
 	client_label = str(arguments.get("client-id", "client"))
 	expected_clients = NetworkConfig.integer_argument(arguments, "expect-clients", 0)
 	round_test_mode = NetworkConfig.bool_argument(arguments, "round-test")
+	spectator_reveal_test_mode = NetworkConfig.bool_argument(arguments, "spectator-reveal-test")
+	if spectator_reveal_test_mode: round_test_mode = true
 	_start_combat_network_test()
 	started_at_msec = Time.get_ticks_msec()
 	var url := str(arguments.get("url", "ws://%s:%d" % [NetworkConfig.DEFAULT_HOST, configured_port()]))
@@ -173,7 +190,7 @@ func _process(_delta: float) -> void:
 		fail("CLIENT_TIMEOUT id=%s" % client_label)
 	if NetworkConfig.should_poll_human_input(
 			joined, expected_clients, round_test_mode,
-			combat_network_test != null, arena_view != null):
+		combat_network_test != null, arena_view != null) and _client_can_gameplay():
 		input_accumulator += _delta
 		if input_accumulator >= 0.05:
 			input_accumulator = 0.0
@@ -200,6 +217,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if mode == "client" and event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		pending_yaw_delta = clampf(pending_yaw_delta - event.relative.x * 0.0025, -MovementRules.MAX_YAW_DELTA, MovementRules.MAX_YAW_DELTA)
 	if mode != "client" or not joined or shutdown_prepare_received or arena_view == null:
+		return
+	if not _client_can_gameplay():
+		if event is InputEventKey and event.pressed and not event.echo:
+			if event.keycode == KEY_Q: _cycle_spectator(-1)
+			elif event.keycode == KEY_E: _cycle_spectator(1)
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		combat_sequence["fire"] += 1
@@ -349,6 +371,10 @@ func submit_input(sequence: int, move: Vector2, yaw_delta: float) -> void:
 		return
 	var movement_test := NetworkConfig.integer_argument(arguments, "stop-after-clients", 0) > 0
 	if not movement_test and (round_authority.state != RoundState.ACTIVE or not round_authority.is_participant(sender) or not round_authority.is_alive(sender)):
+		if spectator_reveal_test_mode and sender == spectator_test_dead_peer \
+				and round_authority.state == RoundState.ACTIVE and not round_authority.is_alive(sender):
+			spectator_test_movement_blocked = true
+			_maybe_finish_spectator_probe()
 		return
 	var reason := authoritative_world.accept_input(sender, sequence, move, yaw_delta, Time.get_ticks_msec())
 	if not reason.is_empty():
@@ -374,6 +400,20 @@ func world_snapshot(states: Array) -> void:
 		return
 	if arena_view != null:
 		arena_view.apply_snapshot(states)
+	if spectator_reveal_test_mode and local_eliminated and not spectator_test_follow_confirmed:
+		for raw_spectator_state in states:
+			if int((raw_spectator_state as Dictionary).get("peer_id", 0)) == _spectator_target():
+				spectator_test_follow_confirmed = true
+				print("SPECTATOR_FOLLOW_OK id=%s" % client_label)
+				_send_input(Vector2.RIGHT, 0.0)
+				combat_sequence["pickup"] += 1
+				request_pickup.rpc_id(1, "weapon_0", combat_sequence["pickup"])
+				combat_sequence["fire"] += 1
+				request_fire.rpc_id(1, combat_sequence["fire"], Vector3.ZERO, Vector3.FORWARD)
+				combat_sequence["reload"] += 1
+				request_reload.rpc_id(1, combat_sequence["reload"])
+				spectator_test_followed.rpc_id(1)
+				break
 	var own_id := multiplayer.get_unique_id()
 	for raw_state in states:
 		var state: Dictionary = raw_state
@@ -501,6 +541,10 @@ func _on_round_state_changed(state: int, round_id: int) -> void:
 	print("ROUND_STATE state=%s round_id=%d players=%d participants=%d" % [
 		RoundState.to_label(state), round_id, lobby.size(), round_authority.participants.size()])
 	_publish_round_state()
+	if spectator_reveal_test_mode and state == RoundState.COUNTDOWN \
+			and spectator_reveal_acks.size() == round_stop_after:
+		print("ROUND_REVEAL_CLEARED_OK")
+		_begin_server_shutdown(lobby.peer_ids())
 
 func _on_round_roles_ready(round_id: int, participant_ids: Array) -> void:
 	combat_authority.begin_round(round_id, participant_ids)
@@ -527,11 +571,33 @@ func _on_round_alive_changed(round_id: int, peer_id: int, alive: bool) -> void:
 	print("ROUND_ALIVE_CHANGED round_id=%d peer_id=%d alive=%s" % [round_id, peer_id, str(alive)])
 	_publish_round_state()
 
+func _on_spectator_targets_changed(changed_round_id: int) -> void:
+	if not multiplayer.is_server() or shutting_down or round_authority == null \
+			or round_authority.state != RoundState.ACTIVE or round_authority.round_id != changed_round_id:
+		return
+	for raw_peer_id in round_authority.participants.keys():
+		var peer_id := int(raw_peer_id)
+		if lobby.has(peer_id) and not round_authority.is_alive(peer_id):
+			round_private_spectator_targets.rpc_id(peer_id, changed_round_id,
+				round_authority.spectator_targets_for(peer_id))
+
 func _on_round_ended(round_id: int, winning_team: int, reason: String) -> void:
 	# `state_changed` já publicou o payload com o resultado; aqui só registramos.
 	print("ROUND_RESULT round_id=%d team=%s reason=%s" % [
 		round_id, Role.team_to_label(winning_team), reason])
 	call_deferred("_clear_combat_round_if_ended", round_id)
+
+func _on_round_reveal_ready(reveal_round_id: int, result: Dictionary) -> void:
+	if not multiplayer.is_server() or shutting_down or round_authority.state != RoundState.ENDED \
+			or round_authority.round_id != reveal_round_id:
+		return
+	var delivered := 0
+	for raw_peer_id in round_authority.participants.keys():
+		var peer_id := int(raw_peer_id)
+		if not lobby.has(peer_id): continue
+		round_final_reveal.rpc_id(peer_id, result)
+		delivered += 1
+	print("ROUND_REVEAL_SENT round_id=%d peers=%d" % [reveal_round_id, delivered])
 
 func _clear_combat_round_if_ended(ended_round_id: int) -> void:
 	if combat_authority != null and round_authority.state == RoundState.ENDED \
@@ -571,6 +637,11 @@ func round_public_state(payload: Dictionary) -> void:
 	if state == RoundState.WAITING or state == RoundState.COUNTDOWN:
 		local_role = Role.NONE
 		local_round_id = 0
+		local_final_reveal.clear()
+		local_spectator_targets.clear()
+		local_spectator_index = -1
+		local_eliminated = false
+		if arena_view != null: arena_view.set_spectator_target(0, false)
 	print("CLIENT_ROUND_STATE id=%s state=%s round_id=%d players=%d countdown=%d" % [
 		client_label, RoundState.to_label(state), int(payload.get("round_id", 0)),
 		int(payload.get("connected", 0)), int(payload.get("countdown_msec", 0))])
@@ -582,6 +653,69 @@ func round_public_state(payload: Dictionary) -> void:
 			Role.team_to_label(int(payload.get("winning_team", Role.TEAM_NONE))),
 			str(payload.get("winner_reason", ""))])
 	_update_round_hud()
+
+@rpc("authority", "call_remote", "reliable")
+func round_private_spectator_targets(target_round_id: int, targets: Array) -> void:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
+		return
+	if int(local_round_public.get("state", RoundState.WAITING)) != RoundState.ACTIVE \
+			or target_round_id != int(local_round_public.get("round_id", 0)):
+		return
+	var safe: Array = []
+	var own_id := multiplayer.get_unique_id()
+	for raw_target in targets:
+		if typeof(raw_target) != TYPE_INT or int(raw_target) == own_id \
+				or int(raw_target) not in local_roster_peers or int(raw_target) in safe:
+			continue
+		safe.append(int(raw_target))
+	local_spectator_targets = safe
+	local_eliminated = true
+	local_spectator_index = 0 if not safe.is_empty() else -1
+	if arena_view != null:
+		arena_view.set_spectator_target(int(safe[0]) if not safe.is_empty() else 0)
+	print("SPECTATOR_TARGETS_PRIVATE_OK id=%s targets=%d" % [client_label, safe.size()])
+	_update_round_hud()
+
+@rpc("authority", "call_remote", "reliable")
+func round_final_reveal(payload: Dictionary) -> void:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
+		return
+	var expected_round := int(local_round_public.get("round_id", 0))
+	if int(local_round_public.get("state", RoundState.WAITING)) != RoundState.ENDED \
+			or int(payload.get("round_id", 0)) != expected_round or expected_round <= 0 \
+			or local_final_reveal.has("round_id"):
+		return
+	var allowed := ["round_id", "winning_team", "reason", "players"]
+	for key in payload.keys():
+		if str(key) not in allowed: return
+	var players: Variant = payload.get("players", [])
+	if typeof(players) != TYPE_ARRAY: return
+	for raw_player in players:
+		if typeof(raw_player) != TYPE_DICTIONARY: return
+		var player: Dictionary = raw_player
+		if player.keys().size() != 3 or not player.has("peer_id") or not player.has("label") \
+				or not player.has("role") or not Role.is_valid(int(player.get("role", Role.NONE))): return
+	local_final_reveal = payload.duplicate(true)
+	print("ROUND_REVEAL_OK players=%d" % players.size())
+	print("ROUND_REVEAL_PRIVACY_OK")
+	if spectator_reveal_test_mode: spectator_reveal_received.rpc_id(1)
+	_update_round_hud()
+
+@rpc("any_peer", "call_remote", "reliable")
+func spectator_test_followed() -> void:
+	if not multiplayer.is_server() or not spectator_reveal_test_mode: return
+	var sender := multiplayer.get_remote_sender_id()
+	if sender != spectator_test_dead_peer or round_authority.spectator_targets_for(sender).is_empty(): return
+	spectator_test_observed = true
+	_maybe_finish_spectator_probe()
+
+@rpc("any_peer", "call_remote", "reliable")
+func spectator_reveal_received() -> void:
+	if not multiplayer.is_server() or not spectator_reveal_test_mode or round_authority.state != RoundState.ENDED: return
+	var sender := multiplayer.get_remote_sender_id()
+	if round_authority.is_participant(sender) and lobby.has(sender): spectator_reveal_acks[sender] = true
+	if spectator_reveal_acks.size() == round_authority.participants.size():
+		print("ROUND_REVEAL_NETWORK_ACK_OK clients=%d" % spectator_reveal_acks.size())
 
 @rpc("authority", "call_remote", "reliable")
 func round_roster(entries: Array) -> void:
@@ -655,6 +789,14 @@ func _maybe_finish_round_privacy_test() -> void:
 		return
 	if round_late_join_peers.size() < round_expect_late_joins:
 		return
+	if spectator_reveal_test_mode:
+		if spectator_test_started: return
+		spectator_test_started = true
+		for peer_id in round_authority.participants:
+			if round_authority.get_role_for_peer(int(peer_id)) == Role.DETECTIVE:
+				spectator_test_dead_peer = int(peer_id)
+				round_authority.eliminate_player(spectator_test_dead_peer, "test", 0, Time.get_ticks_msec())
+				return
 	var counts := round_authority.role_counts()
 	print("ROLE_PRIVACY_TEST_OK clients=%d assassin=%d detective=%d victim=%d" % [
 		round_ack_peers.size(), int(counts["assassin"]), int(counts["detective"]), int(counts["victim"])])
@@ -705,6 +847,22 @@ func _update_round_hud() -> void:
 		return
 	round_hud.call("apply_round_state", local_round_public, local_role, local_round_id, multiplayer.get_unique_id())
 	round_hud.call("apply_combat_state", local_combat_state)
+	round_hud.call("apply_spectator_state", local_eliminated, local_spectator_targets, _spectator_target())
+	round_hud.call("apply_final_reveal", local_final_reveal)
+
+func _client_can_gameplay() -> bool:
+	return int(local_round_public.get("state", RoundState.WAITING)) == RoundState.ACTIVE \
+		and not local_eliminated and int(local_combat_state.get("health", 0)) > 0
+
+func _spectator_target() -> int:
+	if local_spectator_index < 0 or local_spectator_index >= local_spectator_targets.size(): return 0
+	return int(local_spectator_targets[local_spectator_index])
+
+func _cycle_spectator(direction: int) -> void:
+	if local_spectator_targets.is_empty(): return
+	local_spectator_index = posmod(local_spectator_index + direction, local_spectator_targets.size())
+	if arena_view != null: arena_view.set_spectator_target(_spectator_target())
+	_update_round_hud()
 
 @rpc("any_peer", "call_remote", "reliable")
 func request_pickup(pickup_id: Variant, sequence: Variant) -> void:
@@ -714,6 +872,7 @@ func request_pickup(pickup_id: Variant, sequence: Variant) -> void:
 	if not lobby.has(sender):
 		return
 	var result := combat_authority.request_pickup(sender, pickup_id, sequence, Time.get_ticks_msec())
+	_observe_spectator_block(sender, "pickup", result)
 	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "pickup", sequence, result)
 	if not bool(result.get("accepted", false)):
 		combat_action_rejected.rpc_id(sender, "pickup", int(sequence) if typeof(sequence) == TYPE_INT else -1, _safe_combat_reason(result.get("reason", "rejected")))
@@ -726,6 +885,7 @@ func request_fire(sequence: Variant, claimed_origin: Variant, claimed_direction:
 	if not lobby.has(sender):
 		return
 	var result := combat_authority.request_fire(sender, sequence, claimed_origin, claimed_direction, Time.get_ticks_msec())
+	_observe_spectator_block(sender, "fire", result)
 	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "fire", sequence, result)
 	if not bool(result.get("accepted", false)):
 		combat_action_rejected.rpc_id(sender, "fire", int(sequence) if typeof(sequence) == TYPE_INT else -1, _safe_combat_reason(result.get("reason", "rejected")))
@@ -740,9 +900,25 @@ func request_reload(sequence: Variant) -> void:
 	if not lobby.has(sender):
 		return
 	var result := combat_authority.request_reload(sender, sequence, Time.get_ticks_msec())
+	_observe_spectator_block(sender, "reload", result)
 	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "reload", sequence, result)
 	if not bool(result.get("accepted", false)):
 		combat_action_rejected.rpc_id(sender, "reload", int(sequence) if typeof(sequence) == TYPE_INT else -1, _safe_combat_reason(result.get("reason", "rejected")))
+
+func _observe_spectator_block(sender: int, action: String, result: Dictionary) -> void:
+	if not spectator_reveal_test_mode or sender != spectator_test_dead_peer \
+			or str(result.get("reason", "")) != "player_dead": return
+	spectator_test_blocked[action] = true
+	_maybe_finish_spectator_probe()
+
+func _maybe_finish_spectator_probe() -> void:
+	if not spectator_test_observed or not spectator_test_movement_blocked or spectator_test_blocked.size() < 3 \
+			or round_authority.state != RoundState.ACTIVE: return
+	print("SPECTATOR_ACTIONS_BLOCKED")
+	for peer_id in round_authority.participants:
+		if round_authority.get_role_for_peer(int(peer_id)) == Role.ASSASSIN:
+			round_authority.eliminate_player(int(peer_id), "test", 0, Time.get_ticks_msec())
+			return
 
 @rpc("authority", "call_remote", "reliable")
 func combat_private_state(payload: Dictionary) -> void:

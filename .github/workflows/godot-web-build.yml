@@ -93,6 +93,23 @@ jobs:
           grep -q 'COMBAT_AUTHORITY_TEST_OK' "$RUNNER_TEMP/godot-web-logs/combat_authority.log"
           grep -q 'COMBAT_NETWORK_COORDINATOR_TEST_OK' "$RUNNER_TEMP/godot-web-logs/combat_network_coordinator.log"
 
+      - name: Validate spectator and final reveal rules
+        run: |
+          set -o pipefail
+          for test in spectator_reveal_authority spectator_reveal_client; do
+            godot --headless --path . --script "tests/${test}_test.gd" 2>&1 | tee "$RUNNER_TEMP/godot-web-logs/${test}.log"
+          done
+          grep -q 'SPECTATOR_REVEAL_AUTHORITY_TEST_OK' "$RUNNER_TEMP/godot-web-logs/spectator_reveal_authority.log"
+          grep -q 'SPECTATOR_REVEAL_CLIENT_TEST_OK' "$RUNNER_TEMP/godot-web-logs/spectator_reveal_client.log"
+
+      - name: Run spectator and final reveal network test
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/godot-web-logs/spectator-reveal
+        run: |
+          set -o pipefail
+          GODOT_BIN="$(command -v godot)" ./tests/spectator_reveal_network_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/spectator-reveal.log"
+
       - name: Run authoritative combat network test
         env:
           TEST_LOG_DIR: ${{ runner.temp }}/godot-web-logs/combat-processes

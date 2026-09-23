@@ -31,6 +31,8 @@ var _roster: Array = []
 var _label: Label
 var _background: ColorRect
 var _combat: Dictionary = {}
+var _spectator := {"eliminated": false, "targets": [], "target": 0}
+var _reveal: Dictionary = {}
 
 func _ready() -> void:
 	_background = ColorRect.new()
@@ -59,15 +61,21 @@ func apply_combat_state(payload: Dictionary) -> void:
 	_combat = payload.duplicate(true)
 	_render()
 
+func apply_spectator_state(eliminated: bool, targets: Array, target_peer_id: int) -> void:
+	_spectator = {"eliminated": eliminated, "targets": targets.duplicate(), "target": target_peer_id}
+	_render()
+
+func apply_final_reveal(payload: Dictionary) -> void:
+	_reveal = payload.duplicate(true)
+	_render()
+
 func _render() -> void:
 	if _label == null:
 		return
-	var lines := compose_lines(_public, _role, _own_peer_id, _roster)
-	if not _combat.is_empty():
+	var lines := compose_lines(_public, _role, _own_peer_id, _roster, _spectator, _reveal)
+	if not _combat.is_empty() and not bool(_spectator.get("eliminated", false)):
 		lines.append("Vida: %d/100" % int(_combat.get("health", 0)))
-		if int(_combat.get("health", 0)) <= 0:
-			lines.append("ELIMINADO")
-		elif str(_combat.get("weapon_id", "")).is_empty():
+		if str(_combat.get("weapon_id", "")).is_empty():
 			lines.append("Sem arma")
 		else:
 			lines.append("Munição: %d / %d" % [int(_combat.get("magazine", 0)), int(_combat.get("reserve", 0))])
@@ -76,7 +84,8 @@ func _render() -> void:
 
 ## Composição pura do texto do HUD, a partir exclusivamente do que o servidor
 ## publicou. Estática e sem nó, portanto verificável sem renderização.
-static func compose_lines(public_state: Dictionary, role: int, own_peer_id: int, roster: Array) -> Array:
+static func compose_lines(public_state: Dictionary, role: int, own_peer_id: int, roster: Array,
+		spectator: Dictionary = {}, reveal: Dictionary = {}) -> Array:
 	var state := int(public_state.get("state", RoundState.WAITING))
 	var entry := own_entry(roster, own_peer_id)
 	var lines: Array = []
@@ -100,10 +109,35 @@ static func compose_lines(public_state: Dictionary, role: int, own_peer_id: int,
 	if state == RoundState.ENDED:
 		lines.append("Vencedor: %s" % str(TEAM_TEXT.get(
 			int(public_state.get("winning_team", Role.TEAM_NONE)), "—")))
+		lines.append("Razão: %s" % str(public_state.get("winner_reason", "—")))
+		if int(reveal.get("round_id", 0)) == int(public_state.get("round_id", 0)):
+			lines.append("PAPÉIS REVELADOS")
+			for raw_player in reveal.get("players", []):
+				var player: Dictionary = raw_player
+				var revealed_role := int(player.get("role", Role.NONE))
+				var marker := "[!]" if revealed_role == Role.ASSASSIN else ("[D]" if revealed_role == Role.DETECTIVE else "[V]")
+				lines.append("%s %s — %s" % [marker, str(player.get("label", "Jogador %d" % int(player.get("peer_id", 0)))),
+					str(ROLE_TEXT.get(revealed_role, "—"))])
+		lines.append("Retornando ao lobby...")
+	elif state == RoundState.ACTIVE and bool(spectator.get("eliminated", false)):
+		lines.append("ELIMINADO")
+		lines.append("Q/E para observar jogadores vivos")
+		var target := int(spectator.get("target", 0))
+		if target <= 0:
+			lines.append("Aguardando fim da rodada")
+		else:
+			lines.append("ESPECTANDO: %s" % public_label(roster, target))
 	if (state == RoundState.ACTIVE or state == RoundState.ENDED) \
 			and not entry.is_empty() and not bool(entry.get("participant", false)):
 		lines.append("Você entra na próxima rodada")
 	return lines
+
+static func public_label(roster: Array, peer_id: int) -> String:
+	for raw_entry in roster:
+		var entry: Dictionary = raw_entry
+		if int(entry.get("peer_id", 0)) == peer_id:
+			return str(entry.get("label", "Jogador %d" % peer_id))
+	return "Jogador %d" % peer_id
 
 static func own_entry(roster: Array, own_peer_id: int) -> Dictionary:
 	for raw_entry in roster:

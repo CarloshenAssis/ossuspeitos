@@ -161,3 +161,26 @@ As intenções reliable de coleta, disparo e recarga usam remetente derivado por
 e rate limit. Argumentos de borda são `Variant` validados. O protocolo é versão
 4. Viewmodel, pickups, mira, tracer, hit marker e HUD existem só no cliente
 gráfico; a demo offline permanece isolada.
+
+## Marco 5: revelação final e espectador básico
+
+`RoundAuthority` continua como única fonte de papéis, vida e vitória. Ela cria
+uma única revelação sanitizada somente depois da transição oficial para `ENDED`,
+antes de apagar `_roles`; a rede a entrega por `rpc_id` apenas aos participantes
+ainda conectados. O DTO contém exclusivamente rodada, equipe, razão e identidade
+pública/papel final. O reset limpa DTO e papéis, e o acesso retorna vazio fora de
+`ENDED`, impedindo consultas precoces e callbacks atrasados.
+
+A autorização do espectador também permanece em `RoundAuthority`. Cada morto
+recebe privadamente a lista recalculada de participantes vivos e conectados da
+rodada, sempre sem si próprio. Não existe RPC de escolha: Q/E apenas percorre a
+lista já autorizada no cliente. `ArenaView` posiciona a câmera pela posição e yaw
+dos snapshots oficiais; não há câmera livre nem controle do observado. O cliente
+cessa movimento, pickup, tiro e recarga, mantendo as validações do servidor como
+defesa em profundidade.
+
+O HUD apresenta estado privado e resultado sem calcular vida, papel ou vencedor.
+Servidor headless segue sem apresentação e a demo offline não simula esses
+estados. O protocolo passa à versão 5. As validações específicas são os testes
+`spectator_reveal_authority_test.gd`, `spectator_reveal_client_test.gd` e
+`spectator_reveal_network_test.sh` (servidor + quatro clientes).

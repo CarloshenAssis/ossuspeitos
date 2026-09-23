@@ -10,6 +10,8 @@ var pickup_nodes: Dictionary = {}
 var pickup_states: Dictionary = {}
 var weapon_model: MeshInstance3D
 var hit_marker: Label
+var crosshair: Label
+var spectator_target_peer_id := 0
 
 func _ready() -> void:
 	_ensure_input_actions()
@@ -28,7 +30,7 @@ func _ready() -> void:
 	camera.add_child(weapon_model)
 	var overlay := CanvasLayer.new()
 	add_child(overlay)
-	var crosshair := Label.new()
+	crosshair = Label.new()
 	crosshair.text = "+"
 	crosshair.position = Vector2(474, 258)
 	crosshair.add_theme_font_size_override("font_size", 24)
@@ -65,7 +67,10 @@ func apply_snapshot(states: Array) -> void:
 		var state: Dictionary = raw_state
 		var peer_id := int(state["peer_id"])
 		present[peer_id] = true
-		if peer_id == local_peer_id:
+		if spectator_target_peer_id == peer_id:
+			player_rig.position = state["position"]
+			player_rig.rotation.y = float(state["yaw"])
+		if peer_id == local_peer_id and spectator_target_peer_id == 0:
 			player_rig.position = state["position"]
 			player_rig.rotation.y = float(state["yaw"])
 			continue
@@ -142,6 +147,13 @@ func camera_direction() -> Vector3:
 func apply_combat_state(state: Dictionary) -> void:
 	if weapon_model != null:
 		weapon_model.visible = not str(state.get("weapon_id", "")).is_empty() and int(state.get("health", 0)) > 0
+
+## Seleciona apenas um ID previamente autorizado pela camada de rede. A camera
+## segue posicao/yaw oficiais recebidos em snapshots; nunca envia controle.
+func set_spectator_target(peer_id: int, spectator_active: bool = true) -> void:
+	spectator_target_peer_id = peer_id
+	if crosshair != null: crosshair.visible = not spectator_active
+	if weapon_model != null and spectator_active: weapon_model.visible = false
 
 func apply_pickups(entries: Array) -> void:
 	pickup_states.clear()
