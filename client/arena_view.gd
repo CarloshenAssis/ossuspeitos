@@ -12,6 +12,25 @@ var weapon_model: MeshInstance3D
 var hit_marker: Label
 var crosshair: Label
 var spectator_target_peer_id := 0
+var zone_label: Label
+var current_zone_name := ""
+
+## Cores de orientação por região. Apresentação pura: a geometria e os nomes
+## vêm de `ArenaRules`, a mesma fonte que o servidor usa para colisão e tiro.
+const ZONE_COLORS := {
+	"center": Color(0.62, 0.6, 0.57),
+	"north": Color(0.2, 0.38, 0.86),
+	"south": Color(0.9, 0.4, 0.12),
+	"west": Color(0.16, 0.62, 0.3),
+	"east": Color(0.56, 0.26, 0.82),
+}
+const OUTER_WALL_COLOR := Color(0.24, 0.26, 0.31)
+## Amarelo é exclusivo dos caixotes baixos: "bloqueia passagem, tiro passa por cima".
+const LOW_CRATE_COLOR := Color(1.0, 0.86, 0.1)
+const FLOOR_COLOR := Color(0.1, 0.11, 0.13)
+const WEAPON_PICKUP_COLOR := Color(0.25, 0.95, 1.0)
+const AMMO_PICKUP_COLOR := Color(1.0, 0.3, 0.4)
+const ZONE_TILE_HEIGHT := 0.02
 
 func _ready() -> void:
 	_ensure_input_actions()
@@ -19,7 +38,7 @@ func _ready() -> void:
 	player_rig = Node3D.new()
 	add_child(player_rig)
 	camera = Camera3D.new()
-	camera.position.y = 0.7
+	camera.position.y = ArenaRules.EYE_HEIGHT
 	player_rig.add_child(camera)
 	weapon_model = MeshInstance3D.new()
 	var weapon_mesh := BoxMesh.new()
@@ -40,6 +59,12 @@ func _ready() -> void:
 	hit_marker.position = Vector2(473, 258)
 	hit_marker.modulate = Color(1, 0.25, 0.2, 0)
 	overlay.add_child(hit_marker)
+	zone_label = Label.new()
+	zone_label.position = Vector2(724, 16)
+	zone_label.add_theme_font_size_override("font_size", 18)
+	zone_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	zone_label.add_theme_constant_override("outline_size", 6)
+	overlay.add_child(zone_label)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
@@ -70,9 +95,11 @@ func apply_snapshot(states: Array) -> void:
 		if spectator_target_peer_id == peer_id:
 			player_rig.position = state["position"]
 			player_rig.rotation.y = float(state["yaw"])
+			_update_zone_label(player_rig.position)
 		if peer_id == local_peer_id and spectator_target_peer_id == 0:
 			player_rig.position = state["position"]
 			player_rig.rotation.y = float(state["yaw"])
+			_update_zone_label(player_rig.position)
 			continue
 		if not avatars.has(peer_id):
 			avatars[peer_id] = _create_avatar(peer_id, state["position"])
@@ -97,24 +124,136 @@ func _build_arena() -> void:
 	var environment := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.08, 0.1, 0.14)
+	env.background_color = Color(0.3, 0.37, 0.48)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.65, 0.7, 0.8)
-	env.ambient_light_energy = 0.8
+	env.ambient_light_color = Color(0.72, 0.76, 0.84)
+	env.ambient_light_energy = 0.4
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.fog_enabled = true
+	env.fog_light_color = Color(0.3, 0.37, 0.48)
+	env.fog_density = 0.005
 	environment.environment = env
 	add_child(environment)
 	var light := DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-55.0, -30.0, 0.0)
+	light.rotation_degrees = Vector3(-50.0, -35.0, 0.0)
+	light.light_energy = 1.0
 	light.shadow_enabled = true
 	add_child(light)
-	_add_box(Vector3(0.0, -0.25, 0.0), Vector3(25.0, 0.5, 25.0), Color(0.22, 0.25, 0.3))
-	_add_box(Vector3(-12.25, 1.5, 0.0), Vector3(0.5, 3.5, 25.0), Color(0.35, 0.4, 0.5))
-	_add_box(Vector3(12.25, 1.5, 0.0), Vector3(0.5, 3.5, 25.0), Color(0.35, 0.4, 0.5))
-	_add_box(Vector3(0.0, 1.5, -12.25), Vector3(25.0, 3.5, 0.5), Color(0.35, 0.4, 0.5))
-	_add_box(Vector3(0.0, 1.5, 12.25), Vector3(25.0, 3.5, 0.5), Color(0.35, 0.4, 0.5))
-	_add_box(Vector3(0.0, 1.0, 0.0), Vector3(1.0, 2.0, 7.0), Color(0.45, 0.32, 0.25))
+	# Piso visual abaixo de y = 0; tiros oficiais são horizontais e nunca o tocam.
+	_add_decor_box(Vector3(0.0, -0.25, 0.0), Vector3(30.0, 0.5, 30.0), FLOOR_COLOR)
+	for zone in ArenaRules.ZONES:
+		_add_zone_tile(zone)
+	for blocker in ArenaRules.BLOCKERS:
+		_add_blocker(blocker)
+	for index in MovementRules.SPAWN_POINTS.size():
+		_add_spawn_marker(MovementRules.SPAWN_POINTS[index])
+	_add_zone_signs()
+	_add_zone_lights()
 
-func _add_box(box_position: Vector3, size: Vector3, color: Color) -> void:
+## Cada bloco oficial vira exatamente uma mesh com o mesmo centro e tamanho.
+func _add_blocker(blocker: Dictionary) -> void:
+	var kind := str(blocker["kind"])
+	var color := OUTER_WALL_COLOR
+	if kind == "low":
+		color = LOW_CRATE_COLOR
+	elif kind != "outer":
+		color = zone_color(blocker["center"]).darkened(0.15)
+		if kind == "cover":
+			color = zone_color(blocker["center"]).lightened(0.12)
+	var node := _add_box(blocker["center"], blocker["size"], color)
+	node.name = "Blocker_%s" % str(blocker["id"])
+	node.set_meta("arena_blocker_id", str(blocker["id"]))
+
+func _add_zone_tile(zone: Dictionary) -> void:
+	var minimum: Vector2 = zone["min"]
+	var maximum: Vector2 = zone["max"]
+	var center := (minimum + maximum) * 0.5
+	var size := maximum - minimum
+	var color := zone_color(Vector3(center.x, 0.0, center.y)).darkened(0.5)
+	# Placas encostadas, na mesma altura: a troca de cor marca a região sem
+	# criar degrau ou junta que pareça obstáculo.
+	var node := _add_decor_box(Vector3(center.x, ZONE_TILE_HEIGHT * 0.5, center.y),
+		Vector3(size.x, ZONE_TILE_HEIGHT, size.y), color)
+	node.name = "ZoneTile_%s" % str(zone["id"])
+
+func _add_spawn_marker(spawn: Vector3) -> void:
+	var node := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.6
+	mesh.bottom_radius = 0.6
+	mesh.height = 0.01
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.9, 0.95, 1.0, 0.35)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mesh.material = material
+	node.mesh = mesh
+	node.position = Vector3(spawn.x, ZONE_TILE_HEIGHT + 0.005, spawn.z)
+	node.set_meta("arena_decor", "floor")
+	add_child(node)
+
+## Placas planas nos muros externos, legíveis de dentro da arena (a face de
+## leitura de um Label3D é o seu +Z local). Não têm volume nem colisão.
+func _add_zone_signs() -> void:
+	var inner := ArenaRules.INNER_HALF_EXTENT - 0.02
+	var signs := [
+		{"text": "NORTE", "position": Vector3(0.0, 2.7, -inner), "yaw": 0.0},
+		{"text": "SUL", "position": Vector3(0.0, 2.7, inner), "yaw": PI},
+		{"text": "OESTE", "position": Vector3(-inner, 2.7, 0.0), "yaw": PI * 0.5},
+		{"text": "LESTE", "position": Vector3(inner, 2.7, 0.0), "yaw": -PI * 0.5},
+		{"text": "SALA NO", "position": Vector3(-12.3, 2.7, -inner), "yaw": 0.0},
+		{"text": "SALA NE", "position": Vector3(12.3, 2.7, -inner), "yaw": 0.0},
+		{"text": "SALA SO", "position": Vector3(-12.3, 2.7, inner), "yaw": PI},
+		{"text": "SALA SE", "position": Vector3(12.3, 2.7, inner), "yaw": PI},
+	]
+	for entry in signs:
+		var label := Label3D.new()
+		label.text = str(entry["text"])
+		label.font_size = 96
+		label.pixel_size = 0.01
+		label.outline_size = 18
+		label.modulate = Color(1.0, 1.0, 1.0)
+		label.position = entry["position"]
+		label.rotation.y = float(entry["yaw"])
+		label.set_meta("arena_decor", "sign")
+		add_child(label)
+
+## Luzes pontuais coloridas por região, sem sombra, para leitura de lugar.
+func _add_zone_lights() -> void:
+	for zone_id in ["center", "north", "south", "west", "east"]:
+		var zone := _zone_by_id(zone_id)
+		var minimum: Vector2 = zone["min"]
+		var maximum: Vector2 = zone["max"]
+		var center := (minimum + maximum) * 0.5
+		var light := OmniLight3D.new()
+		light.position = Vector3(center.x, 3.8, center.y)
+		light.light_color = zone_color(Vector3(center.x, 0.0, center.y)).lightened(0.3)
+		light.light_energy = 0.6
+		light.omni_range = 9.0
+		light.shadow_enabled = false
+		add_child(light)
+
+static func zone_color(position: Vector3) -> Color:
+	var zone_id := str(ArenaRules.zone_at(position).get("id", "center"))
+	if ZONE_COLORS.has(zone_id):
+		return ZONE_COLORS[zone_id]
+	# Cantos misturam as duas bordas vizinhas: "northeast" = norte + leste.
+	var vertical := "north" if zone_id.begins_with("north") else "south"
+	var horizontal := "east" if zone_id.ends_with("east") else "west"
+	return (ZONE_COLORS[vertical] as Color).lerp(ZONE_COLORS[horizontal], 0.5)
+
+static func _zone_by_id(zone_id: String) -> Dictionary:
+	for zone in ArenaRules.ZONES:
+		if str(zone["id"]) == zone_id:
+			return zone
+	return {}
+
+func _add_decor_box(box_position: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
+	var node := _add_box(box_position, size, color)
+	node.set_meta("arena_decor", "floor")
+	return node
+
+func _add_box(box_position: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
 	var mesh_instance := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
 	mesh.size = size
@@ -124,6 +263,14 @@ func _add_box(box_position: Vector3, size: Vector3, color: Color) -> void:
 	mesh_instance.mesh = mesh
 	mesh_instance.position = box_position
 	add_child(mesh_instance)
+	return mesh_instance
+
+func _update_zone_label(position: Vector3) -> void:
+	var zone_name := ArenaRules.zone_name_at(position)
+	if zone_name == current_zone_name or zone_label == null:
+		return
+	current_zone_name = zone_name
+	zone_label.text = "Região: %s" % zone_name if not zone_name.is_empty() else ""
 
 func _create_avatar(peer_id: int, initial_position: Vector3) -> Node3D:
 	var avatar := MeshInstance3D.new()
@@ -212,7 +359,12 @@ func _create_pickup(entry: Dictionary) -> Node3D:
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(0.5, 0.25, 0.8) if str(entry.get("type", "")) == "weapon" else Vector3(0.5, 0.4, 0.5)
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0.25, 0.55, 0.95) if str(entry.get("type", "")) == "weapon" else Color(0.95, 0.72, 0.2)
+	var color := WEAPON_PICKUP_COLOR if str(entry.get("type", "")) == "weapon" else AMMO_PICKUP_COLOR
+	material.albedo_color = color
+	# Brilho próprio para o pickup se destacar de qualquer região.
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = 0.8
 	mesh.material = material
 	node.mesh = mesh
 	node.position = entry.get("position", Vector3.ZERO)

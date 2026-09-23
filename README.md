@@ -34,6 +34,32 @@ use **E** para coletar, clique esquerdo para atirar e **R** para recarregar.
 Quando eliminado oficialmente, o cliente para de enviar gameplay e **Q/E**
 alternam localmente entre jogadores vivos autorizados pelo servidor.
 
+## Arena graybox
+
+A arena mede 29 × 29 m entre os muros e tem simetria rotacional de 90°, para nenhum spawn
+ser favorecido. Toda a geometria está em `shared/arena_rules.gd`: o servidor usa
+esses blocos para colisão de movimento e hitscan, e o cliente cria exatamente uma
+mesh por bloco — não existe parede só visual nem bloqueio invisível.
+
+- **Pátio central** (cinza): monumento alto no centro, quatro caixotes baixos e
+  as quatro caixas de munição.
+- **Norte, Sul, Leste, Oeste** (azul, laranja, roxo, verde): uma arma comum em
+  cada lado, cobertura em cata-vento perto do pátio e um spawn protegido por
+  uma cobertura larga.
+- **Quatro cantos** (cores misturadas das bordas vizinhas): salas de spawn com
+  porta diagonal voltada para o centro. Os quatro primeiros jogadores nascem
+  nelas; o quinto ao oitavo, nas bordas.
+
+Entre lados opostos há três caminhos: pelo pátio e pelos dois corredores
+laterais. Nenhum spawn enxerga outro no início da rodada, e todo jogador nasce
+olhando para o centro. Placas nos muros externos e o indicador **Região** no
+canto da tela ajudam a saber onde se está.
+
+Regra de leitura: o tiro oficial sai sempre horizontal na altura do olho (a
+altura da mira). Paredes e coberturas passam claramente dessa altura e param o
+tiro; os **caixotes amarelos** são baixos, bloqueiam a passagem, mas dá para ver
+e atirar por cima deles.
+
 ## Ciclo de partida
 
 O servidor é a única autoridade sobre participantes, fase da rodada, contagem
@@ -155,6 +181,8 @@ godot4 --headless --path . --script tests/round_hud_test.gd
 godot4 --headless --path . --script tests/round_authority_test.gd
 # regras de movimento
 godot4 --headless --path . --script tests/movement_rules_test.gd
+# arena: spawns, pickups, rotas, linhas de visão, colisão e meshes do cliente
+godot4 --headless --path . --script tests/arena_layout_test.gd
 # arma, inventário, validação de tiro e combate integrado
 godot4 --headless --path . --script tests/weapon_rules_test.gd
 godot4 --headless --path . --script tests/inventory_authority_test.gd
@@ -200,7 +228,9 @@ O hitscan atual usa geometria analítica simples, sem headshot, previsão ou lag
 
 A demonstração é um modo de apresentação isolado, claramente marcado como
 **OFFLINE / SEM SERVIDOR**. Ela permite andar pela arena com WASD, capturar o
-mouse com um clique, liberar com Esc e observar quatro cápsulas simuladas:
+mouse com um clique, liberar com Esc e observar quatro cápsulas simuladas que
+patrulham a saída das salas de spawn. A caminhada local usa a mesma colisão da
+arena oficial:
 
 ```bash
 godot4 --path . -- --mode=demo
