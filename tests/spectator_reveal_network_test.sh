@@ -53,27 +53,36 @@ for id in 1 2 3 4; do
   assert_equal "client-$id-only-own-role" "$(grep -c 'CLIENT_PRIVATE_ROLE_RECEIVED' "$TMP_DIR/client-$id.log")" 1
 done
 
-mapfile -t SPECTATOR_LOGS < <(grep -l 'SPECTATOR_TARGETS_PRIVATE_OK' "$TMP_DIR"/client-*.log)
-assert_equal spectator-private-updates-only-to-eliminated "${#SPECTATOR_LOGS[@]}" 1
-SPECTATOR_LOG="${SPECTATOR_LOGS[0]}"
-mapfile -t TARGET_COUNTS < <(sed -n 's/.*SPECTATOR_TARGETS_PRIVATE_OK.*targets=\([0-9][0-9]*\).*/\1/p' "$SPECTATOR_LOG")
-assert_equal spectator-private-update-count "${#TARGET_COUNTS[@]}" 2
-assert_equal spectator-first-live-target-count "${TARGET_COUNTS[0]}" 3
-assert_equal spectator-targets-refresh-after-elimination "${TARGET_COUNTS[1]}" 2
-assert_equal no-identical-spectator-refresh "$(printf '%s\n' "${TARGET_COUNTS[@]}" | sort -u | wc -l | tr -d ' ')" 2
-
-SPECTATOR_NUMBER="$(basename "$SPECTATOR_LOG" .log | sed 's/client-//')"
-SPECTATOR_PEER="$(sed -n "s/.*CLIENT_JOINED id=spectator-$SPECTATOR_NUMBER peer_id=\([0-9][0-9]*\).*/\1/p" "$TMP_DIR/server.log")"
 mapfile -t ELIMINATED_PEERS < <(sed -n 's/.*ROUND_ALIVE_CHANGED.*peer_id=\([0-9][0-9]*\).*alive=false.*/\1/p' "$TMP_DIR/server.log")
 assert_equal two-official-eliminations "${#ELIMINATED_PEERS[@]}" 2
-assert_equal spectator-is-first-officially-eliminated "$SPECTATOR_PEER" "${ELIMINATED_PEERS[0]}"
-[[ "${ELIMINATED_PEERS[1]}" != "$SPECTATOR_PEER" ]] && ok refreshed-target-is-not-spectator || fail 1
-assert_equal refresh-excludes-newly-eliminated "${TARGET_COUNTS[1]}" "$((4 - ${#ELIMINATED_PEERS[@]}))"
-for peer_id in "${ELIMINATED_PEERS[@]}"; do
+mapfile -t SPECTATOR_LOGS < <(grep -l 'SPECTATOR_TARGETS_PRIVATE_OK' "$TMP_DIR"/client-*.log)
+assert_equal spectator-private-updates-only-to-eliminated "${#SPECTATOR_LOGS[@]}" 2
+assert_equal spectator-private-delivery-count "$(grep -h -c 'SPECTATOR_TARGETS_PRIVATE_OK' "${SPECTATOR_LOGS[@]}" | awk '{s+=$1} END{print s}')" 3
+
+ELIMINATED_LOGS=()
+for index in 0 1; do
+  peer_id="${ELIMINATED_PEERS[$index]}"
+  client_label="$(sed -n "s/.*CLIENT_JOINED id=\([^ ]*\) peer_id=$peer_id .*/\1/p" "$TMP_DIR/server.log")"
+  client_number="${client_label#spectator-}"
+  client_log="$TMP_DIR/client-$client_number.log"
+  [[ -n "$client_label" && -f "$client_log" ]] || fail 1
+  ELIMINATED_LOGS+=("$client_log")
   grep -qx "$peer_id" <<<"$JOINED_PEERS" && ok "eliminated-peer-$peer_id-was-connected-participant" || fail 1
 done
+assert_equal eliminated-clients-are-distinct "$(printf '%s\n' "${ELIMINATED_LOGS[@]}" | sort -u | wc -l | tr -d ' ')" 2
+
+mapfile -t FIRST_TARGET_COUNTS < <(sed -n 's/.*SPECTATOR_TARGETS_PRIVATE_OK.*targets=\([0-9][0-9]*\).*/\1/p' "${ELIMINATED_LOGS[0]}")
+assert_equal first-eliminated-private-update-count "${#FIRST_TARGET_COUNTS[@]}" 2
+assert_equal spectator-first-live-target-count "$(printf '%s\n' "${FIRST_TARGET_COUNTS[@]}" | grep -c '^3$')" 1
+assert_equal spectator-targets-refresh-after-elimination "$(printf '%s\n' "${FIRST_TARGET_COUNTS[@]}" | grep -c '^2$')" 1
+assert_equal no-identical-spectator-refresh "$(printf '%s\n' "${FIRST_TARGET_COUNTS[@]}" | sort -u | wc -l | tr -d ' ')" 2
+
+mapfile -t SECOND_TARGET_COUNTS < <(sed -n 's/.*SPECTATOR_TARGETS_PRIVATE_OK.*targets=\([0-9][0-9]*\).*/\1/p' "${ELIMINATED_LOGS[1]}")
+assert_equal second-eliminated-private-update-count "${#SECOND_TARGET_COUNTS[@]}" 1
+assert_equal second-eliminated-live-target-count "$(printf '%s\n' "${SECOND_TARGET_COUNTS[@]}" | grep -c '^2$')" 1
+assert_equal refresh-excludes-newly-eliminated 2 "$((4 - ${#ELIMINATED_PEERS[@]}))"
 assert_no_grep living-clients-receive-no-spectator-state 'SPECTATOR_TARGETS_PRIVATE_OK' \
-  $(printf '%s\n' "$TMP_DIR"/client-*.log | grep -vFx "$SPECTATOR_LOG")
+  $(printf '%s\n' "$TMP_DIR"/client-*.log | grep -vFx -f <(printf '%s\n' "${ELIMINATED_LOGS[@]}"))
 assert_grep spectator-follow 'SPECTATOR_FOLLOW_OK' "$TMP_DIR"/client-*.log
 assert_grep actions-blocked 'SPECTATOR_ACTIONS_BLOCKED' "$TMP_DIR/server.log"
 assert_equal four-reveals "$(grep -h -c 'ROUND_REVEAL_OK players=4' "$TMP_DIR"/client-*.log | awk '{s+=$1} END{print s}')" 4
