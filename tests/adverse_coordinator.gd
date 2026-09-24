@@ -50,8 +50,8 @@ func observe_server_elimination(peer_id: int) -> void:
 		marks["queue_at_elimination_%d" % peer_id] = (app.authoritative_world.states[peer_id]["queue"] as Array).size() \
 			if app.authoritative_world.states.has(peer_id) else -1
 
-func _request(action: String, label: String) -> void:
-	print("ADVERSE_REQUEST action=%s label=%s" % [action, label])
+func _request(action: String, label: String, extra: String = "") -> void:
+	print("ADVERSE_REQUEST action=%s label=%s%s" % [action, label, extra])
 
 func _label(peer_id: int) -> String:
 	return str(app.lobby.label_for(peer_id))
@@ -93,6 +93,7 @@ func _plan_round() -> void:
 		"invalid_actions:1": _plan_invalid_actions()
 		"phase4_delay:1": _plan_phase4_delay()
 		"phase4_delay:2": _plan_phase4_delay_next()
+		"protocol_bodies:1": _plan_protocol_bodies()
 		_: _fail("unknown adverse case %s round %d" % [case_name, round_number])
 
 func _check_start() -> String:
@@ -610,6 +611,39 @@ func _plan_phase4_delay_next() -> void:
 		var error := (r["position"] as Vector3).distance_to(app.authoritative_world.states[int(victims[0])]["position"])
 		print("ADVERSE_FRESH_PREDICTION case=phase4_delay error=%.6f" % error)
 		return "" if error <= 0.001 else "prediction differs from official by %.4f" % error})
+	_add_finish()
+
+# --- protocol_bodies (protocolo 10) ------------------------------------------------
+
+## Com corpos na rodada, um cliente de protocolo 9 tenta entrar: é recusado
+## antes de qualquer registro e não recebe corpo algum; o corpo seguinte vai
+## só para os quatro da sala.
+func _plan_protocol_bodies() -> void:
+	var shooter := int(victims[0])
+	var first := int(victims[1])
+	_add("pickup", _pickup_step(shooter, 1, "weapon_1"))
+	_add("first_body", _fire_step(shooter, first, 3, 0, true))
+	_add("old_client_refused", {"run": func():
+		refused.clear()
+		_request("start_client", "old-9", " protocol=9")
+	, "done": func(): return not refused.is_empty(), "timeout": 30000, "check": func():
+		var entry: Dictionary = refused[0]
+		if str(entry["reason"]) != "protocol_version": return "refusal %s" % entry["reason"]
+		var peer_id := int(entry["peer"])
+		if app.lobby.has(peer_id) or app.authoritative_world.states.has(peer_id) or app.round_authority.is_participant(peer_id) \
+				or app.combat_authority.health.has(peer_id) or app.round_late_join_peers.has(peer_id):
+			return "refused peer got a partial entry"
+		if app.lobby.size() != 4 or app.round_authority.participants.size() != 4: return "room changed"
+		marks["old_peer"] = peer_id
+		print("ADVERSE_PROTOCOL_REFUSED case=protocol_bodies lobby=%d bodies=%d" % [app.lobby.size(), app.body_registry.size()])
+		return ""})
+	_add("second_body", _fire_step(shooter, detective, 3, 0, true, "ala_leste"))
+	_add("bodies_only_in_room", {"run": func(): _ask_all("bodies"), "delay": 600, "done": _all_reported, "check": func():
+		if app.body_registry.size() != 2: return "server bodies %d" % app.body_registry.size()
+		for peer_id in peers:
+			if (reports[peer_id]["bodies"] as Array).size() != 2: return "client %d bodies %d" % [int(peer_id), (reports[peer_id]["bodies"] as Array).size()]
+		print("ADVERSE_BODIES_ONLY_IN_ROOM case=protocol_bodies clients=%d bodies=2" % peers.size())
+		return ""})
 	_add_finish()
 
 # --- Cliente -----------------------------------------------------------------------

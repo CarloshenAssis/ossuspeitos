@@ -14,7 +14,7 @@ set -eEuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GODOT_BIN="${GODOT_BIN:-$(command -v godot4 2>/dev/null || command -v godot 2>/dev/null || true)}"
 SEED="${SEED:-1}"
-CASES="${CASES:-menu_errors version_and_crash busy_port double_click ninth join_ended drop_moving observed_leaves leave_rejoin invalid_actions phase4_delay}"
+CASES="${CASES:-menu_errors protocol_mismatch version_and_crash busy_port double_click ninth join_ended drop_moving observed_leaves leave_rejoin invalid_actions phase4_delay protocol_bodies}"
 BASE_PORT="${TEST_PORT:-$((30080 + RANDOM % 1000))}"
 SHA="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 RUN_ID="adverse-s$SEED-$SHA-$$"
@@ -65,22 +65,24 @@ PY
 ) >/dev/null 2>&1 & WATCHDOG_PID=$!
 
 # --- Casos de sessão (coordenador tests/adverse_coordinator.gd) -----------------------
-declare -A CASE_CLIENTS=([ninth]=8 [join_ended]=4 [drop_moving]=5 [observed_leaves]=5 [leave_rejoin]=5 [invalid_actions]=4 [phase4_delay]=4)
+declare -A CASE_CLIENTS=([protocol_bodies]=4 [ninth]=8 [join_ended]=4 [drop_moving]=5 [observed_leaves]=5 [leave_rejoin]=5 [invalid_actions]=4 [phase4_delay]=4)
 declare -A CASE_END_DELAY=([join_ended]=12)
 declare -A CASE_PROFILE=([phase4_delay]=rtt150j)
-declare -A CASE_REFUSED=([ninth]="client-9")
+declare -A CASE_REFUSED=([ninth]="client-9" [protocol_bodies]="old-9")
+declare -A REFUSAL_REASON=([old-9]=protocol_version)
 
 run_session_case() {
   local port=$1 clients=${CASE_CLIENTS[$CASE]} profile=${CASE_PROFILE[$CASE]:-local}
   local names=() pids=() expected=() handled=0 status name
   declare -A pid_by_label=()
   start_client() {
-    local label=$1 log_name=$1 net_args=()
+    local label=$1 log_name=$1 net_args=() protocol_args=()
+    [[ -z "${2:-}" ]] || protocol_args=(--test-protocol-version="$2")
     if [[ -n "${pid_by_label[$label]:-}" ]] && kill -0 "${pid_by_label[$label]}" 2>/dev/null; then log_name="$label-duplicate"
     elif [[ -f "$CASE_DIR/$label.log" ]]; then log_name="$label-rejoin"; fi
     if [[ "$profile" != local ]]; then net_args=(--test-net-profile="$profile" --test-net-seed="$((SEED * 100 + ${#pids[@]}))"); fi
     "$GODOT_BIN" --headless --path "$ROOT" -- --mode=client --client-id="$label" --url="ws://127.0.0.1:$port" \
-      --adverse-test=true "${net_args[@]}" >"$CASE_DIR/$log_name.log" 2>&1 &
+      --adverse-test=true "${net_args[@]}" "${protocol_args[@]}" >"$CASE_DIR/$log_name.log" 2>&1 &
     local pid=$!
     ALL_PIDS+=("$pid"); pids+=("$pid"); names+=("$log_name")
     # Nome já em uso por um processo vivo, ou recusa prevista pelo caso: status 1.
@@ -102,11 +104,11 @@ run_session_case() {
   while kill -0 "$server_pid" 2>/dev/null && (( SECONDS < deadline )); do
     mapfile -t requests < <(grep -E '^ADVERSE_REQUEST ' "$CASE_DIR/server.log" || true)
     while (( handled < ${#requests[@]} )); do
-      local line="${requests[$handled]}" action label
-      action="$(sed -n 's/.*action=\([^ ]*\).*/\1/p' <<<"$line")"; label="$(sed -n 's/.*label=\([^ ]*\).*/\1/p' <<<"$line")"
+      local line="${requests[$handled]}" action label protocol
+      action="$(sed -n 's/.*action=\([^ ]*\).*/\1/p' <<<"$line")"; label="$(sed -n 's/.*label=\([^ ]*\).*/\1/p' <<<"$line")"; protocol="$(sed -n 's/.*protocol=\([0-9]*\).*/\1/p' <<<"$line")"
       handled=$((handled + 1))
       case "$action" in
-        start_client) start_client "$label" ;;
+        start_client) start_client "$label" "$protocol" ;;
         kill_client)
           local victim="${pid_by_label[$label]}"
           for i in "${!pids[@]}"; do [[ "${pids[$i]}" != "$victim" ]] || expected[$i]=137; done
@@ -124,7 +126,8 @@ run_session_case() {
     echo "PROCESS_STATUS case=$CASE name=${names[$i]} status=$LAST_STATUS expected=${expected[$i]}"
     assert_equal "process-${names[$i]}-exit" "$LAST_STATUS" "${expected[$i]}"
     if [[ "${expected[$i]}" == 1 ]]; then
-      assert_grep "${names[$i]}-refused-with-reason" "JOIN_REJECTED id=[^ ]+ reason=room_unavailable" "$CASE_DIR/${names[$i]}.log"
+      assert_grep "${names[$i]}-refused-with-reason" "JOIN_REJECTED id=[^ ]+ reason=${REFUSAL_REASON[${names[$i]}]:-room_unavailable}" "$CASE_DIR/${names[$i]}.log"
+      assert_no_grep "${names[$i]}-never-joined" 'JOIN_ACCEPTED|CLIENT_BODY_SHOWN|CLIENT_PRIVATE_ROLE_RECEIVED' "$CASE_DIR/${names[$i]}.log"
     elif [[ "${expected[$i]}" == 0 ]]; then
       assert_grep "${names[$i]}-coordinated-shutdown" 'CLIENT_SHUTDOWN_COMPLETE' "$CASE_DIR/${names[$i]}.log"
     fi
@@ -191,6 +194,42 @@ case_version_and_crash() {
   port_free "$port" && ok port-released-after-crash || { echo "ASSERT_FAILED case=$CASE name=port-released" >&2; fail 1; }
 }
 
+# --- Protocolo 10: versões diferentes nos dois sentidos, pelo menu ----------------
+case_protocol_mismatch() {
+  local port=$1 status
+  [[ "$(sed -n 's/^const PROTOCOL_VERSION := \([0-9]*\).*/\1/p' "$ROOT/shared/network_config.gd")" == 10 ]] && ok protocol-is-10
+  # Servidor 10, cliente 9.
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 --port="$port" >"$CASE_DIR/server-10.log" 2>&1 &
+  local server_pid=$!; ALL_PIDS+=("$server_pid")
+  wait_marker 'SERVER_READY' "$CASE_DIR/server-10.log" "$server_pid"
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-exit-on-return=true --menu-auto=join --menu-name=antigo \
+    --menu-address=127.0.0.1 --menu-port="$port" --test-protocol-version=9 >"$CASE_DIR/client-9.log" 2>&1 && status=0 || status=$?
+  assert_equal client-9-exit "$status" 0
+  assert_grep client-9-announces-9 'CLIENT_PROTOCOL id=antigo version=9' "$CASE_DIR/client-9.log"
+  assert_grep client-9-refused 'JOIN_REJECTED id=antigo reason=protocol_version' "$CASE_DIR/client-9.log"
+  assert_grep client-9-clear-message 'JOIN_REJECTED_MESSAGE id=antigo text=Versão incompatível do jogo \(este build usa o protocolo 9\)' "$CASE_DIR/client-9.log"
+  assert_grep client-9-back-to-menu 'MENU_RETURNED reason=join_rejected' "$CASE_DIR/client-9.log"
+  assert_no_grep client-9-no-entry 'JOIN_ACCEPTED|CLIENT_ROUND_STATE|CLIENT_ROSTER|CLIENT_BODY_SHOWN|CLIENT_PRIVATE_ROLE' "$CASE_DIR/client-9.log"
+  assert_grep server-10-mismatch 'JOIN_PROTOCOL_MISMATCH peer_id=[0-9]+ client=9 server=10' "$CASE_DIR/server-10.log"
+  assert_grep server-10-refused-empty 'JOIN_REFUSED peer_id=[0-9]+ reason=protocol_version count=0' "$CASE_DIR/server-10.log"
+  assert_no_grep server-10-no-partial-entry 'CLIENT_JOINED|PLAYER_SPAWNED|ROUND_LATE_JOIN|ROUND_STATE' "$CASE_DIR/server-10.log"
+  kill "$server_pid"; status_of "$server_pid"
+  # Servidor 9 (build antiga simulada), cliente 10.
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 --port="$((port + 1))" --test-protocol-version=9 >"$CASE_DIR/server-9.log" 2>&1 &
+  server_pid=$!; ALL_PIDS+=("$server_pid")
+  wait_marker 'SERVER_READY' "$CASE_DIR/server-9.log" "$server_pid"
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-exit-on-return=true --menu-auto=join --menu-name=novo \
+    --menu-address=127.0.0.1 --menu-port="$((port + 1))" >"$CASE_DIR/client-10.log" 2>&1 && status=0 || status=$?
+  assert_equal client-10-exit "$status" 0
+  assert_grep client-10-announces-10 'CLIENT_PROTOCOL id=novo version=10' "$CASE_DIR/client-10.log"
+  assert_grep client-10-refused 'JOIN_REJECTED id=novo reason=protocol_version' "$CASE_DIR/client-10.log"
+  assert_grep client-10-clear-message 'JOIN_REJECTED_MESSAGE id=novo text=Versão incompatível do jogo \(este build usa o protocolo 10\)' "$CASE_DIR/client-10.log"
+  assert_no_grep client-10-no-entry 'JOIN_ACCEPTED|CLIENT_ROUND_STATE|CLIENT_ROSTER|CLIENT_BODY_SHOWN' "$CASE_DIR/client-10.log"
+  assert_grep server-9-mismatch 'JOIN_PROTOCOL_MISMATCH peer_id=[0-9]+ client=10 server=9' "$CASE_DIR/server-9.log"
+  assert_no_grep server-9-no-partial-entry 'CLIENT_JOINED|PLAYER_SPAWNED|ROUND_STATE' "$CASE_DIR/server-9.log"
+  kill "$server_pid"; status_of "$server_pid"
+}
+
 # --- 2. Porta ocupada: falha clara sem derrubar quem ocupa ---------------------------
 case_busy_port() {
   local port=$1 status
@@ -249,7 +288,7 @@ for CASE in $CASES; do
   stage "start port=$port seed=$SEED sha=$SHA"
   started=$SECONDS
   case "$CASE" in
-    menu_errors|version_and_crash|busy_port|double_click) "case_$CASE" "$port" ;;
+    menu_errors|protocol_mismatch|version_and_crash|busy_port|double_click) "case_$CASE" "$port" ;;
     *) [[ -n "${CASE_CLIENTS[$CASE]:-}" ]] || { echo "unknown case $CASE" >&2; exit 2; }; run_session_case "$port" ;;
   esac
   echo "ADVERSE_CASE_OK case=$CASE seconds=$((SECONDS - started))"

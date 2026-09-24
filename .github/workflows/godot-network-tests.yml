@@ -333,7 +333,7 @@ jobs:
           set -o pipefail
           TEST_LOG_DIR="$RUNNER_TEMP/godot-match-logs/adverse" SEED=1 GODOT_BIN="$(command -v godot)" \
             ./tests/adverse_cases_test.sh 2>&1 | tee "$RUNNER_TEMP/godot-match-logs/adverse.log"
-          grep -q 'ADVERSE_CASES_TEST_OK cases=11 ' "$RUNNER_TEMP/godot-match-logs/adverse.log"
+          grep -q 'ADVERSE_CASES_TEST_OK cases=13 ' "$RUNNER_TEMP/godot-match-logs/adverse.log"
 
       - name: Upload failure logs
         if: failure()
