@@ -5,7 +5,8 @@
 # 0 e 1); com a seed padrão nenhum deles é o assassino na rodada 1, e o
 # coordenador falha explicitamente (VISUAL_SEED_UNSUITABLE) se for.
 # Grava quadros JPG + telemetria CSV por cena em OUT e, se houver ffmpeg,
-# um vídeo WebM e uma prancha de quadros por cena. Não entra no CI.
+# uma prancha de quadros (PNG) e, se houver ffmpeg, um vídeo WebM por cena.
+# Não entra no CI.
 # Uso: PROFILE=local|rtt150j SEED=1 OUT=/tmp/visual [FFMPEG=...] tests/campaign_visual_session.sh
 set -eEuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -53,13 +54,18 @@ grep -hE 'SYNC_VISUAL_RECORDED' "$OUT"/client-*.log
 grep -q 'CAMPAIGN_SERVER_OK clients=8 rounds=3' "$OUT/server.log" || STATUS=1
 (( STATUS == 0 )) || { echo "CAMPAIGN_VISUAL_SESSION_FAILED out=$OUT" >&2; exit 1; }
 
-if [[ -n "$FFMPEG" ]]; then
-  mkdir -p "$OUT/video" "$OUT/sheets"
-  for first in "$OUT"/frames/*_0000.jpg; do
-    scene="$(basename "$first" _0000.jpg)"
-    "$FFMPEG" -loglevel error -y -framerate 30 -i "file:$OUT/frames/${scene}_%04d.jpg" -c:v libvpx -b:v 1500k "file:$OUT/video/$scene.webm"
-    "$FFMPEG" -loglevel error -y -i "file:$OUT/frames/${scene}_%04d.jpg" -vf "select=not(mod(n\,12)),scale=320:-1,tile=4x3" -frames:v 1 "file:$OUT/sheets/$scene.jpg"
-    echo "VISUAL_SCENE scene=$scene frames=$(ls "$OUT"/frames/"${scene}"_*.jpg | wc -l)"
-  done
-fi
+# Prancha por cena (Godot, sem dependência) e vídeo WebM se houver ffmpeg.
+mkdir -p "$OUT/video" "$OUT/sheets"
+for first in "$OUT"/frames/*_0000.jpg; do
+  scene="$(basename "$first" _0000.jpg)"
+  "$GODOT_BIN" --headless --path "$ROOT" --script tests/visual_contact_sheet.gd -- "$OUT/frames" "$scene" "$OUT/sheets/$scene.png" | grep CONTACT_SHEET
+  if [[ -n "$FFMPEG" ]]; then
+    # Quadros concatenados num fluxo MJPEG (image2pipe): funciona também em
+    # builds mínimos do ffmpeg, sem o demuxer de sequência de imagens.
+    cat "$OUT"/frames/"${scene}"_*.jpg >"$OUT/video/$scene.mjpeg"
+    "$FFMPEG" -loglevel error -y -framerate 15 -f image2pipe -c:v mjpeg -i "file:$OUT/video/$scene.mjpeg" \
+      -c:v libvpx -b:v 1500k "file:$OUT/video/$scene.webm"
+    rm -f "$OUT/video/$scene.mjpeg"
+  fi
+done
 echo "CAMPAIGN_VISUAL_SESSION_OK profile=$PROFILE seed=$SEED sha=$SHA out=$OUT"

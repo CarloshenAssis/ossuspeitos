@@ -198,15 +198,18 @@ func _plan_round_one() -> void:
 	_add("obstructed", _recorded(_wall_step(shooter_peer, spectator_a), [[shooter_peer, "wall", 3.0]]))
 	_add("eliminate_first", _recorded(_fire_step(shooter_peer, spectator_a, 2, 0, true), [[shooter_peer, "kill", 4.0], [spectator_a, "death", 4.0]]))
 	_add("spectator_first", {"run": func(): _request_state(spectator_a, "spectator"), "done": func(): return reports.has(spectator_a), "check": func(): return _check_spectator(spectator_a)})
-	_visual("spectator_view", 5.0, func():
-		_rec(spectator_a, "spectator", 5.0, shooter_peer)
+	# O espectador segue o ator (câmera em primeira pessoa dele) numa volta
+	# pela porta leste do Salão, com espaço livre à frente.
+	_visual("spectator_view", 6.0, func():
+		app.authoritative_world.teleport(shooter_peer, Vector3(10.4, 1.0, 13.3), -PI * 0.5, 0.0)
+		_rec(spectator_a, "spectator", 6.0, shooter_peer)
 		var script: Array = []
 		for i in 20: script.append({})
-		for i in 60: script.append({"move": Vector2(0, -1)})
-		for i in 20: script.append({"look": Vector2(0.04, 0.0)})
-		for i in 60: script.append({"move": Vector2(0, -1)})
+		for i in 80: script.append({"move": Vector2(0, -1), "look": Vector2(0.01, 0.0)})
+		for i in 30: script.append({})
+		for i in 60: script.append({"move": Vector2(1, 0)})
 		for i in 40: script.append({})
-		_send_script(shooter_peer, "SCRIPT", script))
+		get_tree().create_timer(0.8).timeout.connect(func(): _send_script(shooter_peer, "SCRIPT", script)))
 	_add("dead_actions_blocked", {"run": func():
 		campaign_results.clear()
 		sync_campaign_dead_probe.rpc_id(spectator_a)
