@@ -653,7 +653,10 @@ func _test_client_meshes_match_official_blockers() -> void:
 	var view := _client_view
 	var drawn := {}
 	for item in view.art.items:
-		if str(item["kind"]) == "blocker":
+		# Paredes, vergas e tetos são desenhados como a própria caixa (`blocker`);
+		# móveis registram o volume (`volume`) e são compostos por peças que o
+		# preenchem exatamente, conferidas em `mansion_art_test`.
+		if str(item["kind"]) in ["blocker", "volume"]:
 			_expect(not drawn.has(str(item["id"])), "official blocker %s is drawn once" % item["id"])
 			drawn[str(item["id"])] = item["aabb"]
 	for blocker in ArenaRules.BLOCKERS:
