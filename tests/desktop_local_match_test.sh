@@ -53,7 +53,9 @@ assert_grep() { local n=$1 p=$2; shift 2; grep -qE -- "$p" "$@" && ok "$n" || { 
 assert_no_grep() { local n=$1 p=$2; shift 2; if grep -qE -- "$p" "$@"; then echo "ASSERT_FAILED name=$n forbidden=$p" >&2; return 1; else ok "$n"; fi; }
 assert_equal() { [[ "$2" == "$3" ]] && ok "$1" || { echo "ASSERT_FAILED name=$1 expected=$3 actual=$2" >&2; return 1; }; }
 wait_marker() { local p=$1 f=$2 pid=$3; for _ in {1..900}; do grep -qE -- "$p" "$f" 2>/dev/null && return 0; kill -0 "$pid" 2>/dev/null || { grep -qE -- "$p" "$f" 2>/dev/null && return 0; return 1; }; sleep 0.05; done; return 1; }
-run_menu() { local name=$1; shift; "$GAME_BIN" --headless "${PATH_ARGS[@]}" -- --mode=menu --menu-exit-on-return=true "$@" >"$TMP_DIR/$name.log" 2>&1; }
+# Cada processo com preferências próprias: o nome salvo de um não vira o
+# nome padrão de outro (várias janelas no mesmo PC).
+run_menu() { local name=$1; shift; "$GAME_BIN" --headless "${PATH_ARGS[@]}" -- --mode=menu --menu-exit-on-return=true --menu-settings-path="$TMP_DIR/settings-$name.cfg" "$@" >"$TMP_DIR/$name.log" 2>&1; }
 # Sem subshell: `wait` só enxerga filhos do shell atual.
 wait_status() { if wait "$1"; then LAST_STATUS=0; else LAST_STATUS=$?; fi; }
 
@@ -77,7 +79,7 @@ assert_grep no-server-connection-failed 'CLIENT_CONNECTION_FAILED|CLIENT_TIMEOUT
 assert_grep no-server-back-to-menu 'MENU_RETURNED reason=(connection_failed|timeout)' "$TMP_DIR/no-server.log"
 
 # --- 3b. Volta real ao menu (recarga da cena) com a mensagem de erro ---------
-"$GAME_BIN" --headless "${PATH_ARGS[@]}" -- --mode=menu --menu-auto=join --menu-address=127.0.0.1 \
+"$GAME_BIN" --headless "${PATH_ARGS[@]}" -- --mode=menu --menu-settings-path="$TMP_DIR/settings-reload.cfg" --menu-auto=join --menu-address=127.0.0.1 \
   --menu-port="$PORT" --menu-quit-after-reload=true >"$TMP_DIR/reload.log" 2>&1 && status=0 || status=$?
 assert_equal reload-exit "$status" 0
 assert_grep reload-returned 'MENU_RETURNED reason=connection_failed' "$TMP_DIR/reload.log"

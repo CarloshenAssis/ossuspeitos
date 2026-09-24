@@ -159,22 +159,11 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+	elif event.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _ensure_input_actions() -> void:
-	var bindings := {
-		"move_forward": KEY_W,
-		"move_backward": KEY_S,
-		"move_left": KEY_A,
-		"move_right": KEY_D,
-	}
-	for action in bindings:
-		if not InputMap.has_action(action):
-			InputMap.add_action(action)
-		var event := InputEventKey.new()
-		event.physical_keycode = bindings[action]
-		InputMap.action_add_event(action, event)
+	GameControls.ensure()
 
 ## Estados oficiais de um snapshot. `tick` é o tick do servidor; sem ele
 ## (demo offline, testes) vale a chegada no relógio local. Aqui só entram

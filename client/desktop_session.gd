@@ -23,7 +23,14 @@ static var hosted_lan := false
 static var hosted_status_path := ""
 static var hosted_log_path := ""
 static var pending_message := ""
+## Tipo do resultado mostrado ao voltar ao menu: "failure" (falha
+## recuperável), "info" (fim normal, saída) ou "cancelled".
+static var pending_kind := ""
+## Último pedido do menu (em memória, só nesta execução): refaz a tentativa.
+static var last_request: Dictionary = {}
 static var auto_action_consumed := false
+static var after_return_consumed := false
+static var returns := 0
 
 # --- Validação ----------------------------------------------------------------
 
@@ -31,10 +38,10 @@ static func default_player_name() -> String:
 	return "jogador-%04d" % (OS.get_process_id() % 10000)
 
 ## "" quando válido, senão a mensagem mostrada ao jogador.
+## Mesma regra do servidor (`RoundRules.label_problem`), com a mensagem do menu.
 static func validate_name(raw_name: String) -> String:
-	if not RoundRules.validate_label(raw_name).is_empty():
-		return "Nome inválido: use de 1 a %d letras, números, - ou _." % RoundRules.MAX_LABEL_LENGTH
-	return ""
+	var problem := RoundRules.label_problem(raw_name)
+	return "" if problem.is_empty() else DesktopMenu.name_message(problem)
 
 static func parse_port(raw_port: String) -> int:
 	var clean := raw_port.strip_edges()

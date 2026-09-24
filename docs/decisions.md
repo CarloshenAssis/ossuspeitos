@@ -834,3 +834,41 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
 - Testes: adversos `protocol_mismatch` (menu 9 contra servidor 10 e menu 10
   contra servidor 9) e `protocol_bodies` (cliente 9 tentando entrar numa
   rodada com corpos: recusado, sem entrada parcial, nenhum corpo recebido).
+
+## Fase 7 — menu principal e fluxo de conexão
+
+- O menu (`client/desktop_menu.gd`) só apresenta e valida o que o jogador
+  digita. Quem inicia o servidor local e conecta é a `NetworkApp` com
+  `DesktopSession`. A arena e o HUD só são criados depois de `join_accepted`.
+- Estados explícitos em `client/menu_flow.gd` (`MenuFlow`): ocioso,
+  validando, iniciando servidor, conectando, aguardando resposta, conectado,
+  cancelando, falha recuperável, desconectado, encerrando.
+  - Cada tentativa tem um id; evento de tentativa anterior é ignorado.
+  - Botões ficam desativados enquanto há tentativa, então o clique duplo não
+    abre duas conexões nem dois servidores.
+- Voltar ao menu continua sendo a recarga da cena. O resultado da tentativa
+  sobrevive em `DesktopSession` e define a mensagem:
+  - saída voluntária ou encerramento coordenado: aviso neutro;
+  - cancelamento: nenhum aviso;
+  - o resto: erro com TENTAR NOVAMENTE.
+- Nome: até 20 caracteres; letras (com acentos), dígitos, espaço, `-` e `_`;
+  sem espaço duplo, controle ou quebra de linha (`RoundRules.label_problem`).
+  - O servidor valida de novo.
+  - Nome repetido é recusado com motivo próprio (`name_taken`), separado de
+    sala cheia (`room_unavailable`).
+  - O nome não é identidade.
+- Preferências em `user://settings.cfg` (`MenuSettings`):
+  - campos: último nome válido, volume, sensibilidade, tela cheia, janela,
+    reduzir movimento;
+  - endereço, porta e URL não são salvos;
+  - a tela salva é aplicada uma vez ao abrir o jogo.
+- Controles: `shared/game_controls.gd` é a fonte única.
+  - Registra as ações no InputMap.
+  - "Como jogar" lê as teclas do próprio InputMap.
+- URL online centralizada em `OnlineEndpoint`; ver `docs/online-endpoint.md`.
+- Visual feito só com Godot: StyleBox, desenho vetorial e gradientes. Não há
+  imagem nem fonte externa; o título usa `SystemFont` serifada, com fallback
+  para a fonte padrão.
+  - Sons do menu são sintetizados (`SfxBank`), no máximo um por quadro, e
+    nunca em headless.
+  - "Reduzir movimento" desliga a oscilação da luz e a animação do indicador.

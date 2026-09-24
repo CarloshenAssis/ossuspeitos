@@ -95,6 +95,11 @@ var hosting_deadline_msec := 0
 var pending_player_name := ""
 var returning_to_menu := false
 var leave_trigger := ""
+## Tentativa corrente do menu (fase 7): eventos de rede de outra tentativa
+## são ignorados pelo `MenuFlow`.
+var menu_attempt := 0
+## Sensibilidade efetiva do mouse (base × preferência salva no menu).
+var mouse_sensitivity := MOUSE_SENSITIVITY
 ## Servidor hospedado pelo menu: grava prontidão num arquivo e se encerra sozinho
 ## quando fica vazio, para nunca sobrar processo órfão.
 var status_file_path := ""
@@ -103,6 +108,7 @@ var hosted_empty_since_msec := 0
 const HOSTED_IDLE_EXIT_MSEC := 20000
 
 func _ready() -> void:
+	GameControls.ensure()
 	arguments = NetworkConfig.user_arguments()
 	mode = str(arguments.get("mode", ""))
 	if mode.is_empty() and OS.has_feature("visual_demo"):
@@ -202,14 +208,20 @@ func start_client() -> void:
 	peer = _wrap_test_net_delay(peer)
 	multiplayer.multiplayer_peer = peer
 	net_stats_interval_msec = NetworkConfig.integer_argument(arguments, "net-stats", 0)
-	if DisplayServer.get_name() != "headless":
+	# Pelo menu (fase 7), a mansão só é montada depois da entrada aceita; o
+	# menu continua na tela mostrando o estado da conexão.
+	if not interactive_session:
+		_create_client_presentation()
+	print("CLIENT_CONNECTING id=%s url=%s" % [client_label, url])
+
+func _create_client_presentation() -> void:
+	if DisplayServer.get_name() != "headless" and arena_view == null:
 		arena_view = ArenaView.new()
 		arena_view.local_view_provider = _local_presented
 		add_child(arena_view)
 		_start_round_hud()
 	print("CLIENT_UI id=%s hud=%s arena=%s display=%s" % [
 		client_label, str(round_hud != null), str(arena_view != null), DisplayServer.get_name()])
-	print("CLIENT_CONNECTING id=%s url=%s" % [client_label, url])
 
 ## O HUD só existe no cliente gráfico. A cena nem é carregada no headless,
 ## portanto o servidor nunca instancia interface.
@@ -291,7 +303,7 @@ func _process(_delta: float) -> void:
 	# O prazo é de conexão: depois do encerramento combinado com o servidor
 	# (`joined` volta a falso ao desconectar), ele não se aplica mais.
 	if not joined and not returning_to_menu and not shutdown_prepare_received \
-			and Time.get_ticks_msec() - started_at_msec > int(NetworkConfig.CONNECT_TIMEOUT_SECONDS * 1000.0):
+			and Time.get_ticks_msec() - started_at_msec > _connect_timeout_msec():
 		if interactive_session:
 			print("CLIENT_TIMEOUT id=%s" % client_label)
 			_return_to_menu("Tempo esgotado ao conectar em %s." % str(arguments.get("url", "")), "timeout")
@@ -300,6 +312,27 @@ func _process(_delta: float) -> void:
 	if net_stats_interval_msec > 0 and joined and Time.get_ticks_msec() - net_stats_last_msec >= net_stats_interval_msec:
 		net_stats_last_msec = Time.get_ticks_msec()
 		print("NET_STATS id=%s %s" % [client_label, net_stats.summary(prediction, arena_view.interpolator if arena_view != null else null)])
+
+## Teste (binário de desenvolvimento): encerramento coordenado N ms depois da
+## primeira entrada, para provar que o fim combinado não vira mensagem de erro.
+var _test_shutdown_from_msec := 0
+func _maybe_test_shutdown(now_msec: int) -> void:
+	if shutting_down or not arguments.has("test-shutdown-after-msec") or not OS.is_debug_build() or OS.has_feature("template"):
+		return
+	if lobby.is_empty():
+		return
+	if _test_shutdown_from_msec == 0:
+		_test_shutdown_from_msec = now_msec
+	if now_msec - _test_shutdown_from_msec >= NetworkConfig.integer_argument(arguments, "test-shutdown-after-msec", 0):
+		print("SERVER_TEST_SHUTDOWN lobby=%d" % lobby.size())
+		_begin_server_shutdown(lobby.peer_ids())
+
+## Prazo de conexão; um binário de desenvolvimento pode encurtá-lo nos testes.
+func _connect_timeout_msec() -> int:
+	var seconds := NetworkConfig.CONNECT_TIMEOUT_SECONDS
+	if arguments.has("test-connect-timeout-seconds") and OS.is_debug_build() and not OS.has_feature("template"):
+		seconds = clampf(float(str(arguments["test-connect-timeout-seconds"])), 0.5, 60.0)
+	return int(seconds * 1000.0)
 
 func _physics_process(_delta: float) -> void:
 	if mode == "client":
@@ -311,6 +344,7 @@ func _physics_process(_delta: float) -> void:
 	if hosted_server:
 		_check_hosted_idle(now_msec)
 	server_tick += 1
+	_maybe_test_shutdown(now_msec)
 	authoritative_world.step(_command_gate, _run_command_action, _on_command_rejected)
 	if combat_authority != null:
 		combat_authority.tick(now_msec)
@@ -332,7 +366,7 @@ func _broadcast_snapshot() -> void:
 			"players": players, "ack": authoritative_world.ack_for(int(peer_id))})
 
 func _unhandled_input(event: InputEvent) -> void:
-	if interactive_session and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F10:
+	if interactive_session and event.is_action_pressed("leave_match"):
 		_return_to_menu("Você saiu da partida.", "left")
 		return
 	if mode == "client" and event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED \
@@ -340,21 +374,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		# Mouse para a direita reduz o yaw; para cima (relative.y < 0) olha para
 		# cima. O delta é consumido uma vez: a câmera o mostra no próximo quadro
 		# e o próximo comando o leva (limitado como no servidor).
-		prediction.add_look(-event.relative.x * MOUSE_SENSITIVITY, -event.relative.y * MOUSE_SENSITIVITY, Time.get_ticks_usec())
+		prediction.add_look(-event.relative.x * mouse_sensitivity, -event.relative.y * mouse_sensitivity, Time.get_ticks_usec())
 	if mode != "client" or not joined or shutdown_prepare_received or arena_view == null:
 		return
 	if not _client_can_gameplay():
-		if event is InputEventKey and event.pressed and not event.echo:
-			if event.keycode == KEY_Q: _cycle_spectator(-1)
-			elif event.keycode == KEY_E: _cycle_spectator(1)
+		if event.is_action_pressed("spectate_previous"): _cycle_spectator(-1)
+		elif event.is_action_pressed("spectate_next"): _cycle_spectator(1)
 		return
 	if not _commands_enabled():
 		return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+	if event.is_action_pressed("fire"):
 		_queue_local_action(NetSync.ACTION_FIRE)
-	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_R:
+	elif event.is_action_pressed("reload"):
 		_queue_local_action(NetSync.ACTION_RELOAD)
-	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
+	elif event.is_action_pressed("interact"):
 		var pickup_id: String = arena_view.nearest_available_pickup()
 		if not pickup_id.is_empty():
 			_queue_local_action(NetSync.ACTION_PICKUP, pickup_id)
@@ -394,6 +427,8 @@ func _on_peer_disconnected(peer_id: int) -> void:
 
 func _on_connected_to_server() -> void:
 	client_connected = true
+	if interactive_session and desktop_menu != null:
+		desktop_menu.enter(MenuFlow.State.AWAITING_RESPONSE, "", menu_attempt)
 	print("CLIENT_CONNECTED id=%s peer_id=%d" % [client_label, multiplayer.get_unique_id()])
 	# Teste de incompatibilidade: um binário de desenvolvimento pode se
 	# anunciar com outra versão; a build exportada sempre usa a própria.
@@ -479,9 +514,19 @@ func _refuse_join(sender: int, reason: String) -> void:
 @rpc("authority", "call_remote", "reliable")
 func join_accepted(peer_id: int) -> void:
 	joined = true
+	if interactive_session and desktop_menu != null:
+		desktop_menu.enter(MenuFlow.State.CONNECTED, "", menu_attempt)
+		desktop_menu.queue_free()
+		desktop_menu = null
+		_create_client_presentation()
+		_show_session_label(str(arguments.get("url", "")))
 	if arena_view != null:
 		arena_view.local_peer_id = peer_id
 	print("JOIN_ACCEPTED id=%s peer_id=%d" % [client_label, peer_id])
+	var leave_after := NetworkConfig.integer_argument(arguments, "menu-leave-after-msec", 0)
+	if interactive_session and leave_after > 0:
+		get_tree().create_timer(float(leave_after) / 1000.0).timeout.connect(func():
+			if not returning_to_menu: _return_to_menu("Você saiu da partida.", "left"))
 	if interactive_session and leave_trigger == "joined":
 		call_deferred("_return_to_menu", "Você saiu da partida.", "left")
 
@@ -491,7 +536,8 @@ func join_rejected(reason: String) -> void:
 		print("JOIN_REJECTED id=%s reason=%s" % [client_label, reason])
 		var messages := {
 			"protocol_version": "Versão incompatível do jogo (este build usa o protocolo %d). Use o mesmo build do anfitrião." % NetworkConfig.effective_protocol_version(arguments),
-			"room_unavailable": "Sala cheia, em andamento com 8 jogadores ou nome já usado. Tente outro nome.",
+			"room_unavailable": "A sala está cheia (8 jogadores). Tente mais tarde ou crie outra partida.",
+			"name_taken": "Já existe alguém com esse nome nesta sala. Escolha outro nome.",
 			"invalid_client": "Nome recusado pelo servidor.",
 		}
 		var message := str(messages.get(reason, "Entrada recusada pelo servidor."))
@@ -1585,21 +1631,35 @@ func _safe_combat_reason(raw_reason: Variant) -> String:
 # Nenhum caminho daqui instancia RoundAuthority, CombatAuthority ou o mundo.
 
 func start_menu() -> void:
+	# Testes (e várias janelas no mesmo PC) podem isolar as preferências.
+	MenuSettings.path_override = str(arguments.get("menu-settings-path", ""))
 	desktop_menu = DesktopMenu.new()
+	desktop_menu.arguments = arguments
 	add_child(desktop_menu)
 	desktop_menu.host_requested.connect(_on_menu_host)
 	desktop_menu.join_requested.connect(_on_menu_join)
+	desktop_menu.online_requested.connect(_on_menu_online)
+	desktop_menu.cancel_requested.connect(_on_menu_cancel)
 	desktop_menu.quit_requested.connect(_on_menu_quit)
+	desktop_menu.settings_changed.connect(_apply_menu_settings)
 	desktop_menu.input_rejected.connect(func(_field): _exit_if_menu_test())
-	if not DesktopSession.pending_message.is_empty():
-		print("MENU_SHOWING_MESSAGE after_return=true hosting=%s" % str(DesktopSession.is_hosting()))
-		desktop_menu.set_status(DesktopSession.pending_message, true)
+	_apply_menu_settings(desktop_menu.settings)
+	if not DesktopSession.pending_message.is_empty() or not DesktopSession.pending_kind.is_empty():
+		print("MENU_SHOWING_MESSAGE after_return=true hosting=%s kind=%s" % [str(DesktopSession.is_hosting()), DesktopSession.pending_kind])
+		desktop_menu.restore_after_return(DesktopSession.last_request, DesktopSession.pending_kind, DesktopSession.pending_message)
 		DesktopSession.pending_message = ""
+		DesktopSession.pending_kind = ""
 		if NetworkConfig.bool_argument(arguments, "menu-quit-after-reload"):
 			desktop_menu.call_deferred("emit_signal", "quit_requested")
 			return
-	# Automação para testes e atalhos: preenche os campos e aciona o mesmo
-	# handler dos botões. Só uma vez por processo, nunca após voltar ao menu.
+		var after := str(arguments.get("menu-after-return", ""))
+		if not after.is_empty() and not DesktopSession.after_return_consumed:
+			DesktopSession.after_return_consumed = true
+			var delay := float(NetworkConfig.integer_argument(arguments, "menu-after-return-delay-msec", 0)) / 1000.0
+			get_tree().create_timer(delay).timeout.connect(_run_menu_automation.bind(after))
+		return
+	# Automação para testes e atalhos: preenche os campos e aciona os botões
+	# reais do menu (os mesmos de um clique). Só uma vez por processo.
 	var auto := str(arguments.get("menu-auto", ""))
 	if auto.is_empty() or DesktopSession.auto_action_consumed:
 		return
@@ -1607,33 +1667,77 @@ func start_menu() -> void:
 	desktop_menu.fill(str(arguments.get("menu-name", "")), str(arguments.get("menu-port", "")),
 		NetworkConfig.bool_argument(arguments, "menu-lan"), str(arguments.get("menu-address", "")),
 		str(arguments.get("menu-port", "")))
-	match auto:
-		"host": desktop_menu.call_deferred("_on_host_pressed")
-		"join": desktop_menu.call_deferred("_on_join_pressed")
-		# Clique duplo: dois acionamentos no mesmo quadro, antes da troca de cena.
-		"join-twice":
-			desktop_menu.call_deferred("_on_join_pressed")
-			desktop_menu.call_deferred("_on_join_pressed")
-		"host-twice":
-			desktop_menu.call_deferred("_on_host_pressed")
-			desktop_menu.call_deferred("_on_host_pressed")
-		"quit": desktop_menu.call_deferred("emit_signal", "quit_requested")
+	call_deferred("_run_menu_automation", auto)
 
-func _on_menu_host(player_name: String, port: int, lan: bool) -> void:
+## Sequências de automação: navegam pelos botões visíveis do menu.
+func _run_menu_automation(auto: String) -> void:
+	if desktop_menu == null:
+		return
+	print("MENU_AUTOMATION action=%s" % auto)
+	match auto:
+		"host":
+			_menu_open("host")
+			desktop_menu.press("host_create")
+		"join", "retry-join":
+			_menu_open("join")
+			desktop_menu.press("join_enter")
+		# Clique duplo: dois acionamentos no mesmo quadro.
+		"join-twice":
+			_menu_open("join")
+			desktop_menu.press("join_enter")
+			desktop_menu.press("join_enter")
+		"host-twice":
+			_menu_open("host")
+			desktop_menu.press("host_create")
+			desktop_menu.press("host_create")
+		"online":
+			_menu_open("online")
+			if not desktop_menu.press("online_connect"):
+				print("MENU_ONLINE_UNAVAILABLE reason=%s" % desktop_menu.online["reason"])
+				if NetworkConfig.bool_argument(arguments, "menu-exit-on-return"):
+					get_tree().quit(0)
+		"cancel-join":
+			_menu_open("join")
+			desktop_menu.press("join_enter")
+			var delay := float(NetworkConfig.integer_argument(arguments, "menu-cancel-after-msec", 300)) / 1000.0
+			get_tree().create_timer(delay).timeout.connect(func():
+				if desktop_menu != null: desktop_menu.press("cancel"))
+		"cancel-host":
+			desktop_menu.press("host")
+			desktop_menu.press("host_create")
+			desktop_menu.call_deferred("press", "cancel")
+		"retry":
+			desktop_menu.press("retry")
+		"quit":
+			desktop_menu.press("quit")
+
+## Como o jogador: fecha o aviso da volta ao menu (VOLTAR) e abre o painel,
+## se ainda não estiver nele.
+func _menu_open(panel_id: String) -> void:
+	if desktop_menu.status_box.visible:
+		desktop_menu.press("status_back")
+	if desktop_menu.panel_name != panel_id:
+		desktop_menu.press(panel_id)
+
+func _apply_menu_settings(settings: MenuSettings) -> void:
+	mouse_sensitivity = MOUSE_SENSITIVITY * MenuSettings.clamp_sensitivity(settings.sensitivity)
+	print("MENU_SETTINGS_APPLIED volume=%.2f sensitivity=%.2f" % [settings.volume, settings.sensitivity])
+
+func _on_menu_host(player_name: String, port: int, lan: bool, attempt: int = 0) -> void:
 	if hosting_pending or interactive_session:
 		print("MENU_DUPLICATE_IGNORED action=host")
 		return
+	menu_attempt = attempt
 	var error := DesktopSession.start_hosted_server(port, lan)
 	if not error.is_empty():
 		print("MENU_HOST_ERROR reason=%s port=%d" % [error, port])
-		desktop_menu.set_status(DesktopSession.error_message(error, port), true)
+		desktop_menu.fail(DesktopSession.error_message(error, port), attempt)
 		_exit_if_menu_test()
 		return
 	hosting_pending = true
 	hosting_deadline_msec = Time.get_ticks_msec() + DesktopSession.SERVER_READY_TIMEOUT_MSEC
 	pending_player_name = player_name
-	desktop_menu.set_busy(true)
-	desktop_menu.set_status("Iniciando servidor local na porta %d…" % port)
+	desktop_menu.enter(MenuFlow.State.STARTING_SERVER, "Abrindo a mansão na porta %d…" % port, attempt)
 
 func _poll_hosting() -> void:
 	if not hosting_pending:
@@ -1648,20 +1752,51 @@ func _poll_hosting() -> void:
 	if status != DesktopSession.STATUS_READY:
 		DesktopSession.stop_hosted_server(status)
 		print("MENU_HOST_ERROR reason=%s port=%d" % [status, port])
-		desktop_menu.set_busy(false)
-		desktop_menu.set_status(DesktopSession.error_message(status, port), true)
+		desktop_menu.fail(DesktopSession.error_message(status, port), menu_attempt)
 		_exit_if_menu_test()
 		return
 	print("MENU_HOST_READY port=%d lan=%s" % [port, str(DesktopSession.hosted_lan)])
+	desktop_menu.enter(MenuFlow.State.CONNECTING, "", menu_attempt)
 	_start_interactive_client(pending_player_name, DesktopSession.url_for(DesktopSession.LOOPBACK_ADDRESS, port))
 
-func _on_menu_join(player_name: String, address: String, port: int) -> void:
-	# Clique duplo em "Entrar": o segundo acionamento chega antes de o menu
-	# sumir e abriria outra conexão com os sinais ligados duas vezes.
+func _on_menu_join(player_name: String, address: String, port: int, attempt: int = 0) -> void:
+	# Clique duplo em "Entrar": o menu já bloqueia o segundo; esta guarda
+	# continua valendo para qualquer outro caminho.
 	if hosting_pending or interactive_session:
 		print("MENU_DUPLICATE_IGNORED action=join")
 		return
+	menu_attempt = attempt
+	desktop_menu.enter(MenuFlow.State.CONNECTING, "Conectando a %s:%d…" % [address, port], attempt)
 	_start_interactive_client(player_name, DesktopSession.url_for(address, port))
+
+func _on_menu_online(player_name: String, url: String, attempt: int = 0) -> void:
+	if hosting_pending or interactive_session:
+		print("MENU_DUPLICATE_IGNORED action=online")
+		return
+	menu_attempt = attempt
+	desktop_menu.enter(MenuFlow.State.CONNECTING, "Conectando ao servidor online…", attempt)
+	_start_interactive_client(player_name, url)
+
+## Cancelar: antes do servidor local ficar pronto, só o encerra; conectando,
+## fecha a conexão e volta ao mesmo painel, sem mensagem de erro.
+func _on_menu_cancel(attempt: int) -> void:
+	if attempt != menu_attempt:
+		print("MENU_STALE_EVENT_IGNORED state=cancel attempt=%d current=%d" % [attempt, menu_attempt])
+		return
+	if hosting_pending:
+		hosting_pending = false
+		desktop_menu.enter(MenuFlow.State.CANCELLING, "", attempt)
+		DesktopSession.stop_hosted_server("cancelled")
+		desktop_menu.enter(MenuFlow.State.IDLE, "", attempt)
+		print("MENU_CANCELLED stage=starting_server")
+		if NetworkConfig.bool_argument(arguments, "menu-exit-on-return"):
+			print("MENU_RETURNED reason=cancelled")
+			get_tree().quit(0)
+		return
+	if interactive_session and not joined:
+		desktop_menu.enter(MenuFlow.State.CANCELLING, "", attempt)
+		print("MENU_CANCELLED stage=connecting")
+		_return_to_menu("", "cancelled")
 
 func _on_menu_quit() -> void:
 	print("MENU_QUIT")
@@ -1669,9 +1804,6 @@ func _on_menu_quit() -> void:
 	get_tree().quit(0)
 
 func _start_interactive_client(player_name: String, url: String) -> void:
-	if desktop_menu != null:
-		desktop_menu.queue_free()
-		desktop_menu = null
 	interactive_session = true
 	leave_trigger = str(arguments.get("menu-leave-on", ""))
 	arguments["client-id"] = player_name
@@ -1679,7 +1811,6 @@ func _start_interactive_client(player_name: String, url: String) -> void:
 	mode = "client"
 	print("MENU_CONNECTING id=%s url=%s" % [player_name, url])
 	start_client()
-	_show_session_label(url)
 
 func _show_session_label(url: String) -> void:
 	if DisplayServer.get_name() == "headless" or round_hud == null:
@@ -1687,7 +1818,7 @@ func _show_session_label(url: String) -> void:
 	# Endereço da sala e atalhos ficam no painel de estado do HUD (canto
 	# superior direito), longe do centro e dos painéis de vida e arma.
 	var where := DesktopSession.hosted_address_text() if DesktopSession.is_hosting() else "Conectado a %s" % url.trim_prefix("ws://")
-	round_hud.call("set_session_info", "%s\nEsc: soltar mouse · F10: sair para o menu" % where)
+	round_hud.call("set_session_info", "%s\n%s: soltar mouse · %s: sair para o menu" % [where, GameControls.action_text("release_mouse"), GameControls.action_text("leave_match")])
 
 ## Volta ao menu com uma mensagem. Fecha a conexão, encerra o servidor que este
 ## processo hospeda (se houver) e recarrega a cena limpa.
@@ -1697,8 +1828,18 @@ func _return_to_menu(message: String, reason: String) -> void:
 	returning_to_menu = true
 	print("MENU_RETURNED reason=%s" % reason)
 	DesktopSession.pending_message = message
+	DesktopSession.pending_kind = _return_kind(reason)
 	# Fora do callback de rede que disparou a volta (desconexão, falha, recusa).
 	call_deferred("_finish_return_to_menu", reason)
+
+## Como o menu mostra a volta: cancelamento (sem aviso), aviso neutro (saída
+## voluntária, fim combinado com o servidor) ou falha recuperável.
+func _return_kind(reason: String) -> String:
+	if reason == "cancelled":
+		return "cancelled"
+	if reason == "left" or (reason == "server_disconnected" and shutdown_prepare_received):
+		return "info"
+	return "failure"
 
 func _finish_return_to_menu(reason: String) -> void:
 	if multiplayer.multiplayer_peer != null:
@@ -1706,6 +1847,13 @@ func _finish_return_to_menu(reason: String) -> void:
 	DesktopSession.stop_hosted_server(reason)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if NetworkConfig.bool_argument(arguments, "menu-exit-on-return"):
+		get_tree().quit(0)
+		return
+	# Testes: encerra o processo na N-ésima volta ao menu.
+	DesktopSession.returns += 1
+	var exit_after := NetworkConfig.integer_argument(arguments, "menu-exit-after-returns", 0)
+	if exit_after > 0 and DesktopSession.returns >= exit_after:
+		print("MENU_EXIT_AFTER_RETURNS returns=%d" % DesktopSession.returns)
 		get_tree().quit(0)
 		return
 	multiplayer.multiplayer_peer = null

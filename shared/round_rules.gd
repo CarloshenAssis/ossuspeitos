@@ -11,7 +11,7 @@ const COUNTDOWN_SECONDS := 5.0
 const ROUND_END_DELAY_SECONDS := 5.0
 const MIN_COUNTDOWN_SECONDS := 0.5
 const MAX_COUNTDOWN_SECONDS := 120.0
-const MAX_LABEL_LENGTH := 32
+const MAX_LABEL_LENGTH := 20
 const MAX_CAUSE_LENGTH := 24
 const DEFAULT_CAUSE := "unknown"
 
@@ -44,12 +44,26 @@ static func sanitize_cause(cause: String) -> String:
 ## aceitável ou o motivo da recusa. O valor nunca é usado como identidade de
 ## rede: essa vem sempre de `multiplayer.get_remote_sender_id()`.
 static func validate_label(raw_label: String) -> String:
+	return "" if label_problem(raw_label).is_empty() else "invalid_client"
+
+## Nome de exibição (fase 7): letras (inclusive acentuadas do português),
+## números, espaço, hífen e sublinhado, de 1 a `MAX_LABEL_LENGTH` caracteres
+## depois de tirar os espaços das pontas. Sem caractere de controle, quebra de
+## linha ou espaços seguidos. É só exibição: identidade é o peer da conexão.
+## Devolve "" ou o motivo: "empty", "too_long", "characters", "spaces".
+static func label_problem(raw_label: String) -> String:
 	var clean := raw_label.strip_edges()
-	if clean.is_empty() or clean.length() > MAX_LABEL_LENGTH:
-		return "invalid_client"
-	if not clean.replace("-", "_").is_valid_identifier():
-		return "invalid_client"
+	if clean.is_empty():
+		return "empty"
+	if clean.length() > MAX_LABEL_LENGTH:
+		return "too_long"
+	if _label_pattern.search(clean) == null:
+		return "characters"
+	if clean.contains("  "):
+		return "spaces"
 	return ""
+
+static var _label_pattern := RegEx.create_from_string("^[0-9A-Za-zÀ-ÖØ-öø-ÿ _-]+$")
 
 static func sanitize_label(raw_label: String) -> String:
 	return raw_label.strip_edges()

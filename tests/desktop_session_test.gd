@@ -37,8 +37,11 @@ func _test_names() -> void:
 	_expect(DesktopSession.validate_name("jogador-0042").is_empty(), "default-style name is valid")
 	_expect(DesktopSession.validate_name(DesktopSession.default_player_name()).is_empty(), "generated default name is valid")
 	_expect(DesktopSession.validate_name("Ana_2").is_empty(), "letters, digits and underscore are valid")
-	for bad in ["", "   ", "com espaço", "ação", "a".repeat(RoundRules.MAX_LABEL_LENGTH + 1), "x;rm", "<b>"]:
-		_expect(not DesktopSession.validate_name(bad).is_empty(), "name '%s' is rejected" % bad)
+	# Fase 7: letras do português, espaço, hífen e sublinhado.
+	for good in ["com espaço", "ação", "João Ninguém", "  Ana  ", "Çé_2-x"]:
+		_expect(DesktopSession.validate_name(good).is_empty(), "name '%s' is valid" % good)
+	for bad in ["", "   ", "a".repeat(RoundRules.MAX_LABEL_LENGTH + 1), "x;rm", "<b>", "a\nb", "a\tb", "duas  vezes", "emoji 😀"]:
+		_expect(not DesktopSession.validate_name(bad).is_empty(), "name '%s' is rejected" % bad.c_escape())
 
 func _test_addresses() -> void:
 	for good in ["127.0.0.1", "192.168.0.10", "10.0.0.255", "localhost", "meu-pc", "meu-pc.lan"]:
@@ -89,29 +92,31 @@ func _test_stop_is_idempotent_without_server() -> void:
 	_expect(DesktopSession.hosted_pid == 0 and DesktopSession.hosted_status_path.is_empty(), "stopping twice without a server is harmless")
 
 func _test_menu_emits_only_valid_requests() -> void:
-	_menu.host_requested.connect(func(n, p, l): _emitted.append(["host", n, p, l]))
-	_menu.join_requested.connect(func(n, a, p): _emitted.append(["join", n, a, p]))
+	_menu.host_requested.connect(func(n, p, l, _a): _emitted.append(["host", n, p, l]))
+	_menu.join_requested.connect(func(n, a, p, _t): _emitted.append(["join", n, a, p]))
 	_menu.fill("ana", "9080", false, "999.1.1.1", "9080")
-	_menu._on_join_pressed()
+	_menu._submit_join()
 	_expect(_emitted.is_empty(), "invalid address never reaches the network layer")
 	_menu.fill("ana", "80", false, "127.0.0.1", "80")
-	_menu._on_host_pressed()
-	_menu._on_join_pressed()
+	_menu._submit_host()
+	_menu._submit_join()
 	_expect(_emitted.is_empty(), "invalid port never reaches the network layer")
-	_menu.fill("com espaço", "9080", false, "127.0.0.1", "9080")
-	_menu._on_host_pressed()
+	_menu.fill("com\ttab", "9080", false, "127.0.0.1", "9080")
+	_menu._submit_host()
 	_expect(_emitted.is_empty(), "invalid name never reaches the network layer")
 	_menu.fill("ana", "9090", true, "192.168.0.10", "9090")
-	_menu._on_host_pressed()
-	_menu._on_join_pressed()
+	_menu._submit_host()
+	# A tentativa do anfitrião termina (falha recuperável) antes da próxima.
+	_menu.fail("teste", _menu.flow.attempt)
+	_menu._submit_join()
 	_expect(_emitted.size() == 2, "valid host and join requests are emitted")
 	_expect(_emitted[0] == ["host", "ana", 9090, true], "host request carries name, port and explicit LAN choice")
-	_expect(_emitted[1] == ["join", "ana", "192.168.0.10", 9090], "join request carries name, address and port")
+	_expect(_emitted.size() == 2 and _emitted[1] == ["join", "ana", "192.168.0.10", 9090], "join request carries name, address and port")
 	_menu.fill("ana", "9080", false, "", "")
 	_expect(not _menu.lan_check.button_pressed, "LAN stays off unless chosen")
-	# O menu não cria nenhuma autoridade: só nós de interface.
+	# O menu não cria nenhuma autoridade: só nós de interface (e o som do menu).
 	for node in _menu.find_children("*", "", true, false):
-		_expect(node is Control, "menu node %s is presentation only" % node.name)
+		_expect(node is Control or node is AudioStreamPlayer, "menu node %s is presentation only" % node.name)
 
 func _expect(condition: bool, message: String) -> void:
 	checks += 1

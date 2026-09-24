@@ -11,7 +11,7 @@ const MIX_RATE := 22050
 const NOISE_SEED := 20260924
 
 const NAMES := ["shot", "dry_fire", "hit", "hurt", "pickup_ok", "pickup_deny",
-	"reload_start", "reload_end", "elimination"]
+	"reload_start", "reload_end", "elimination", "ui_move", "ui_confirm", "ui_error"]
 
 static var _cache: Dictionary = {}
 
@@ -56,6 +56,19 @@ static func _build_all() -> void:
 	_cache["elimination"] = _render(0.4, func(t: float) -> float:
 		var pitch := 420.0 - 240.0 * t / 0.4
 		return 0.22 * sin(TAU * pitch * t) * exp(-t * 6.0))
+	# Menu (fase 7): toques baixos e curtos, como madeira e metal da mansão.
+	# Navegar: batida de madeira bem discreta.
+	_cache["ui_move"] = _render(0.05, func(t: float) -> float:
+		return 0.08 * sin(TAU * 520.0 * t) * exp(-t * 90.0))
+	# Confirmar: duas notas graves e quentes.
+	_cache["ui_confirm"] = _render(0.18, func(t: float) -> float:
+		var freq := 392.0 if t < 0.07 else 523.0
+		var local := t if t < 0.07 else t - 0.07
+		return 0.12 * sin(TAU * freq * t) * exp(-local * 22.0))
+	# Erro: nota que desce, sem aspereza.
+	_cache["ui_error"] = _render(0.22, func(t: float) -> float:
+		var pitch := 300.0 - 90.0 * t / 0.22
+		return 0.12 * sin(TAU * pitch * t) * exp(-t * 12.0))
 
 static func _render(seconds: float, sample: Callable) -> AudioStreamWAV:
 	var count := int(seconds * MIX_RATE)
