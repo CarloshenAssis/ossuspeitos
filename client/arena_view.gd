@@ -65,6 +65,13 @@ const VIEWMODEL_SCALE := 0.8
 ## Giro lento dos pickups disponíveis (só visual; a posição oficial não muda).
 const PICKUP_SPIN_SPEED := 0.9
 var _visual_time := 0.0
+## Animadores de repouso/caminhada por jogador remoto (fase 3).
+var animators: Dictionary = {}
+## Liga/desliga a animação procedural (comparação de desempenho e testes).
+var character_animation := true
+## Distância a partir da qual o corpo remoto salta para a posição oficial em
+## vez de deslizar (reposicionamento), sem virar passada.
+const SNAP_DISTANCE := 2.5
 
 func _ready() -> void:
 	_ensure_input_actions()
@@ -178,6 +185,7 @@ func apply_snapshot(states: Array) -> void:
 			avatars[peer_id].queue_free()
 			avatars.erase(peer_id)
 			targets.erase(peer_id)
+			animators.erase(peer_id)
 
 func _place_rig(state: Dictionary) -> void:
 	player_rig.position = state["position"]
@@ -194,10 +202,20 @@ func _process(delta: float) -> void:
 			continue
 		var avatar: Node3D = avatars[peer_id]
 		var state: Dictionary = targets[peer_id]
-		avatar.position = avatar.position.lerp(state["position"], weight)
+		var official: Vector3 = state["position"]
+		var animator: CharacterAnimator = animators.get(peer_id)
+		# Reposicionamento (nova rodada, teleporte de teste, correção grande):
+		# salta direto, sem varrer o cenário nem contar como passada.
+		if avatar.position.distance_to(official) > SNAP_DISTANCE:
+			avatar.position = official
+			if animator != null:
+				animator.reset(official)
+		else:
+			avatar.position = avatar.position.lerp(official, weight)
 		avatar.rotation.y = lerp_angle(avatar.rotation.y, float(state["yaw"]), weight)
-		# Só a cabeça acompanha o pitch oficial; o corpo continua de pé.
-		var head := avatar.find_child(ArenaModels.HEAD_PIVOT, true, false) as Node3D
+		# Só a cabeça acompanha o pitch oficial; o corpo continua de pé. A
+		# referência vem do rig (sem busca de nó por quadro).
+		var head: Node3D = animator.rig.get("head") if animator != null and animator.is_valid() else avatar.find_child(ArenaModels.HEAD_PIVOT, true, false) as Node3D
 		if head != null:
 			head.rotation.x = lerpf(head.rotation.x, ArenaModels.head_rotation_for_pitch(state.get("pitch", 0.0)), weight)
 		# Em primeira pessoa como espectador, a câmera fica dentro do alvo:
@@ -205,6 +223,11 @@ func _process(delta: float) -> void:
 		var show_model: bool = peer_id != spectator_target_peer_id
 		for part in avatar.get_children():
 			(part as Node3D).visible = show_model
+		if animator != null:
+			if character_animation and show_model and avatar.visible:
+				animator.update(avatar.position, avatar.rotation.y, delta)
+			elif animator.amplitude > 0.0 or animator.speed > 0.0:
+				animator.rest()
 	_visual_time += delta
 	for pickup_id in pickup_nodes:
 		var spin := (pickup_nodes[pickup_id] as Node3D).get_node_or_null("Spin") as Node3D
@@ -321,6 +344,14 @@ func _create_avatar(peer_id: int, initial_position: Vector3) -> Node3D:
 	var avatar := ArenaModels.build_character(appearance_for(peer_id))
 	avatar.position = initial_position
 	add_child(avatar)
+	# Repouso e caminhada procedurais (fase 3), um animador por avatar. A
+	# defasagem da respiração é cosmética e deriva só do peer id.
+	var model := avatar.get_node_or_null(ArenaModels.CHARACTER_MODEL) as Node3D
+	if model != null:
+		var animator := CharacterAnimator.new(model, float(absi(peer_id) % 97) * 0.37)
+		if animator.is_valid():
+			animator.reset(initial_position)
+			animators[peer_id] = animator
 	return avatar
 
 func camera_origin() -> Vector3:
@@ -522,6 +553,9 @@ func set_player_alive(peer_id: int, alive: bool) -> void:
 	_alive_flags[peer_id] = alive
 	if avatars.has(peer_id):
 		(avatars[peer_id] as Node3D).visible = alive
+	# Eliminado: pose de repouso; ao voltar, nenhum deslocamento antigo conta.
+	if animators.has(peer_id):
+		(animators[peer_id] as CharacterAnimator).rest()
 
 ## Vivo/eliminado do roster oficial: quem caiu some e, na rodada seguinte,
 ## volta a aparecer quando o servidor o marca vivo de novo.

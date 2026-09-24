@@ -622,3 +622,49 @@ Detalhes, dimensões e checkpoint: `docs/mansion-plan.md`.
 - 5 texturas procedurais de até 64 px, geradas no projeto. Nada é baixado.
 - Mapeamento triplanar só nos pisos e no lambri. Com triplanar também nas
   paredes, o quadro custava cerca de 20% mais no renderizador por software.
+
+## Repouso e caminhada procedurais (fase 3)
+
+**Inspeção**
+- Os oito GLBs não têm ossos, skinning nem animação. Cada peça é uma malha
+  irmã com transformação identidade.
+- A geometria separa, nas oito variantes, coxa, canela, sapato, braço,
+  antebraço e mão.
+- Cada variante tem extras próprios: bolsos, faixas, punhos, joelheiras e
+  painéis.
+- Não há pulso nem dedos separados, e nenhuma peça é dobrada no meio.
+
+**Escolha: pivôs procedurais, sem rig nem IK**
+- `CharacterRig` cria pivôs de quadril, joelho, tornozelo, ombro e cotovelo
+  nas junções medidas em cada modelo, mais um pivô de tronco.
+- Cada malha é compensada, de modo que a pose de repouso fica idêntica ao GLB.
+- Extras vão para o segmento cuja caixa os contém.
+- O `HeadPivot` da mira vertical passa a ser filho do tronco. Seu pitch
+  continua escrito só pela `ArenaView`.
+- Um rig com skinning não traria ganho: as peças são rígidas e já separadas
+  nas articulações.
+
+**Animação**
+- `CharacterAnimator` é só apresentação no cliente. Ele lê a posição e o yaw
+  apresentados.
+- Grava apenas nos pivôs e na altura do nó visual `CharacterModel`. Assim, os
+  pés ficam no piso, pelo ponto mais baixo real dos sapatos.
+- A raiz do avatar, a câmera, a hitbox e a origem do tiro não mudam.
+- Não há root motion, RPC ou mudança de protocolo. O servidor headless não
+  instancia nada disso.
+
+**Marcha**
+- A fase avança com a distância apresentada: independe da taxa de quadros e
+  para quando a posição para, como contra uma parede.
+- Metade do ciclo é apoio, com o pé recuando linearmente. O ciclo mede
+  `4·perna·sen(amplitude)`, então o pé de apoio quase não desliza.
+- A outra metade é balanço, com o joelho dobrando no início (para frente) ou no
+  fim (de costas).
+- O tornozelo mantém a sola quase paralela ao piso.
+- De lado: a perna do lado do movimento abre, e nenhuma cruza.
+- Diagonal mistura os dois padrões.
+
+**Filtros**
+- Saltos de mais de 1,5 m entre quadros reiniciam a referência.
+- A velocidade apresentada é limitada a 1,5 × 5 m/s.
+- Correções acima de 2,5 m saltam o corpo em vez de deslizá-lo.
