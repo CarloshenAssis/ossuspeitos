@@ -45,19 +45,23 @@ func _world_state(position: Vector3) -> Dictionary:
 	return {"position": position, "velocity": Vector3.ZERO, "input": Vector2.ZERO, "yaw": 0.0}
 
 func _test_lane_validation() -> void:
-	var states := {10: _world_state(Vector3(8, 1, 8)), 11: _world_state(Vector3(8, 1, 2)),
-		12: _world_state(Vector3(-8, 1, -8)), 13: _world_state(Vector3(-8, 1, 8))}
+	var safe: Array = CombatNetworkCoordinator.SAFE_POSITIONS
+	var states := {10: _world_state(CombatNetworkCoordinator.LANE_SHOOTER), 11: _world_state(CombatNetworkCoordinator.LANE_TARGET),
+		12: _world_state(safe[0]), 13: _world_state(safe[1])}
 	var alive := {10: true, 11: true, 12: true, 13: true}
 	_expect(CombatNetworkCoordinator.validate_test_lane(states, alive, 10, 11).is_empty(), "distinct official lane accepted")
+	states[10]["pitch"] = 0.3
+	_expect(CombatNetworkCoordinator.validate_test_lane(states, alive, 10, 11) == "pitch_not_applied", "a tilted shooter is not a level lane")
+	states[10]["pitch"] = 0.0
 	states[12]["position"] = states[10]["position"]
 	_expect(CombatNetworkCoordinator.validate_test_lane(states, alive, 10, 11) != "", "overlapping participant rejected")
-	states[12]["position"] = Vector3(8, 1, 5)
+	states[12]["position"] = CombatNetworkCoordinator.LANE_SHOOTER.lerp(CombatNetworkCoordinator.LANE_TARGET, 0.5)
 	_expect(CombatNetworkCoordinator.validate_test_lane(states, alive, 10, 11) != "", "intermediate participant rejected")
-	states[12]["position"] = Vector3(-8, 1, -8)
+	states[12]["position"] = safe[0]
 	states[13]["velocity"] = Vector3.ONE
 	_expect(CombatNetworkCoordinator.validate_test_lane(states, alive, 10, 11) == "participant_moving", "late position with residual movement rejected")
 	states[13]["velocity"] = Vector3.ZERO
-	states[11]["position"] = Vector3(8, 1, 3)
+	states[11]["position"] = CombatNetworkCoordinator.LANE_TARGET + Vector3(0, 0, 1)
 	_expect(CombatNetworkCoordinator.validate_test_lane(states, alive, 10, 11) == "position_not_applied", "unexpected target position rejected")
 
 func _post_result(peer_id: int, action: String) -> Dictionary:

@@ -14,7 +14,7 @@ func add_player(peer_id: int) -> Dictionary:
 		"position": spawn,
 		"spawn_position": spawn,
 		"velocity": Vector3.ZERO,
-		"yaw": MovementRules.spawn_yaw(spawn),
+		"yaw": MansionMap.spawn_yaw_at(spawn_index),
 		"pitch": 0.0,
 		"input": Vector2.ZERO,
 		"last_sequence": -1,

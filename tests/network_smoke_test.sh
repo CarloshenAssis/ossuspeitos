@@ -218,16 +218,17 @@ if awk '
 else
 	check_failed "authoritative-speed-limit" "max speed missing or greater than 5.001"
 fi
-# O limite vem da regra oficial, para o teste não divergir quando a arena muda.
-ARENA_LIMIT="$(sed -n 's/^const ARENA_HALF_EXTENT := \([0-9.]*\).*/\1/p' "$ROOT/shared/movement_rules.gd")"
-[[ -n "$ARENA_LIMIT" ]] || { echo "ARENA_HALF_EXTENT not found" >&2; exit 1; }
-if awk -F'[=, ]+' -v limit="$ARENA_LIMIT" '
+# Os limites vêm da regra oficial, para o teste não divergir quando o mapa muda.
+map_limit() { sed -n "s/^const $1 := \(-\{0,1\}[0-9.]*\).*/\1/p" "$ROOT/shared/movement_rules.gd"; }
+MAP_MIN_X="$(map_limit MAP_MIN_X)"; MAP_MAX_X="$(map_limit MAP_MAX_X)"
+MAP_MIN_Z="$(map_limit MAP_MIN_Z)"; MAP_MAX_Z="$(map_limit MAP_MAX_Z)"
+[[ -n "$MAP_MIN_X" && -n "$MAP_MAX_X" && -n "$MAP_MIN_Z" && -n "$MAP_MAX_Z" ]] || { echo "map limits not found" >&2; exit 1; }
+if awk -F'[=, ]+' -v min_x="$MAP_MIN_X" -v max_x="$MAP_MAX_X" -v min_z="$MAP_MIN_Z" -v max_z="$MAP_MAX_Z" '
   /PLAYER_STATE/ {
     for (field = 1; field <= NF; field++) {
       if ($field == "position") {
         x = $(field + 1); y = $(field + 2); z = $(field + 3)
-        bound = limit + 0.001
-        if (x < -bound || x > bound || y < 0.999 || y > 1.001 || z < -bound || z > bound) exit 1
+        if (x < min_x - 0.001 || x > max_x + 0.001 || y < 0.999 || y > 1.001 || z < min_z - 0.001 || z > max_z + 0.001) exit 1
         found++
       }
     }

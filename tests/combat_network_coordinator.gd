@@ -4,6 +4,18 @@ extends Node
 ## Explicit-only E2E coordinator. It controls barriers and official test setup;
 ## every gameplay action still crosses NetworkApp's real combat RPCs.
 
+## Faixas fixas na mansão (validadas em `arena_layout_test`): tiro livre
+## atravessando o Salão para o norte; parede sul do Salão entre o Jantar e o
+## Salão; espectadores em cômodos fora do alcance do atirador.
+const LANE_SHOOTER := Vector3(12, 1, 15.5)
+const LANE_TARGET := Vector3(12, 1, 10)
+const WALL_SHOOTER := Vector3(10, 1, 20.3)
+const WALL_TARGET := Vector3(10, 1, 15.5)
+## Uma posição por espectador possível (até oito jogadores), cada uma num
+## cômodo diferente, longe da faixa de tiro.
+const SAFE_POSITIONS := [Vector3(3, 1, 2.5), Vector3(39.5, 1, 24.0), Vector3(26, 1, 2.5), Vector3(25, 1, 11.5),
+	Vector3(33, 1, 24.5), Vector3(44, 1, 12.2)]
+
 var app
 var stage := "WAIT_FOR_ACTIVE"
 var stage_started_msec := 0
@@ -38,10 +50,23 @@ var current_shot_hit := false
 var current_hit_peer_id := 0
 var lane_prepared_msec := 0
 var post_end_command_active := false
+## Quantidade de clientes da partida (`--combat-clients`, padrão 4). Com
+## `--combat-extended`, o atirador (vítima) também elimina outra vítima antes
+## do assassino (espectador no meio da rodada) e, depois do fim, a próxima
+## rodada é conferida (reset sem duplicar pickups nem prender corpos).
+var expected_count := 4
+var extended := false
+var spectator_victim := 0
+var spectator_confirmed := false
+var extra_shots := 0
+var first_round_id := 0
+var first_appearances: Dictionary = {}
 
 func _ready() -> void:
 	app = get_parent()
 	stage_started_msec = Time.get_ticks_msec()
+	expected_count = NetworkConfig.integer_argument(app.arguments, "combat-clients", 4)
+	extended = NetworkConfig.bool_argument(app.arguments, "combat-extended")
 
 func _process(_delta: float) -> void:
 	if app.mode == "server":
@@ -62,8 +87,13 @@ func _server_tick() -> void:
 			return
 		peers = app.round_authority.participants.keys()
 		peers.sort()
-		if peers.size() != 4: return
-		print("COMBAT_ROUND_ACTIVE players=4")
+		if peers.size() != expected_count:
+			if peers.size() > 0 and Time.get_ticks_msec() - stage_started_msec > 5000:
+				_fail("round started with %d participants, expected %d" % [peers.size(), expected_count])
+			return
+		print("COMBAT_ROUND_ACTIVE players=%d" % expected_count)
+		first_round_id = app.round_authority.round_id
+		if not _check_spawns_and_identity(): return
 		var health_ok := true
 		var inventory_ok := true
 		for peer_id in peers:
@@ -71,11 +101,11 @@ func _server_tick() -> void:
 			inventory_ok = inventory_ok and str(app.combat_authority.inventory.get_inventory(peer_id).get("weapon_id", "")).is_empty()
 		if not health_ok or not inventory_ok:
 			_fail("invalid initial authoritative state"); return
-		print("COMBAT_INITIAL_HEALTH_OK players=4 health=100")
-		print("COMBAT_INITIAL_INVENTORY_OK players=4")
+		print("COMBAT_INITIAL_HEALTH_OK players=%d health=100" % expected_count)
+		print("COMBAT_INITIAL_INVENTORY_OK players=%d" % expected_count)
 		_enter("INITIAL", peers)
 		return
-	if stage == "INITIAL" and acknowledgements.size() == 4:
+	if stage == "INITIAL" and acknowledgements.size() == expected_count:
 		var first := int(peers[0]); var second := int(peers[1])
 		_set_position(first, ArenaRules.PICKUP_POSITIONS[0] + Vector3.UP * 0.75)
 		_set_position(second, ArenaRules.PICKUP_POSITIONS[0] + Vector3.UP * 0.75)
@@ -92,7 +122,18 @@ func _server_tick() -> void:
 		print("COMBAT_PICKUP_CONTEST_OK accepted=1 rejected=1 owners=1")
 		for peer_id in peers:
 			if app.round_authority.get_role_for_peer(peer_id) == Role.ASSASSIN: target = int(peer_id)
-			elif shooter == 0: shooter = int(peer_id)
+		# No modo estendido o atirador é uma vítima comum: o detetive morreria ao
+		# acertar um inocente.
+		for peer_id in peers:
+			if int(peer_id) == target or shooter != 0: continue
+			if extended and app.round_authority.get_role_for_peer(peer_id) != Role.VICTIM: continue
+			shooter = int(peer_id)
+		if extended:
+			for peer_id in peers:
+				if int(peer_id) != shooter and int(peer_id) != target and spectator_victim == 0 \
+						and app.round_authority.get_role_for_peer(peer_id) == Role.VICTIM:
+					spectator_victim = int(peer_id)
+			if shooter == 0 or spectator_victim == 0: _fail("extended flow needs two victims"); return
 		if str(app.combat_authority.inventory.get_inventory(shooter).get("weapon_id", "")).is_empty():
 			_set_position(shooter, ArenaRules.PICKUP_POSITIONS[1] + Vector3.UP * 0.75)
 			action_results.clear(); _enter_wait("WAIT_ARM_READY")
@@ -160,15 +201,36 @@ func _server_tick() -> void:
 	if stage == "FIRE_TWO" and _single_action_accepted():
 		if int(app.combat_authority.health.get(target, -1)) != 32: _fail("second damage"); return
 		stage = "WAIT_FINAL_HIT"; stage_started_msec = Time.get_ticks_msec(); return
+	if stage == "WAIT_FINAL_HIT" and extended and spectator_victim != 0 and app.round_authority.is_alive(spectator_victim):
+		if Time.get_ticks_msec() >= _last_shot() + 400:
+			_prepare_victim_lane(); action_results.clear()
+			extra_shots += 1
+			_enter("SPECTATOR_FIRE", [shooter], _fire_payload(4 + extra_shots - 1))
+		return
+	if stage == "SPECTATOR_FIRE" and _single_action_accepted():
+		if not app.round_authority.is_alive(spectator_victim):
+			if app.round_authority.state != RoundState.ACTIVE: _fail("victim elimination ended the round"); return
+			var spectator_state: Dictionary = app.round_authority.get_spectator_state(spectator_victim)
+			var targets: Array = spectator_state.get("targets", [])
+			if targets.is_empty() or spectator_victim in targets or target not in targets: _fail("spectator targets %s" % str(spectator_state)); return
+			print("COMBAT_SPECTATOR_SERVER_OK victim_eliminated=1 targets=%d" % targets.size())
+			_enter_wait("WAIT_SPECTATOR_CLIENT")
+		else:
+			_enter_wait("WAIT_FINAL_HIT")
+		return
+	if stage == "WAIT_SPECTATOR_CLIENT" and spectator_confirmed and Time.get_ticks_msec() >= _last_shot() + 400:
+		_prepare_lane_after_spectator(); _enter_wait("WAIT_FINAL_HIT_READY"); return
+	if stage == "WAIT_FINAL_HIT_READY" and Time.get_ticks_msec() > lane_prepared_msec + 100:
+		action_results.clear(); _enter("FIRE_THREE", [shooter], _fire_payload(4 + extra_shots)); return
 	if stage == "WAIT_FINAL_HIT" and Time.get_ticks_msec() >= _last_shot() + 400:
-		action_results.clear(); _enter("FIRE_THREE", [shooter], _fire_payload(4)); return
+		action_results.clear(); _enter("FIRE_THREE", [shooter], _fire_payload(4 + extra_shots)); return
 	if stage == "FIRE_THREE" and action_results.size() == 1:
 		stage = "WAIT_ENDED"; stage_started_msec = Time.get_ticks_msec(); return
 	if stage == "WAIT_ENDED" and app.round_authority.state == RoundState.ENDED:
-		if health_history.count(66) < 1 or health_history.count(32) < 1 or health_history.count(0) < 1 or eliminations != 1:
+		if health_history.count(66) < 1 or health_history.count(32) < 1 or health_history.count(0) < 1 or eliminations != (2 if extended else 1):
 			_fail("damage or elimination history"); return
 		print("COMBAT_DAMAGE_OK health_sequence=100,66,32,0")
-		print("COMBAT_ELIMINATION_OK count=1")
+		print("COMBAT_ELIMINATION_OK count=%d" % eliminations)
 		if app.round_authority.winning_team != Role.TEAM_INNOCENTS: _fail("wrong winner"); return
 		print("COMBAT_WIN_CONDITION_OK winner=INNOCENTS")
 		action_results.clear()
@@ -176,10 +238,18 @@ func _server_tick() -> void:
 		return
 	if stage == "POST_END" and post_end_complete(acknowledgements, action_results, peers, expected_round_id, command_id, current_sequence):
 		print("COMBAT_POST_END_ACTIONS_REJECTED")
-		print("COMBAT_PRIVACY_OK clients=4 leaks=0")
-		print("COMBAT_SERVER_TEST_OK clients=4")
-		app._begin_server_shutdown(peers)
-		stage = "SHUTDOWN"
+		if extended:
+			_enter_wait("WAIT_NEW_ROUND")
+			return
+		_finish()
+	if stage == "WAIT_NEW_ROUND":
+		# O intervalo de fim de rodada e a contagem do servidor passam aqui.
+		if app.round_authority.state != RoundState.ACTIVE:
+			stage_started_msec = Time.get_ticks_msec()
+		if app.round_authority.state == RoundState.ACTIVE and app.round_authority.round_id > first_round_id \
+				and app.combat_authority.active_round_id == app.round_authority.round_id:
+			if not _check_new_round(): return
+			_finish()
 
 func observe_server_action(peer_id: int, action: String, sequence: Variant, result: Dictionary) -> void:
 	if app.mode != "server": return
@@ -234,6 +304,10 @@ func observe_client_event(kind: String, payload: Variant = null) -> void:
 			eliminations += 1
 			if typeof(payload) != TYPE_INT: privacy_leaks += 1
 			print("COMBAT_RPC_RECEIVED name=combat_public_elimination id=%s" % app.client_label)
+		"spectator":
+			if typeof(payload) != TYPE_ARRAY: privacy_leaks += 1
+			print("COMBAT_RPC_RECEIVED name=round_private_spectator_targets id=%s targets=%d" % [app.client_label, (payload as Array).size()])
+			combat_spectator_seen.rpc_id(1)
 		"rejection":
 			print("COMBAT_RPC_RECEIVED name=combat_action_rejected id=%s" % app.client_label)
 			if post_end_command_active:
@@ -247,6 +321,13 @@ func combat_test_command(round_id: int, received_stage: String, received_command
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1: return
 	if received_command_id <= 0 or processed_commands.has(received_command_id): return
 	pending_command = {"round_id": round_id, "command": received_stage, "command_id": received_command_id, "payload": payload}
+
+@rpc("any_peer", "call_remote", "reliable")
+func combat_spectator_seen() -> void:
+	if not multiplayer.is_server() or app.mode != "server": return
+	if multiplayer.get_remote_sender_id() == spectator_victim and spectator_victim != 0:
+		spectator_confirmed = true
+		print("COMBAT_SPECTATOR_CLIENT_OK peer_id=%d" % spectator_victim)
 
 @rpc("any_peer", "call_remote", "reliable")
 func combat_test_ack(round_id: int, received_stage: String, received_command_id: int, event: String) -> void:
@@ -279,7 +360,7 @@ func _try_run_client_command() -> void:
 		app.request_pickup.rpc_id(1, payload["pickup_id"], payload["sequence"])
 	elif command == "AMMO" and own_id == int(payload["actor"]):
 		app.request_pickup.rpc_id(1, payload["pickup_id"], payload["sequence"])
-	elif command.begins_with("FIRE") or command == "REPLAY" or command == "RATE" or command == "CADENCE" or command == "WALL":
+	elif command.begins_with("FIRE") or command == "SPECTATOR_FIRE" or command == "REPLAY" or command == "RATE" or command == "CADENCE" or command == "WALL":
 		if own_id == int(payload["actor"]): app.request_fire.rpc_id(1, payload["sequence"], payload["origin"], payload["direction"])
 	elif command == "RELOAD" and own_id == int(payload["actor"]):
 		app.request_reload.rpc_id(1, payload["sequence"])
@@ -327,19 +408,94 @@ func _prepare_ammo() -> void:
 	action_results.clear(); _enter_wait("WAIT_AMMO_READY")
 
 func _prepare_lane() -> void:
-	var safe_positions := [Vector3(-8, 1, -8), Vector3(-8, 1, 8)]
 	var safe_index := 0
 	for peer_id in peers:
 		if int(peer_id) == shooter or int(peer_id) == target: continue
-		_set_position(int(peer_id), safe_positions[safe_index])
+		_set_position(int(peer_id), SAFE_POSITIONS[safe_index])
 		safe_index += 1
-	_set_position(shooter, Vector3(8, 1, 8))
-	_set_position(target, Vector3(8, 1, 2))
+	_set_position(shooter, LANE_SHOOTER)
+	_set_position(target, LANE_TARGET)
 	app.authoritative_world.states[shooter]["yaw"] = 0.0
+	app.authoritative_world.states[shooter]["pitch"] = 0.0
 	lane_prepared_msec = Time.get_ticks_msec()
 
 func _prepare_wall() -> void:
-	_set_position(shooter, Vector3(0, 1, 5)); _set_position(target, Vector3(0, 1, -5)); app.authoritative_world.states[shooter]["yaw"] = 0.0
+	_set_position(shooter, WALL_SHOOTER); _set_position(target, WALL_TARGET)
+	app.authoritative_world.states[shooter]["yaw"] = 0.0
+	app.authoritative_world.states[shooter]["pitch"] = 0.0
+
+## Vítima parada na faixa de tiro; o assassino vai para um cômodo seguro.
+func _prepare_victim_lane() -> void:
+	var safe_index := 0
+	for peer_id in peers:
+		if int(peer_id) in [shooter, spectator_victim] or not app.round_authority.is_alive(int(peer_id)): continue
+		_set_position(int(peer_id), SAFE_POSITIONS[safe_index]); safe_index += 1
+	_set_position(shooter, LANE_SHOOTER); _set_position(spectator_victim, LANE_TARGET)
+	app.authoritative_world.states[shooter]["yaw"] = 0.0
+	app.authoritative_world.states[shooter]["pitch"] = 0.0
+
+## Depois do espectador: o corpo eliminado sai da faixa e o assassino volta a ela.
+func _prepare_lane_after_spectator() -> void:
+	_set_position(spectator_victim, SAFE_POSITIONS[SAFE_POSITIONS.size() - 1])
+	var safe_index := 0
+	for peer_id in peers:
+		if int(peer_id) in [shooter, target, spectator_victim]: continue
+		_set_position(int(peer_id), SAFE_POSITIONS[safe_index]); safe_index += 1
+	_set_position(shooter, LANE_SHOOTER); _set_position(target, LANE_TARGET)
+	app.authoritative_world.states[shooter]["yaw"] = 0.0
+	app.authoritative_world.states[shooter]["pitch"] = 0.0
+	lane_prepared_msec = Time.get_ticks_msec()
+
+func _finish() -> void:
+	print("COMBAT_PRIVACY_OK clients=%d leaks=0" % expected_count)
+	print("COMBAT_SERVER_TEST_OK clients=%d" % expected_count)
+	app._begin_server_shutdown(peers)
+	stage = "SHUTDOWN"
+
+## Início oficial na mansão: cada participante num spawn distinto dos dados,
+## fora de paredes e móveis, com aparência cosmética distinta.
+func _check_spawns_and_identity() -> bool:
+	var used := {}
+	for peer_id in peers:
+		var position: Vector3 = app.authoritative_world.states[peer_id]["position"]
+		var index := MovementRules.SPAWN_POINTS.find(position)
+		if index < 0 and not _near_spawn(position): _fail("peer %d is not at a mansion spawn (%s)" % [peer_id, str(position)]); return false
+		if ArenaRules.overlaps_blocker(position): _fail("peer %d spawned inside geometry" % peer_id); return false
+		var appearance := str(app.lobby.appearance_for(int(peer_id)))
+		if used.has(appearance) or not CharacterAppearance.is_valid(appearance): _fail("appearance %s repeated or invalid" % appearance); return false
+		used[appearance] = true
+		first_appearances[int(peer_id)] = appearance
+	print("COMBAT_MANSION_SPAWNS_OK players=%d appearances=%d" % [peers.size(), used.size()])
+	return true
+
+## Clientes do teste andam um pouco a partir do spawn antes da rodada.
+func _near_spawn(position: Vector3) -> bool:
+	for spawn in MovementRules.SPAWN_POINTS:
+		if Vector2(spawn.x, spawn.z).distance_to(Vector2(position.x, position.z)) < 3.0: return true
+	return false
+
+## Reset da rodada: mesmos participantes vivos, vida cheia, sem arma, oito
+## pickups (sem duplicar) nos pontos da mansão, corpos fora dos volumes e
+## aparências mantidas.
+func _check_new_round() -> bool:
+	var participants: Array = app.round_authority.participants.keys()
+	participants.sort()
+	if participants != peers: _fail("new round participants %s" % str(participants)); return false
+	for peer_id in peers:
+		if not app.round_authority.is_alive(int(peer_id)) or int(app.combat_authority.health.get(peer_id, 0)) != 100: _fail("new round health/alive"); return false
+		if not str(app.combat_authority.inventory.get_inventory(peer_id).get("weapon_id", "")).is_empty(): _fail("new round inventory"); return false
+		var position: Vector3 = app.authoritative_world.states[peer_id]["position"]
+		if ArenaRules.overlaps_blocker(position) or ArenaRules.zone_at(position).is_empty(): _fail("peer %d starts the new round inside geometry (%s)" % [peer_id, str(position)]); return false
+		if str(app.lobby.appearance_for(int(peer_id))) != str(first_appearances.get(int(peer_id), "")): _fail("appearance changed across rounds"); return false
+	var pickups: Array = app.combat_authority.public_pickups()
+	var ids := {}
+	for entry in pickups:
+		ids[str(entry["pickup_id"])] = true
+		var index := int(str(entry["pickup_id"]).get_slice("_", 1)) + (4 if str(entry["type"]) == "ammo" else 0)
+		if not bool(entry["available"]) or not (entry["position"] as Vector3).is_equal_approx(ArenaRules.PICKUP_POSITIONS[index]): _fail("pickup %s not reset" % entry["pickup_id"]); return false
+	if pickups.size() != 8 or ids.size() != 8: _fail("new round has %d pickups (%d ids)" % [pickups.size(), ids.size()]); return false
+	print("COMBAT_NEW_ROUND_OK round_id=%d participants=%d pickups=8 appearances_kept=true" % [app.round_authority.round_id, peers.size()])
+	return true
 
 func _fire_payload(sequence: int) -> Dictionary:
 	return {"actor": shooter, "sequence": sequence,
@@ -362,7 +518,7 @@ func _pickup_action_ready() -> bool:
 
 func _expected_action_for_stage(value: String) -> String:
 	if value in ["CONTEST", "ARM", "AMMO"]: return "pickup"
-	if value in ["FIRE_ONE", "REPLAY", "RATE", "CADENCE", "WALL", "FIRE_TWO", "FIRE_THREE"]: return "fire"
+	if value in ["FIRE_ONE", "REPLAY", "RATE", "CADENCE", "WALL", "FIRE_TWO", "SPECTATOR_FIRE", "FIRE_THREE"]: return "fire"
 	if value == "RELOAD": return "reload"
 	return ""
 
@@ -413,16 +569,16 @@ static func validate_test_lane(states: Dictionary, alive: Dictionary, shooter_id
 	if not states.has(shooter_id) or not states.has(target_id): return "missing_actor"
 	var shooter_position: Vector3 = states[shooter_id]["position"]
 	var target_position: Vector3 = states[target_id]["position"]
-	if shooter_position != Vector3(8, 1, 8) or target_position != Vector3(8, 1, 2): return "position_not_applied"
+	if shooter_position != LANE_SHOOTER or target_position != LANE_TARGET: return "position_not_applied"
 	if absf(float(states[shooter_id]["yaw"])) > 0.0001: return "yaw_not_applied"
+	if absf(float(states[shooter_id].get("pitch", 0.0))) > 0.0001: return "pitch_not_applied"
 	var bystanders: Array = []
 	for peer_id in states:
 		if int(peer_id) != shooter_id and int(peer_id) != target_id: bystanders.append(int(peer_id))
 	bystanders.sort()
-	if bystanders.size() != 2: return "invalid_bystander_count"
-	var expected_safe := [Vector3(-8, 1, -8), Vector3(-8, 1, 8)]
+	if bystanders.size() > SAFE_POSITIONS.size(): return "invalid_bystander_count"
 	for index in bystanders.size():
-		if states[bystanders[index]]["position"] != expected_safe[index]: return "bystander_position_not_applied"
+		if states[bystanders[index]]["position"] != SAFE_POSITIONS[index]: return "bystander_position_not_applied"
 	for peer_id in states:
 		if (states[peer_id]["velocity"] as Vector3).length_squared() > 0.000001: return "participant_moving"
 		if (states[peer_id]["input"] as Vector2).length_squared() > 0.000001: return "participant_input_active"

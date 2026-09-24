@@ -51,10 +51,11 @@ func _test_health_pickups_and_privacy() -> void:
 	_expect(authority.request_pickup(2, [], 2, 300)["reason"] == "invalid_pickup", "invalid pickup type is safe")
 
 func _test_fire_damage_and_validation() -> void:
-	# Fresh unobstructed lane on the east side of the central wall.
-	world.states[1]["position"] = Vector3(6, 0, 6)
+	# Fresh unobstructed lane across the mansion hall (x = 12, clear of columns
+	# and pedestal), shooting north.
+	world.states[1]["position"] = Vector3(12, 0, 15.5)
 	world.states[1]["yaw"] = 0.0
-	world.states[2]["position"] = Vector3(6, 0, 1)
+	world.states[2]["position"] = Vector3(12, 0, 10.5)
 	var eye: Vector3 = world.states[1]["position"] + Vector3.UP * ArenaRules.EYE_HEIGHT
 	_expect(authority.request_fire(1, 1, eye + Vector3(2, 0, 0), Vector3.FORWARD, 1000)["reason"] == "implausible_origin", "impossible origin")
 	_expect(authority.request_fire(1, 1, eye, "bad", 1000)["reason"] == "invalid_direction", "invalid direction")
@@ -81,10 +82,10 @@ func _test_fire_damage_and_validation() -> void:
 
 func _test_raycast_and_death() -> void:
 	# Self is ignored; nearest target takes the shot, then dead target takes no more.
-	world.states[1]["position"] = Vector3(6, 0, 8)
+	world.states[1]["position"] = Vector3(12, 0, 16)
 	world.states[1]["yaw"] = 0.0
-	world.states[2]["position"] = Vector3(6, 0, 5)
-	world.states[3]["position"] = Vector3(6, 0, 2)
+	world.states[2]["position"] = Vector3(12, 0, 13)
+	world.states[3]["position"] = Vector3(12, 0, 10)
 	authority.health[2] = 34
 	authority.inventory.inventories[1]["magazine"] = 6
 	authority.inventory.inventories[1]["last_shot_msec"] = -1
@@ -95,9 +96,9 @@ func _test_raycast_and_death() -> void:
 	# Ray now passes dead player and reaches the next live player.
 	_expect(authority.request_fire(1, 3, eye, Vector3.FORWARD, 3400)["accepted"], "dead hitbox ignored")
 	_expect(authority.health[2] == dead_health and authority.health[3] == 66, "dead target takes no new damage")
-	# Central blocker wins before a target behind it.
-	world.states[1]["position"] = Vector3(0, 0, 8)
-	world.states[3]["position"] = Vector3(0, 0, -5)
+	# The wall between the dining room and the hall wins before a target behind it.
+	world.states[1]["position"] = Vector3(10, 0, 20.3)
+	world.states[3]["position"] = Vector3(10, 0, 15.5)
 	eye = world.states[1]["position"] + Vector3.UP * ArenaRules.EYE_HEIGHT
 	var before: int = authority.health[3]
 	authority.request_fire(1, 4, eye, Vector3.FORWARD, 3800)

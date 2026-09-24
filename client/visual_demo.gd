@@ -12,13 +12,14 @@ var local_pitch := 0.0
 var elapsed := 0.0
 var test_frames := 0
 
-## Patrulhas dos bonecos simulados: trechos livres saindo das salas de spawn.
-## Apresentação apenas; nenhuma rede, rodada ou combate é simulado.
+## Patrulhas dos bonecos simulados em trechos livres da mansão (corredor
+## norte, Salão, ala leste e corredor sudeste). Apresentação apenas; nenhuma
+## rede, rodada ou combate é simulado.
 const PATROLS := [
-	[Vector3(12.3, MovementRules.PLAYER_HEIGHT, 12.3), Vector3(9.2, MovementRules.PLAYER_HEIGHT, 9.2), Vector3(6.8, MovementRules.PLAYER_HEIGHT, 8.8)],
-	[Vector3(12.3, MovementRules.PLAYER_HEIGHT, -12.3), Vector3(9.2, MovementRules.PLAYER_HEIGHT, -9.2), Vector3(8.8, MovementRules.PLAYER_HEIGHT, -6.8)],
-	[Vector3(-12.3, MovementRules.PLAYER_HEIGHT, 12.3), Vector3(-9.2, MovementRules.PLAYER_HEIGHT, 9.2), Vector3(-8.8, MovementRules.PLAYER_HEIGHT, 6.8)],
-	[Vector3(0.0, MovementRules.PLAYER_HEIGHT, -13.0), Vector3(-4.0, MovementRules.PLAYER_HEIGHT, -12.5), Vector3(-6.5, MovementRules.PLAYER_HEIGHT, -12.5)],
+	[Vector3(8.0, MovementRules.PLAYER_HEIGHT, 2.5), Vector3(19.0, MovementRules.PLAYER_HEIGHT, 2.5)],
+	[Vector3(11.8, MovementRules.PLAYER_HEIGHT, 8.4), Vector3(15.2, MovementRules.PLAYER_HEIGHT, 8.4), Vector3(15.4, MovementRules.PLAYER_HEIGHT, 11.0)],
+	[Vector3(28.0, MovementRules.PLAYER_HEIGHT, 18.5), Vector3(44.0, MovementRules.PLAYER_HEIGHT, 18.5)],
+	[Vector3(25.0, MovementRules.PLAYER_HEIGHT, 15.5), Vector3(25.0, MovementRules.PLAYER_HEIGHT, 22.5), Vector3(20.0, MovementRules.PLAYER_HEIGHT, 22.5)],
 ]
 const PATROL_SPEED := 1.6
 
@@ -106,7 +107,8 @@ func _validate_demo() -> void:
 		var positions: Dictionary = {}
 		for index in range(1, sampled.size()):
 			var position: Vector3 = sampled[index]["position"]
-			if absf(position.x) > MovementRules.ARENA_HALF_EXTENT or absf(position.z) > MovementRules.ARENA_HALF_EXTENT:
+			if position.x < MovementRules.MAP_MIN_X or position.x > MovementRules.MAP_MAX_X \
+					or position.z < MovementRules.MAP_MIN_Z or position.z > MovementRules.MAP_MAX_Z:
 				_fail_demo_test("simulated player escaped arena")
 				return
 			if ArenaRules.overlaps_blocker(position):

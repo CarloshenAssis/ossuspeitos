@@ -111,8 +111,10 @@ func _test_gameplay_visuals() -> void:
 	_arena.set_gameplay_visuals(true)
 	_expect(_arena.crosshair.visible and not _arena.weapon_model.visible, "without an official weapon there is nothing in hand")
 	_arena.local_peer_id = OWN
-	_arena.apply_snapshot([{"peer_id": OWN, "position": Vector3(0, 1, -10), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
-	_expect(_arena.region_chip.visible and _arena.region_side.text == "N" and _arena.region_name.text == "NORTE", "region chip names the official zone with its side letter")
+	_arena.apply_snapshot([{"peer_id": OWN, "position": Vector3(13.5, 1, 9), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
+	_expect(_arena.region_chip.visible and _arena.region_side.text == "SC" and _arena.region_name.text == "SALÃO CENTRAL", "region chip names the official room with its initials")
+	_arena.apply_snapshot([{"peer_id": OWN, "position": Vector3(10, 1, 2.5), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
+	_expect(_arena.region_side.text == "CR" and _arena.region_name.text == "CORREDOR NORTE", "corridors are named too")
 
 # --- Layout -----------------------------------------------------------------------
 
@@ -140,9 +142,9 @@ func _test_layout_keeps_the_center_free() -> void:
 	_hud.apply_combat_state(_combat(2, 32, "common_pistol", 6, 0, false))
 	var short := _hud._weapon_panel.size
 	_expect(short.x < tall.x and is_equal_approx(_hud._weapon_panel.get_global_rect().end.x, viewport_rect.end.x - HudStyle.MARGIN), "weapon panel shrinks back and stays on the right margin (%s -> %s)" % [str(tall), str(short)])
-	_arena.apply_snapshot([{"peer_id": OWN, "position": Vector3(-10, 1, 10), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
+	_arena.apply_snapshot([{"peer_id": OWN, "position": Vector3(25, 1, 2.5), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
 	var long_chip := _arena.region_chip.size.x
-	_arena.apply_snapshot([{"peer_id": OWN, "position": Vector3(0, 1, 10), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
+	_arena.apply_snapshot([{"peer_id": OWN, "position": Vector3(25, 1, 11.5), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
 	_expect(_arena.region_chip.size.x < long_chip, "region chip shrinks for a shorter zone name (%s -> %s)" % [long_chip, _arena.region_chip.size.x])
 	_hud.apply_roster(_roster_with_dead([OWN]))
 	_hud.apply_spectator_state(true, [7, 8], 7)

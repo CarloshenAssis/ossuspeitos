@@ -535,3 +535,52 @@ licença.
   cabeça (1,57 m), compensadas para ficar no mesmo lugar em repouso.
 - Os demais clientes giram só esse pivô em X pelo pitch oficial, limitado a
   ±40°. Pescoço, tronco, raiz do avatar e colisão não inclinam.
+
+## Mansão jogável (fase 1)
+
+Detalhes, dimensões e checkpoint: `docs/mansion-plan.md`.
+
+**Fonte única do mapa**
+- A arena graybox saiu. `shared/mansion_map.gd` declara:
+  - cômodos e corredores;
+  - portas e junções;
+  - móveis;
+  - spawns e pickups.
+- Paredes, vergas e tetos são derivados de forma determinística. Uma parede
+  esquecida não deixa canto aberto.
+- `ArenaRules` mantém a API de antes (`BLOCKERS`, `PICKUP_POSITIONS`, `ZONES`,
+  raycasts, `overlaps_blocker`) e lê desses dados. Servidor, cliente e testes
+  não mantêm coordenadas próprias.
+
+**Colisão e tiro oficiais**
+- O movimento segue o mesmo algoritmo: circunferência contra AABB, por eixo,
+  com sub-passos de 0,2 m. Duas mudanças:
+  - ignora volumes acima do corpo (vergas e tetos);
+  - consulta um índice em baldes de 4 m.
+- O limite simétrico da arena virou um retângulo de segurança
+  (`MAP_MIN/MAX_X/Z`). Quem fecha a casa são as paredes.
+- O tiro para no primeiro contato entre piso, paredes, batentes, vergas,
+  tetos, móveis e jogadores.
+- Mesas são tampo e pés: embaixo delas o tiro passa, e o corpo é barrado pelo
+  tampo.
+
+**Regras preservadas**
+- Tipos, quantidades, distâncias e índices dos pickups continuam os mesmos
+  (0..3 armas, 4..7 munição).
+- Oito spawns, na mesma ordem de ocupação.
+- A nova rodada continua sem reposicionar jogadores, como antes. O teste de
+  oito clientes confirma que ninguém começa dentro de um volume.
+
+**Correção encontrada pelo teste de oito clientes**
+- Um cliente encerrado corretamente pelo servidor podia sair com
+  `CLIENT_TIMEOUT` quando a sessão passava de 10 s. O prazo de conexão era
+  avaliado depois do desligamento combinado.
+- Agora o prazo não vale depois de `shutdown_prepare_received`.
+
+**Testes de rede**
+- `combat_network_test.sh` aceita `COMBAT_CLIENTS` e `COMBAT_EXTENDED`.
+- Com oito clientes, o modo estendido cobre:
+  - vítima eliminada no meio da rodada, que passa a espectadora;
+  - fim da rodada;
+  - rodada seguinte, com oito pickups sem duplicação, corpos livres e
+    aparências mantidas.

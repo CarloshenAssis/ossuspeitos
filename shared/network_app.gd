@@ -217,7 +217,10 @@ func _process(_delta: float) -> void:
 		return
 	if mode != "client":
 		return
-	if not joined and not returning_to_menu and Time.get_ticks_msec() - started_at_msec > int(NetworkConfig.CONNECT_TIMEOUT_SECONDS * 1000.0):
+	# O prazo é de conexão: depois do encerramento combinado com o servidor
+	# (`joined` volta a falso ao desconectar), ele não se aplica mais.
+	if not joined and not returning_to_menu and not shutdown_prepare_received \
+			and Time.get_ticks_msec() - started_at_msec > int(NetworkConfig.CONNECT_TIMEOUT_SECONDS * 1000.0):
 		if interactive_session:
 			print("CLIENT_TIMEOUT id=%s" % client_label)
 			_return_to_menu("Tempo esgotado ao conectar em %s." % str(arguments.get("url", "")), "timeout")
@@ -806,6 +809,7 @@ func round_private_spectator_targets(payload: Dictionary) -> void:
 	local_spectator_targets = safe
 	local_eliminated = true
 	local_spectator_index = 0 if not safe.is_empty() else -1
+	if combat_network_test != null: combat_network_test.call("observe_client_event", "spectator", safe)
 	if arena_view != null:
 		arena_view.set_spectator_target(int(safe[0]) if not safe.is_empty() else 0)
 	print("SPECTATOR_TARGETS_PRIVATE_OK id=%s targets=%d" % [client_label, safe.size()])

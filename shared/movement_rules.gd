@@ -14,32 +14,27 @@ const MAX_PITCH_RATE := 3.0
 const MAX_COMMAND_RATE := 30.0
 const COMMAND_BURST := 4.0
 const MAX_SEQUENCE_ADVANCE := 64
-## Limite do centro do corpo. A face interna dos muros externos fica em
-## `ArenaRules.INNER_HALF_EXTENT` (14,5 m), meio metro além deste limite.
-const ARENA_HALF_EXTENT := 14.0
 const PLAYER_HEIGHT := 1.0
 const MOVEMENT_EPSILON := 0.001
 const TEST_MOVEMENT_DISTANCE := 0.2
-## Oito spawns, um por região de borda da arena graybox. Os quatro primeiros
-## (usados numa sala de 4 jogadores) ficam dentro das salas dos cantos; os
-## outros quatro atrás das coberturas das bordas. Nenhum spawn enxerga outro
-## na altura do olho, nenhum toca um bloco e nenhum fica sobre um pickup.
-const SPAWN_POINTS: Array[Vector3] = [
-	Vector3(-12.3, PLAYER_HEIGHT, -12.3),
-	Vector3(12.3, PLAYER_HEIGHT, 12.3),
-	Vector3(12.3, PLAYER_HEIGHT, -12.3),
-	Vector3(-12.3, PLAYER_HEIGHT, 12.3),
-	Vector3(0.0, PLAYER_HEIGHT, -13.0),
-	Vector3(0.0, PLAYER_HEIGHT, 13.0),
-	Vector3(-13.0, PLAYER_HEIGHT, 0.0),
-	Vector3(13.0, PLAYER_HEIGHT, 0.0),
-]
+## Limite de segurança do centro do corpo: o retângulo do piso livre da mansão.
+## As paredes derivadas fecham a casa por dentro dele; o limite só existe para
+## que um estado corrompido nunca saia para o vazio.
+const MAP_MIN_X := -0.5
+const MAP_MAX_X := 46.0
+const MAP_MIN_Z := -1.0
+const MAP_MAX_Z := 29.0
+## Oito spawns candidatos da mansão (um por cômodo, fora o Salão). O servidor
+## ocupa do primeiro livre em diante; os dados ficam em `MansionMap.SPAWNS`.
+static var SPAWN_POINTS: Array[Vector3] = MansionMap.spawn_points()
 
-## Yaw inicial do spawn: de frente para o centro da arena (a porta da sala de
-## canto ou a saída lateral da cobertura), nunca encarando o muro externo.
+## Yaw inicial do spawn: de frente para a porta do próprio cômodo.
 ## Com yaw 0 o jogador olha para -Z; `yaw` gira essa direção em torno de +Y.
 static func spawn_yaw(spawn: Vector3) -> float:
-	return atan2(spawn.x, spawn.z)
+	for index in SPAWN_POINTS.size():
+		if SPAWN_POINTS[index].is_equal_approx(spawn):
+			return MansionMap.spawn_yaw_at(index)
+	return 0.0
 
 static func validate_input(move: Vector2, yaw_delta: float, pitch_delta: float = 0.0) -> String:
 	if not is_finite(move.x) or not is_finite(move.y) or not is_finite(yaw_delta) or not is_finite(pitch_delta):
@@ -84,9 +79,9 @@ static func integrate(state: Dictionary, delta: float, now_msec: int) -> void:
 		velocity.x = 0.0
 	if bool(resolved["blocked_z"]):
 		velocity.z = 0.0
-	if absf(position.x) >= ARENA_HALF_EXTENT and signf(velocity.x) == signf(position.x):
+	if (position.x <= MAP_MIN_X and velocity.x < 0.0) or (position.x >= MAP_MAX_X and velocity.x > 0.0):
 		velocity.x = 0.0
-	if absf(position.z) >= ARENA_HALF_EXTENT and signf(velocity.z) == signf(position.z):
+	if (position.z <= MAP_MIN_Z and velocity.z < 0.0) or (position.z >= MAP_MAX_Z and velocity.z > 0.0):
 		velocity.z = 0.0
 	state["position"] = position
 	state["velocity"] = velocity
@@ -94,7 +89,8 @@ static func integrate(state: Dictionary, delta: float, now_msec: int) -> void:
 ## Aplica um deslocamento com colisão autoritativa contra `ArenaRules.BLOCKERS`.
 ## Cada eixo é resolvido separadamente, o que permite deslizar ao longo de uma
 ## parede. O passo é subdividido em trechos de no máximo `MAX_COLLISION_STEP`,
-## menor que o bloco mais fino (0,5 m), então nenhum delta atravessa parede.
+## menor que o diâmetro do corpo somado ao volume mais fino, então nenhum delta
+## atravessa parede ou móvel.
 ## Um corpo que já esteja dentro de um bloco (teleporte de teste) não fica
 ## preso: só é barrado o trecho que entra num bloco a partir de posição livre.
 const MAX_COLLISION_STEP := 0.2
@@ -109,13 +105,13 @@ static func resolve_step(from: Vector3, step: Vector3) -> Dictionary:
 	for _index in chunks:
 		var started_inside := ArenaRules.overlaps_blocker(position)
 		if not blocked_x and chunk.x != 0.0:
-			var candidate := Vector3(clampf(position.x + chunk.x, -ARENA_HALF_EXTENT, ARENA_HALF_EXTENT), PLAYER_HEIGHT, position.z)
+			var candidate := Vector3(clampf(position.x + chunk.x, MAP_MIN_X, MAP_MAX_X), PLAYER_HEIGHT, position.z)
 			if not started_inside and ArenaRules.overlaps_blocker(candidate):
 				blocked_x = true
 			else:
 				position = candidate
 		if not blocked_z and chunk.y != 0.0:
-			var candidate := Vector3(position.x, PLAYER_HEIGHT, clampf(position.z + chunk.y, -ARENA_HALF_EXTENT, ARENA_HALF_EXTENT))
+			var candidate := Vector3(position.x, PLAYER_HEIGHT, clampf(position.z + chunk.y, MAP_MIN_Z, MAP_MAX_Z))
 			if not started_inside and ArenaRules.overlaps_blocker(candidate):
 				blocked_z = true
 			else:
