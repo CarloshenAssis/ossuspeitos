@@ -1,0 +1,57 @@
+name: Online server probe
+
+# Conecta um cliente Godot real ao servidor online de produção pelo protocolo
+# normal (TLS, WebSocket, handshake do protocolo, entrada na sala) e sai.
+# Não usa flags de coordenador de teste e não reinicia nada no servidor; um
+# jogador na sala pode ver a sonda entrar e sair. Não é gate de PR comum:
+# roda sob demanda e quando o endpoint online muda.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Endereço wss:// do servidor (vazio = configuração do projeto)"
+        required: false
+        default: ""
+  pull_request:
+    paths:
+      - project.godot
+      - client/online_endpoint.gd
+      - .github/workflows/online-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Validate project
+        run: godot --headless --path . --editor --quit 2>&1 | tail -3
+
+      - name: Probe the online server with a real Godot client
+        env:
+          INPUT_URL: ${{ github.event.inputs.url }}
+        run: |
+          set -o pipefail
+          url="$INPUT_URL"
+          if [[ -z "$url" ]]; then
+            url="$(sed -n 's/^network\/online_url="\(.*\)"$/\1/p' project.godot)"
+          fi
+          if [[ -z "$url" ]]; then url="wss://ossuspeitos-production.up.railway.app"; fi
+          echo "PROBE_TARGET url=$url"
+          getent hosts "${url#wss://}" || true
+          timeout 60 godot --headless --path . -- --mode=client --probe=true \
+            --client-id="sonda-ci-${GITHUB_RUN_ID: -6}" --url="$url" 2>&1 | tee probe.log
+          grep -qE 'PROBE_OK .* result=(joined|refused) .* protocol=10' probe.log
