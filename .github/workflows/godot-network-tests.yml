@@ -160,6 +160,14 @@ jobs:
               | tee "$RUNNER_TEMP/godot-network-logs/combat-network-$run.log"
           done
 
+      - name: Run full eight-player mansion match (spectator and next round)
+        run: |
+          set -o pipefail
+          TEST_LOG_DIR="$RUNNER_TEMP/godot-network-logs/combat-eight-processes" \
+            COMBAT_CLIENTS=8 COMBAT_EXTENDED=true GODOT_BIN="$(command -v godot)" ./tests/combat_network_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/combat-eight.log"
+          grep -q 'COMBAT_NETWORK_TEST_OK server=1 clients=8 extended=true' "$RUNNER_TEMP/godot-network-logs/combat-eight.log"
+
       - name: Run role privacy network test
         env:
           TEST_LOG_DIR: ${{ runner.temp }}/godot-network-logs/round-processes

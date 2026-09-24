@@ -1,20 +1,23 @@
 class_name ArenaRules
 extends RefCounted
 
-## Geometria oficial da arena graybox. Servidor e cliente leem exatamente estes
-## dados: o servidor para colisão de movimento e hitscan, o cliente para montar
-## as meshes. Nenhuma parede visível existe fora de `BLOCKERS`, e nenhuma
-## entrada de `BLOCKERS` fica sem mesh correspondente.
+## Geometria oficial da partida: a mansão de `MansionMap`. Servidor e cliente
+## leem exatamente estes volumes: o servidor para colisão de movimento e
+## hitscan, o cliente para montar as meshes. Nenhuma parede visível existe fora
+## de `BLOCKERS`, e nenhuma entrada de `BLOCKERS` fica sem mesh correspondente.
 ##
 ## Eixos: +X é leste, -Z é norte (a direção "para frente" com yaw 0). O piso
-## fica em y = 0 e não há pulo: todo bloco apoiado no piso bloqueia movimento.
-## Tiros saem na altura do olho, sempre horizontais, e só param em blocos cujo
-## topo passa dessa altura. Por isso existem três alturas bem distintas:
+## fica em y = 0 e não há pulo nem agachamento. Tipos de volume:
 ##
-## - `wall` (3,0 m) e muro externo (3,5 m): bloqueiam visão, tiro e passagem;
-## - `cover` (2,4 m): cobertura cheia, bloqueia visão, tiro e passagem;
-## - `low` (1,0 m): caixote baixo, bloqueia passagem mas a câmera e o tiro
-##   passam por cima — o que se vê por cima dele também pode ser atingido.
+## - `wall`: paredes do piso até acima do teto mais alto;
+## - `lintel`: verga sobre um vão de porta (de `MansionMap.DOOR_HEIGHT` para
+##   cima);
+## - `ceiling`: laje de teto de cada ambiente, que barra tiros para cima;
+## - `furniture`: móveis grandes. Mesas são tampo e pés, e o vão embaixo do
+##   tampo deixa o tiro passar.
+##
+## O movimento só considera volumes cuja base fica abaixo do topo do corpo
+## (`PLAYER_HIT_HEIGHT`); vergas e tetos ficam acima de qualquer jogador.
 
 const EYE_HEIGHT := 0.7
 const PLAYER_HIT_RADIUS := 0.45
@@ -24,91 +27,22 @@ const PLAYER_HIT_HEIGHT := 2.0
 const BODY_CENTER_HEIGHT := 1.0
 const OFFICIAL_EYE_Y := BODY_CENTER_HEIGHT + EYE_HEIGHT
 
-const TALL_HEIGHT := 3.0
-const COVER_HEIGHT := 2.4
-const LOW_HEIGHT := 1.0
-const OUTER_WALL_HEIGHT := 3.5
-const OUTER_WALL_THICKNESS := 0.5
-## Face interna dos muros externos.
-const INNER_HALF_EXTENT := 14.5
-
-## Índices 0..3: armas comuns, uma em cada lado da arena. Índices 4..7: caixas
-## de munição nas quatro entradas do pátio central.
-const PICKUP_POSITIONS := [
-	Vector3(3.2, 0.25, 8.4), Vector3(-8.4, 0.25, 3.2),
-	Vector3(-3.2, 0.25, -8.4), Vector3(8.4, 0.25, -3.2),
-	Vector3(0.0, 0.25, 4.2), Vector3(-4.2, 0.25, 0.0),
-	Vector3(0.0, 0.25, -4.2), Vector3(4.2, 0.25, 0.0),
-]
-
-const OUTER_WALLS := [
-	{"id": "outer_west", "kind": "outer", "center": Vector3(-14.75, 1.75, 0.0), "size": Vector3(0.5, 3.5, 30.0)},
-	{"id": "outer_east", "kind": "outer", "center": Vector3(14.75, 1.75, 0.0), "size": Vector3(0.5, 3.5, 30.0)},
-	{"id": "outer_north", "kind": "outer", "center": Vector3(0.0, 1.75, -14.75), "size": Vector3(30.0, 3.5, 0.5)},
-	{"id": "outer_south", "kind": "outer", "center": Vector3(0.0, 1.75, 14.75), "size": Vector3(30.0, 3.5, 0.5)},
-]
-
-## Obstáculos internos. O layout tem simetria rotacional de 90°, portanto
-## nenhum spawn ou lado é favorecido.
-const INTERIOR := [
-	# Pátio central: monumento alto e quatro caixotes baixos (tiro passa por cima).
-	{"id": "monument", "kind": "wall", "center": Vector3(0.0, 1.5, 0.0), "size": Vector3(2.4, 3.0, 2.4)},
-	{"id": "plaza_crate_0", "kind": "low", "center": Vector3(2.9, 0.5, 2.9), "size": Vector3(1.0, 1.0, 1.0)},
-	{"id": "plaza_crate_1", "kind": "low", "center": Vector3(-2.9, 0.5, 2.9), "size": Vector3(1.0, 1.0, 1.0)},
-	{"id": "plaza_crate_2", "kind": "low", "center": Vector3(-2.9, 0.5, -2.9), "size": Vector3(1.0, 1.0, 1.0)},
-	{"id": "plaza_crate_3", "kind": "low", "center": Vector3(2.9, 0.5, -2.9), "size": Vector3(1.0, 1.0, 1.0)},
-	# Norte (z < 0)
-	{"id": "north_spawn_shield", "kind": "cover", "center": Vector3(0.0, 1.2, -10.8), "size": Vector3(4.8, 2.4, 0.6)},
-	{"id": "north_pinwheel", "kind": "cover", "center": Vector3(-4.2, 1.2, -5.6), "size": Vector3(0.6, 2.4, 2.6)},
-	{"id": "north_crate", "kind": "low", "center": Vector3(4.6, 0.5, -11.4), "size": Vector3(1.4, 1.0, 1.4)},
-	{"id": "north_flank_wall", "kind": "cover", "center": Vector3(-6.6, 1.2, -10.4), "size": Vector3(2.4, 2.4, 0.6)},
-	{"id": "north_pillar", "kind": "wall", "center": Vector3(-9.0, 1.5, -4.6), "size": Vector3(0.9, 3.0, 0.9)},
-	# Sul (z > 0)
-	{"id": "south_spawn_shield", "kind": "cover", "center": Vector3(0.0, 1.2, 10.8), "size": Vector3(4.8, 2.4, 0.6)},
-	{"id": "south_pinwheel", "kind": "cover", "center": Vector3(4.2, 1.2, 5.6), "size": Vector3(0.6, 2.4, 2.6)},
-	{"id": "south_crate", "kind": "low", "center": Vector3(-4.6, 0.5, 11.4), "size": Vector3(1.4, 1.0, 1.4)},
-	{"id": "south_flank_wall", "kind": "cover", "center": Vector3(6.6, 1.2, 10.4), "size": Vector3(2.4, 2.4, 0.6)},
-	{"id": "south_pillar", "kind": "wall", "center": Vector3(9.0, 1.5, 4.6), "size": Vector3(0.9, 3.0, 0.9)},
-	# Leste (x > 0)
-	{"id": "east_spawn_shield", "kind": "cover", "center": Vector3(10.8, 1.2, 0.0), "size": Vector3(0.6, 2.4, 4.8)},
-	{"id": "east_pinwheel", "kind": "cover", "center": Vector3(5.6, 1.2, -4.2), "size": Vector3(2.6, 2.4, 0.6)},
-	{"id": "east_crate", "kind": "low", "center": Vector3(11.4, 0.5, 4.6), "size": Vector3(1.4, 1.0, 1.4)},
-	{"id": "east_flank_wall", "kind": "cover", "center": Vector3(10.4, 1.2, -6.6), "size": Vector3(0.6, 2.4, 2.4)},
-	{"id": "east_pillar", "kind": "wall", "center": Vector3(4.6, 1.5, -9.0), "size": Vector3(0.9, 3.0, 0.9)},
-	# Oeste (x < 0)
-	{"id": "west_spawn_shield", "kind": "cover", "center": Vector3(-10.8, 1.2, 0.0), "size": Vector3(0.6, 2.4, 4.8)},
-	{"id": "west_pinwheel", "kind": "cover", "center": Vector3(-5.6, 1.2, 4.2), "size": Vector3(2.6, 2.4, 0.6)},
-	{"id": "west_crate", "kind": "low", "center": Vector3(-11.4, 0.5, -4.6), "size": Vector3(1.4, 1.0, 1.4)},
-	{"id": "west_flank_wall", "kind": "cover", "center": Vector3(-10.4, 1.2, 6.6), "size": Vector3(0.6, 2.4, 2.4)},
-	{"id": "west_pillar", "kind": "wall", "center": Vector3(-4.6, 1.5, 9.0), "size": Vector3(0.9, 3.0, 0.9)},
-	# Salas de spawn nos quatro cantos: duas pernas altas e porta diagonal.
-	{"id": "room_northeast_wall_x", "kind": "wall", "center": Vector3(13.0, 1.5, -10.2), "size": Vector3(3.0, 3.0, 0.6)},
-	{"id": "room_northeast_wall_z", "kind": "wall", "center": Vector3(10.2, 1.5, -13.0), "size": Vector3(0.6, 3.0, 3.0)},
-	{"id": "room_northwest_wall_x", "kind": "wall", "center": Vector3(-13.0, 1.5, -10.2), "size": Vector3(3.0, 3.0, 0.6)},
-	{"id": "room_northwest_wall_z", "kind": "wall", "center": Vector3(-10.2, 1.5, -13.0), "size": Vector3(0.6, 3.0, 3.0)},
-	{"id": "room_southeast_wall_x", "kind": "wall", "center": Vector3(13.0, 1.5, 10.2), "size": Vector3(3.0, 3.0, 0.6)},
-	{"id": "room_southeast_wall_z", "kind": "wall", "center": Vector3(10.2, 1.5, 13.0), "size": Vector3(0.6, 3.0, 3.0)},
-	{"id": "room_southwest_wall_x", "kind": "wall", "center": Vector3(-13.0, 1.5, 10.2), "size": Vector3(3.0, 3.0, 0.6)},
-	{"id": "room_southwest_wall_z", "kind": "wall", "center": Vector3(-10.2, 1.5, 13.0), "size": Vector3(0.6, 3.0, 3.0)},
-]
+## Índices 0..3: armas comuns. Índices 4..7: caixas de munição.
+static var PICKUP_POSITIONS: Array = MansionMap.pickup_positions()
 
 ## Lista única usada por hitscan, colisão e apresentação.
-const BLOCKERS := OUTER_WALLS + INTERIOR
+static var BLOCKERS: Array = MansionMap.blockers()
 
-## Regiões nomeadas para orientação. Grade 3x3: pátio no meio, quatro bordas
-## e quatro cantos (onde ficam as salas de spawn). `min`/`max` em XZ.
-const ZONE_EDGE := 5.0
-const ZONES := [
-	{"id": "center", "name": "Pátio central", "min": Vector2(-5.0, -5.0), "max": Vector2(5.0, 5.0)},
-	{"id": "north", "name": "Norte", "min": Vector2(-5.0, -14.5), "max": Vector2(5.0, -5.0)},
-	{"id": "south", "name": "Sul", "min": Vector2(-5.0, 5.0), "max": Vector2(5.0, 14.5)},
-	{"id": "west", "name": "Oeste", "min": Vector2(-14.5, -5.0), "max": Vector2(-5.0, 5.0)},
-	{"id": "east", "name": "Leste", "min": Vector2(5.0, -5.0), "max": Vector2(14.5, 5.0)},
-	{"id": "northwest", "name": "Canto noroeste", "min": Vector2(-14.5, -14.5), "max": Vector2(-5.0, -5.0)},
-	{"id": "northeast", "name": "Canto nordeste", "min": Vector2(5.0, -14.5), "max": Vector2(14.5, -5.0)},
-	{"id": "southwest", "name": "Canto sudoeste", "min": Vector2(-14.5, 5.0), "max": Vector2(-5.0, 14.5)},
-	{"id": "southeast", "name": "Canto sudeste", "min": Vector2(5.0, 5.0), "max": Vector2(14.5, 14.5)},
-]
+## Regiões nomeadas para orientação: um retângulo por cômodo ou trecho de
+## corredor. `min`/`max` em XZ.
+static var ZONES: Array = _zones()
+
+static func _zones() -> Array:
+	var result: Array = []
+	for entry in MansionMap.SPACES:
+		result.append({"id": str(entry["id"]), "name": str(entry["name"]), "kind": str(entry["kind"]),
+			"min": entry["min"], "max": entry["max"]})
+	return result
 
 static func ray_aabb(origin: Vector3, direction: Vector3, max_distance: float, center: Vector3, size: Vector3) -> float:
 	var minimum := center - size * 0.5
@@ -158,13 +92,47 @@ static func first_blocker_distance(origin: Vector3, direction: Vector3, max_dist
 	return closest
 
 ## Verdadeiro quando um corpo de raio `radius` centrado em `position` (XZ)
-## invade algum bloco. Blocos começam no piso e não há pulo, então a altura
-## não entra no teste.
+## invade algum volume que barra movimento. Esses volumes começam abaixo do
+## topo do corpo e não há pulo, então a altura não entra no teste.
 static func overlaps_blocker(position: Vector3, radius: float = PLAYER_HIT_RADIUS) -> bool:
-	for blocker in BLOCKERS:
+	var candidates: Array = MOVEMENT_BLOCKERS
+	if radius <= BUCKET_MARGIN:
+		candidates = _movement_buckets.get(_bucket_of(position), [])
+	for blocker in candidates:
 		if _circle_hits_box(position, radius, blocker["center"], blocker["size"]):
 			return true
 	return false
+
+static func blocks_movement(blocker: Dictionary) -> bool:
+	var center: Vector3 = blocker["center"]
+	var size: Vector3 = blocker["size"]
+	return center.y - size.y * 0.5 < PLAYER_HIT_HEIGHT
+
+## Volumes que barram o corpo, e um índice espacial deles em baldes de 4 m. Cada
+## volume entra em todo balde que seu retângulo, alargado por `BUCKET_MARGIN`,
+## toca; a consulta lê só o balde da posição.
+static var MOVEMENT_BLOCKERS: Array = BLOCKERS.filter(func(blocker): return blocks_movement(blocker))
+const BUCKET_SIZE := 4.0
+const BUCKET_MARGIN := 0.5
+static var _movement_buckets: Dictionary = _build_buckets()
+
+static func _build_buckets() -> Dictionary:
+	var buckets := {}
+	for blocker in MOVEMENT_BLOCKERS:
+		var center: Vector3 = blocker["center"]
+		var half: Vector3 = (blocker["size"] as Vector3) * 0.5
+		var first := _bucket_of(center - half - Vector3(BUCKET_MARGIN, 0.0, BUCKET_MARGIN))
+		var last := _bucket_of(center + half + Vector3(BUCKET_MARGIN, 0.0, BUCKET_MARGIN))
+		for bx in range(first.x, last.x + 1):
+			for bz in range(first.y, last.y + 1):
+				var key := Vector2i(bx, bz)
+				if not buckets.has(key):
+					buckets[key] = []
+				(buckets[key] as Array).append(blocker)
+	return buckets
+
+static func _bucket_of(position: Vector3) -> Vector2i:
+	return Vector2i(floori(position.x / BUCKET_SIZE), floori(position.z / BUCKET_SIZE))
 
 static func _circle_hits_box(position: Vector3, radius: float, center: Vector3, size: Vector3) -> bool:
 	var dx := maxf(absf(position.x - center.x) - size.x * 0.5, 0.0)
@@ -172,10 +140,11 @@ static func _circle_hits_box(position: Vector3, radius: float, center: Vector3, 
 	return dx * dx + dz * dz < radius * radius
 
 static func zone_at(position: Vector3) -> Dictionary:
+	var entry := MansionMap.space_at(position)
+	if entry.is_empty():
+		return {}
 	for zone in ZONES:
-		var minimum: Vector2 = zone["min"]
-		var maximum: Vector2 = zone["max"]
-		if position.x >= minimum.x and position.x <= maximum.x and position.z >= minimum.y and position.z <= maximum.y:
+		if str(zone["id"]) == str(entry["id"]):
 			return zone
 	return {}
 

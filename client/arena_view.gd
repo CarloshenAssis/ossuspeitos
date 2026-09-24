@@ -33,25 +33,37 @@ var _alive_flags: Dictionary = {}
 var _appearances: Dictionary = {}
 ## Último estado oficial do próprio jogador (chega em todo snapshot).
 var _local_state: Dictionary = {}
+## Sigla de cada região no chip (cômodos; corredores usam "CR").
 const ZONE_SIDES := {
-	"center": "C", "north": "N", "south": "S", "west": "O", "east": "L",
-	"northwest": "NO", "northeast": "NE", "southwest": "SO", "southeast": "SE",
+	"escritorio": "ES", "biblioteca": "BI", "galeria": "GA", "salao": "SC", "cozinha": "CO",
+	"jantar": "SJ", "quarto_fundo": "QF", "quarto_hospedes": "QH", "banheiro": "BA",
 }
+const CORRIDOR_SIDE := "CR"
 
-## Cores de orientação por região. Apresentação pura: a geometria e os nomes
-## vêm de `ArenaRules`, a mesma fonte que o servidor usa para colisão e tiro.
+## Cores de orientação por cômodo (blockout neutro com um matiz por ambiente).
+## Apresentação pura: geometria e nomes vêm de `MansionMap`, a mesma fonte que
+## o servidor usa para colisão e tiro.
 const ZONE_COLORS := {
-	"center": Color(0.62, 0.6, 0.57),
-	"north": Color(0.2, 0.38, 0.86),
-	"south": Color(0.9, 0.4, 0.12),
-	"west": Color(0.16, 0.62, 0.3),
-	"east": Color(0.56, 0.26, 0.82),
+	"escritorio": Color(0.42, 0.52, 0.44),
+	"biblioteca": Color(0.5, 0.4, 0.3),
+	"galeria": Color(0.56, 0.44, 0.56),
+	"salao": Color(0.62, 0.6, 0.57),
+	"cozinha": Color(0.55, 0.62, 0.66),
+	"jantar": Color(0.62, 0.46, 0.34),
+	"quarto_fundo": Color(0.6, 0.5, 0.4),
+	"quarto_hospedes": Color(0.44, 0.52, 0.66),
+	"banheiro": Color(0.66, 0.7, 0.72),
 }
-const OUTER_WALL_COLOR := Color(0.24, 0.26, 0.31)
-## Amarelo é exclusivo dos caixotes baixos: "bloqueia passagem, tiro passa por cima".
-const LOW_CRATE_COLOR := Color(1.0, 0.86, 0.1)
-const FLOOR_COLOR := Color(0.1, 0.11, 0.13)
-const ZONE_TILE_HEIGHT := 0.02
+const CORRIDOR_COLOR := Color(0.56, 0.36, 0.34)
+const WALL_COLOR := Color(0.78, 0.76, 0.72)
+const CEILING_COLOR := Color(0.7, 0.69, 0.66)
+const FURNITURE_COLOR := Color(0.36, 0.27, 0.2)
+const FLOOR_THICKNESS := 0.1
+## Recursos de inspeção (nomes dos cômodos, marcadores de spawn e teto
+## recortado). Desligados na apresentação normal; ligar só muda o que se vê,
+## nunca a simulação.
+var debug_overlay := false
+var show_ceilings := true
 const VIEWMODEL_OFFSET := Vector3(0.19, -0.16, -0.5)
 const VIEWMODEL_SCALE := 0.8
 ## Giro lento dos pickups disponíveis (só visual; a posição oficial não muda).
@@ -208,57 +220,86 @@ func _build_arena() -> void:
 	var environment := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.3, 0.37, 0.48)
+	env.background_color = Color(0.05, 0.05, 0.07)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.72, 0.76, 0.84)
-	env.ambient_light_energy = 0.4
+	env.ambient_light_color = Color(0.9, 0.86, 0.8)
+	env.ambient_light_energy = 0.55
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.fog_enabled = true
-	env.fog_light_color = Color(0.3, 0.37, 0.48)
-	env.fog_density = 0.005
 	environment.environment = env
 	add_child(environment)
+	# Interior fechado por lajes: a luz vem de pontos sem sombra por ambiente e
+	# de uma direcional fraca sem sombra (não atravessaria o teto com sombra).
 	var light := DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-50.0, -35.0, 0.0)
-	light.light_energy = 1.0
-	light.shadow_enabled = true
+	light.rotation_degrees = Vector3(-60.0, -35.0, 0.0)
+	light.light_energy = 0.35
+	light.shadow_enabled = false
 	add_child(light)
-	# Piso visual abaixo de y = 0; tiros oficiais são horizontais e nunca o tocam.
-	_add_decor_box(Vector3(0.0, -0.25, 0.0), Vector3(30.0, 0.5, 30.0), FLOOR_COLOR)
-	for zone in ArenaRules.ZONES:
-		_add_zone_tile(zone)
+	for entry in MansionMap.SPACES:
+		_add_floor(entry["min"], entry["max"], zone_color_by_id(str(entry["id"])).darkened(0.35), "Floor_%s" % str(entry["id"]))
+		_add_space_lights(entry)
+	for door in MansionMap.DOORS:
+		_add_floor(door["min"], door["max"], zone_color_by_id(str(door["room"])).darkened(0.35), "Floor_%s" % str(door["id"]))
 	for blocker in ArenaRules.BLOCKERS:
 		_add_blocker(blocker)
 	for index in MovementRules.SPAWN_POINTS.size():
 		_add_spawn_marker(MovementRules.SPAWN_POINTS[index])
-	_add_zone_signs()
-	_add_zone_lights()
+	for room in MansionMap.rooms():
+		_add_room_label(room)
+	set_debug_overlay(debug_overlay)
+	set_show_ceilings(show_ceilings)
 
-## Cada bloco oficial vira exatamente uma mesh com o mesmo centro e tamanho.
+## Liga os recursos de inspeção (nomes, spawns). Só apresentação.
+func set_debug_overlay(enabled: bool) -> void:
+	debug_overlay = enabled
+	for node in get_children():
+		if str(node.get_meta("arena_decor", "")) == "debug":
+			(node as Node3D).visible = enabled
+
+## Recorte visual do teto para inspeção de cima. As lajes oficiais continuam
+## barrando tiros no servidor; aqui só a mesh some.
+func set_show_ceilings(enabled: bool) -> void:
+	show_ceilings = enabled
+	for node in get_children():
+		if node.has_meta("arena_blocker_kind") and str(node.get_meta("arena_blocker_kind")) == "ceiling":
+			(node as Node3D).visible = enabled
+
+## Cada volume oficial vira exatamente uma mesh com o mesmo centro e tamanho.
 func _add_blocker(blocker: Dictionary) -> void:
 	var kind := str(blocker["kind"])
-	var color := OUTER_WALL_COLOR
-	if kind == "low":
-		color = LOW_CRATE_COLOR
-	elif kind != "outer":
-		color = zone_color(blocker["center"]).darkened(0.15)
-		if kind == "cover":
-			color = zone_color(blocker["center"]).lightened(0.12)
+	var color := WALL_COLOR
+	match kind:
+		"ceiling": color = CEILING_COLOR
+		"furniture": color = FURNITURE_COLOR.lerp(zone_color_by_id(str(blocker.get("space", ""))), 0.2)
 	var node := _add_box(blocker["center"], blocker["size"], color)
 	node.name = "Blocker_%s" % str(blocker["id"])
 	node.set_meta("arena_blocker_id", str(blocker["id"]))
+	node.set_meta("arena_blocker_kind", kind)
 
-func _add_zone_tile(zone: Dictionary) -> void:
-	var minimum: Vector2 = zone["min"]
-	var maximum: Vector2 = zone["max"]
-	var center := (minimum + maximum) * 0.5
-	var size := maximum - minimum
-	var color := zone_color(Vector3(center.x, 0.0, center.y)).darkened(0.5)
-	# Placas encostadas, na mesma altura: a troca de cor marca a região sem
-	# criar degrau ou junta que pareça obstáculo.
-	var node := _add_decor_box(Vector3(center.x, ZONE_TILE_HEIGHT * 0.5, center.y),
-		Vector3(size.x, ZONE_TILE_HEIGHT, size.y), color)
-	node.name = "ZoneTile_%s" % str(zone["id"])
+## Piso visual: placa fina logo abaixo de y = 0 (o piso oficial é o plano y = 0).
+func _add_floor(min_point: Vector2, max_point: Vector2, color: Color, node_name: String) -> void:
+	var center := (min_point + max_point) * 0.5
+	var size := max_point - min_point
+	var node := _add_decor_box(Vector3(center.x, -FLOOR_THICKNESS * 0.5, center.y), Vector3(size.x, FLOOR_THICKNESS, size.y), color)
+	node.name = node_name
+
+## Luzes pontuais sem sombra perto do teto: uma a cada ~6 m de comprimento.
+func _add_space_lights(entry: Dictionary) -> void:
+	var min_point: Vector2 = entry["min"]
+	var max_point: Vector2 = entry["max"]
+	var size := max_point - min_point
+	var count_x := maxi(1, int(round(size.x / 6.0)))
+	var count_z := maxi(1, int(round(size.y / 6.0)))
+	var ceiling := float(entry["ceiling"])
+	for ix in count_x:
+		for iz in count_z:
+			var light := OmniLight3D.new()
+			light.position = Vector3(min_point.x + size.x * (ix + 0.5) / count_x, ceiling - 0.4, min_point.y + size.y * (iz + 0.5) / count_z)
+			light.light_color = Color(1.0, 0.92, 0.8)
+			light.light_energy = 0.9
+			light.omni_range = maxf(size.x / count_x, size.y / count_z) * 0.9 + 2.0
+			light.shadow_enabled = false
+			light.set_meta("arena_light", str(entry["id"]))
+			add_child(light)
 
 func _add_spawn_marker(spawn: Vector3) -> void:
 	var node := MeshInstance3D.new()
@@ -272,78 +313,52 @@ func _add_spawn_marker(spawn: Vector3) -> void:
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mesh.material = material
 	node.mesh = mesh
-	node.position = Vector3(spawn.x, ZONE_TILE_HEIGHT + 0.005, spawn.z)
-	node.set_meta("arena_decor", "floor")
+	node.position = Vector3(spawn.x, 0.005, spawn.z)
+	node.set_meta("arena_decor", "debug")
 	add_child(node)
 
-## Placas planas nos muros externos, legíveis de dentro da arena (a face de
-## leitura de um Label3D é o seu +Z local). Não têm volume nem colisão.
-func _add_zone_signs() -> void:
-	var inner := ArenaRules.INNER_HALF_EXTENT - 0.02
-	var signs := [
-		{"text": "NORTE", "position": Vector3(0.0, 2.7, -inner), "yaw": 0.0},
-		{"text": "SUL", "position": Vector3(0.0, 2.7, inner), "yaw": PI},
-		{"text": "OESTE", "position": Vector3(-inner, 2.7, 0.0), "yaw": PI * 0.5},
-		{"text": "LESTE", "position": Vector3(inner, 2.7, 0.0), "yaw": -PI * 0.5},
-		{"text": "SALA NO", "position": Vector3(-12.3, 2.7, -inner), "yaw": 0.0},
-		{"text": "SALA NE", "position": Vector3(12.3, 2.7, -inner), "yaw": 0.0},
-		{"text": "SALA SO", "position": Vector3(-12.3, 2.7, inner), "yaw": PI},
-		{"text": "SALA SE", "position": Vector3(12.3, 2.7, inner), "yaw": PI},
-	]
-	for entry in signs:
-		var label := Label3D.new()
-		label.text = str(entry["text"])
-		label.font_size = 96
-		label.pixel_size = 0.01
-		label.outline_size = 18
-		label.modulate = Color(1.0, 1.0, 1.0)
-		label.position = entry["position"]
-		label.rotation.y = float(entry["yaw"])
-		label.set_meta("arena_decor", "sign")
-		add_child(label)
-
-## Luzes pontuais coloridas por região, sem sombra, para leitura de lugar.
-func _add_zone_lights() -> void:
-	for zone_id in ["center", "north", "south", "west", "east"]:
-		var zone := _zone_by_id(zone_id)
-		var minimum: Vector2 = zone["min"]
-		var maximum: Vector2 = zone["max"]
-		var center := (minimum + maximum) * 0.5
-		var light := OmniLight3D.new()
-		light.position = Vector3(center.x, 3.8, center.y)
-		light.light_color = zone_color(Vector3(center.x, 0.0, center.y)).lightened(0.3)
-		light.light_energy = 0.6
-		light.omni_range = 9.0
-		light.shadow_enabled = false
-		add_child(light)
+## Nome do cômodo flutuando no centro, para inspeção (visível de cima e de
+## dentro). Só existe com `debug_overlay`.
+func _add_room_label(room: Dictionary) -> void:
+	var center := ((room["min"] as Vector2) + (room["max"] as Vector2)) * 0.5
+	var label := Label3D.new()
+	label.text = str(room["name"]).to_upper()
+	label.font_size = 96
+	label.pixel_size = 0.012
+	label.outline_size = 18
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.position = Vector3(center.x, 2.6, center.y)
+	label.set_meta("arena_decor", "debug")
+	add_child(label)
 
 static func zone_color(position: Vector3) -> Color:
-	var zone_id := str(ArenaRules.zone_at(position).get("id", "center"))
-	if ZONE_COLORS.has(zone_id):
-		return ZONE_COLORS[zone_id]
-	# Cantos misturam as duas bordas vizinhas: "northeast" = norte + leste.
-	var vertical := "north" if zone_id.begins_with("north") else "south"
-	var horizontal := "east" if zone_id.ends_with("east") else "west"
-	return (ZONE_COLORS[vertical] as Color).lerp(ZONE_COLORS[horizontal], 0.5)
+	return zone_color_by_id(str(ArenaRules.zone_at(position).get("id", "")))
 
-static func _zone_by_id(zone_id: String) -> Dictionary:
-	for zone in ArenaRules.ZONES:
-		if str(zone["id"]) == zone_id:
-			return zone
-	return {}
+static func zone_color_by_id(zone_id: String) -> Color:
+	return ZONE_COLORS.get(zone_id, CORRIDOR_COLOR)
 
 func _add_decor_box(box_position: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
 	var node := _add_box(box_position, size, color)
 	node.set_meta("arena_decor", "floor")
 	return node
 
+## Um material por cor, compartilhado entre todas as caixas do mapa.
+static var _box_materials: Dictionary = {}
+
+static func _shared_material(color: Color) -> StandardMaterial3D:
+	var key := color.to_html()
+	if not _box_materials.has(key):
+		var material := StandardMaterial3D.new()
+		material.albedo_color = color
+		_box_materials[key] = material
+	return _box_materials[key]
+
 func _add_box(box_position: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
 	var mesh_instance := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
 	mesh.size = size
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	mesh.material = material
+	mesh.material = _shared_material(color)
 	mesh_instance.mesh = mesh
 	mesh_instance.position = box_position
 	add_child(mesh_instance)
@@ -357,7 +372,7 @@ func _update_zone_label(position: Vector3) -> void:
 	current_zone_name = zone_name
 	region_chip.visible = not zone_name.is_empty()
 	region_name.text = zone_name.to_upper()
-	region_side.text = str(ZONE_SIDES.get(str(zone.get("id", "")), "?"))
+	region_side.text = str(ZONE_SIDES.get(str(zone.get("id", "")), CORRIDOR_SIDE))
 	# Reancora ao tamanho mínimo: nome curto depois de um longo encolhe o chip.
 	HudStyle.anchor_corner(region_chip, Control.PRESET_TOP_LEFT)
 	region_chip.offset_top = region_chip_top

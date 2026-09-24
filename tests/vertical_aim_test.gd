@@ -112,16 +112,19 @@ func _setup_combat() -> void:
 	authority.begin_round(1, [1, 2, 3, 4])
 	world.states[SHOOTER]["position"] = ArenaRules.PICKUP_POSITIONS[0] + Vector3(0, 0.75, 0)
 	_expect(authority.request_pickup(SHOOTER, "weapon_0", 1, 100)["accepted"], "shooter picks up the pistol")
-	world.states[OTHER]["position"] = Vector3(-12, 1, -12)
-	world.states[4]["position"] = Vector3(12, 1, -12)
+	world.states[OTHER]["position"] = CombatNetworkCoordinator.SAFE_POSITIONS[0]
+	world.states[4]["position"] = CombatNetworkCoordinator.SAFE_POSITIONS[1]
 
-## Dispara do corredor livre a leste do centro (mesmo usado no teste de combate)
-## com a mira oficial dada; o alvo fica `distance` metros à frente.
+## Dispara para o norte pela faixa livre do Salão (x = 12, longe de colunas e
+## pedestal; teto a 4,5 m) com a mira oficial dada; o alvo fica `distance`
+## metros à frente.
+const LANE_START := Vector3(12, MovementRules.PLAYER_HEIGHT, 16)
+
 func _shot(pitch: float, distance: float, claimed: Variant = null) -> Dictionary:
-	world.states[SHOOTER]["position"] = Vector3(6, MovementRules.PLAYER_HEIGHT, 8)
+	world.states[SHOOTER]["position"] = LANE_START
 	world.states[SHOOTER]["yaw"] = 0.0
 	world.states[SHOOTER]["pitch"] = pitch
-	world.states[TARGET]["position"] = Vector3(6, MovementRules.PLAYER_HEIGHT, 8 - distance)
+	world.states[TARGET]["position"] = LANE_START - Vector3(0, 0, distance)
 	authority.health[TARGET] = 100
 	rounds.alive[TARGET] = true
 	authority.inventory.inventories[SHOOTER]["magazine"] = 6
@@ -148,7 +151,8 @@ func _test_shooting_up_and_down() -> void:
 	var up := _shot(0.5, 5.0)
 	var up_event: Dictionary = up["event"]
 	_expect(up["accepted"] and not up["hit"] and up["target_health"] == 100, "aiming 0.5 rad up passes over a target 5 m away")
-	_expect((up_event["end"] as Vector3).y > (up_event["origin"] as Vector3).y + 5.0, "the upward shot travels up (end y=%.2f)" % (up_event["end"] as Vector3).y)
+	var hall_ceiling := float(MansionMap.space("salao")["ceiling"])
+	_expect(absf((up_event["end"] as Vector3).y - hall_ceiling) < 0.01, "the upward shot stops on the hall ceiling (end y=%.2f)" % (up_event["end"] as Vector3).y)
 	var down_far := _shot(-0.5, 5.0)
 	var far_event: Dictionary = down_far["event"]
 	_expect(down_far["accepted"] and not down_far["hit"], "aiming 0.5 rad down hits the floor before a target 5 m away")
@@ -185,9 +189,9 @@ func _test_claimed_direction_is_not_trusted() -> void:
 	_expect(not forged["accepted"] and forged["reason"] == "forbidden_field", "a declared impact point or hit is refused")
 
 func _test_walls_still_block() -> void:
-	# Parede central entre atirador e alvo: nem nivelado nem levemente para cima.
-	world.states[SHOOTER]["position"] = Vector3(0, MovementRules.PLAYER_HEIGHT, 8)
-	world.states[TARGET]["position"] = Vector3(0, MovementRules.PLAYER_HEIGHT, -5)
+	# Parede entre a Sala de Jantar e o Salão: nem nivelado nem levemente para cima.
+	world.states[SHOOTER]["position"] = CombatNetworkCoordinator.WALL_SHOOTER
+	world.states[TARGET]["position"] = CombatNetworkCoordinator.WALL_TARGET
 	for pitch in [0.0, 0.1, -0.1]:
 		world.states[SHOOTER]["yaw"] = 0.0
 		world.states[SHOOTER]["pitch"] = pitch
@@ -197,7 +201,7 @@ func _test_walls_still_block() -> void:
 		_sequence += 1
 		var eye: Vector3 = world.states[SHOOTER]["position"] + Vector3.UP * ArenaRules.EYE_HEIGHT
 		var result := authority.request_fire(SHOOTER, _sequence, eye, MovementRules.aim_direction(0.0, pitch), _now)
-		_expect(result["accepted"] and not result["hit"] and authority.health[TARGET] == 100, "the central wall blocks a shot at pitch %.1f" % pitch)
+		_expect(result["accepted"] and not result["hit"] and authority.health[TARGET] == 100, "the dining-hall wall blocks a shot at pitch %.1f" % pitch)
 
 # --- Cliente --------------------------------------------------------------------
 
