@@ -13,7 +13,13 @@ var _settings_path := ""
 var menu: DesktopMenu
 var emitted: Array = []
 
+## Endereço online que o projeto traz de fábrica; os testes de "sem URL"
+## rodam com ele vazio e ele é restaurado no fim.
+var _project_online_url := ""
+
 func _initialize() -> void:
+	_project_online_url = str(ProjectSettings.get_setting(OnlineEndpoint.SETTING, ""))
+	ProjectSettings.set_setting(OnlineEndpoint.SETTING, "")
 	_settings_path = OS.get_user_data_dir().path_join("menu-test-%d.cfg" % OS.get_process_id())
 	MenuSettings.path_override = _settings_path
 	if FileAccess.file_exists(_settings_path):
@@ -47,6 +53,7 @@ func _process(_delta: float) -> bool:
 		return false
 	if _frame == 6:
 		_test_online_configured_by_argument_and_setting()
+		_test_project_default_and_disable()
 		return false
 	if _frame < 9:
 		return false
@@ -334,6 +341,25 @@ func _test_online_configured_by_argument_and_setting() -> void:
 	_expect(str(by_setting.online["url"]) == "wss://outro-servico.up.railway.app" and by_setting.online["source"] == "project_settings", "endpoint read from the central setting")
 	ProjectSettings.set_setting(OnlineEndpoint.SETTING, "")
 	by_setting.queue_free()
+
+## Padrão de fábrica (servidor Railway validado) e o desligamento explícito,
+## que vence o padrão sem tirar LAN e partida local.
+func _test_project_default_and_disable() -> void:
+	_expect(_project_online_url == "wss://ossuspeitos-production.up.railway.app", "project default is the validated Railway server")
+	ProjectSettings.set_setting(OnlineEndpoint.SETTING, _project_online_url)
+	var by_default := OnlineEndpoint.resolve({})
+	_expect(by_default["ok"] and by_default["source"] == "project_settings" and by_default["secure"], "default endpoint resolves from the project, over wss")
+	_expect(OnlineEndpoint.resolve({"online-url": "ws://127.0.0.1:9080"})["source"] == "argument", "argument still overrides the default")
+	var disabled := OnlineEndpoint.resolve({"online-url": "off"})
+	_expect(not disabled["ok"] and disabled["reason"] == "disabled" and disabled["source"] == "disabled", "--online-url=off disables online")
+	var menu_off := _new_menu({"online-url": "off"})
+	_expect(not menu_off.buttons.has("online_connect") and (menu_off.buttons["host"] as Button).theme_type_variation == "PrimaryButton", "disabled online keeps local as the primary action")
+	_expect(menu_off.buttons["host"].is_visible_in_tree() and menu_off.buttons["join"].is_visible_in_tree(), "local and LAN stay available")
+	menu_off.queue_free()
+	var menu_default := _new_menu({})
+	_expect(menu_default.buttons.has("online_connect") and (menu_default.buttons["online"] as Button).theme_type_variation == "PrimaryButton", "configured default makes JOGAR ONLINE the primary action")
+	menu_default.queue_free()
+	ProjectSettings.set_setting(OnlineEndpoint.SETTING, "")
 
 func await_ready(_node: Node) -> void:
 	pass

@@ -910,3 +910,15 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
   - Região, réplica única, domínio, variáveis e serverless (desligado) ficam
     no painel.
 - **Protocolo:** continua 10; a superfície de RPC não mudou.
+
+## Endpoint online padrão (pós-fase 8)
+
+- **Padrão de JOGAR ONLINE** (`armed_mystery/network/online_url`):
+  `wss://ossuspeitos-production.up.railway.app`.
+- **Validação:** feita antes com um cliente Godot real pelo protocolo normal
+  (TLS, WebSocket, protocolo 10, entrada na sala, snapshots, estado da
+  rodada), rodando no GitHub Actions. O ambiente de desenvolvimento bloqueia
+  esse host por política de rede.
+- **Precedência:** a mesma de antes, argumento > variável > projeto (ou
+  `override.cfg`). O valor `off` desliga o online na execução.
+- **O que não mudou:** local e LAN; a demo Web continua offline.

@@ -60,11 +60,18 @@ PY
 
 # --- 1. Online sem URL configurada: aviso, nenhuma conexão --------------------
 SCENE=online-unconfigured
-menu online --menu-exit-on-return=true --menu-auto=online && status=0 || status=$?
+# O projeto traz o servidor Railway como padrão; `--online-url=off` desliga o
+# online nesta execução (nada de rede externa no teste).
+menu online --menu-exit-on-return=true --menu-auto=online --online-url=off && status=0 || status=$?
 assert_equal exit "$status" 0
-assert_grep ready-reports-unconfigured 'MENU_READY name=[^ ]+ online=not_configured source=none' "$TMP_DIR/online.log"
-assert_grep online-unavailable 'MENU_ONLINE_UNAVAILABLE reason=not_configured' "$TMP_DIR/online.log"
+assert_grep ready-reports-disabled 'MENU_READY name=[^ ]+ online=disabled source=disabled' "$TMP_DIR/online.log"
+assert_grep online-unavailable 'MENU_ONLINE_UNAVAILABLE reason=disabled' "$TMP_DIR/online.log"
 assert_no_grep online-no-connection 'CLIENT_CONNECTING|MENU_CONNECTING' "$TMP_DIR/online.log"
+# Sem argumento, o menu lê o endereço padrão do projeto (sem conectar).
+menu online-default --menu-auto=quit && status=0 || status=$?
+assert_equal default-exit "$status" 0
+assert_grep ready-reports-project-default 'MENU_READY name=[^ ]+ online=configured source=project_settings' "$TMP_DIR/online-default.log"
+assert_no_grep default-no-connection 'CLIENT_CONNECTING|MENU_CONNECTING' "$TMP_DIR/online-default.log"
 
 # --- 1b. Online com URL por argumento: tenta o endereço configurado ------------
 SCENE=online-configured

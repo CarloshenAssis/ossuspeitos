@@ -13,6 +13,8 @@ extends RefCounted
 ##        [armed_mystery]
 ##        network/online_url="wss://SEU-SERVICO.up.railway.app"
 ## Nada configurado: o modo online aparece como "ainda não configurado".
+## O valor `off` (argumento ou variável) desliga o online nesta execução, mesmo
+## com endereço no projeto: testes e eventos só na LAN.
 ##
 ## Só o endereço público do servidor: nunca token, senha ou segredo. URL com
 ## credencial (`usuario@`) ou consulta (`?`) é recusada.
@@ -20,14 +22,19 @@ extends RefCounted
 const SETTING := "armed_mystery/network/online_url"
 const ENV_VAR := "ARMED_MYSTERY_ONLINE_URL"
 const ARGUMENT := "online-url"
+const DISABLED := "off"
 
 ## {url, source} da primeira fonte não vazia; url vazia se nenhuma.
 static func configured(arguments: Dictionary) -> Dictionary:
 	var from_argument := str(arguments.get(ARGUMENT, "")).strip_edges()
+	if from_argument == DISABLED:
+		return {"url": "", "source": "disabled"}
 	if not from_argument.is_empty():
 		return {"url": from_argument, "source": "argument"}
 	if not OS.has_feature("web"):
 		var from_env := OS.get_environment(ENV_VAR).strip_edges()
+		if from_env == DISABLED:
+			return {"url": "", "source": "disabled"}
 		if not from_env.is_empty():
 			return {"url": from_env, "source": "environment"}
 	var from_setting := str(ProjectSettings.get_setting(SETTING, "")).strip_edges()
@@ -88,6 +95,8 @@ static func resolve(arguments: Dictionary) -> Dictionary:
 	var source := configured(arguments)
 	var production := OS.has_feature("template") and not OS.is_debug_build()
 	var check := validate(str(source["url"]), production)
+	if source["source"] == "disabled":
+		check["reason"] = "disabled"
 	check["source"] = source["source"]
 	check["message"] = message_for(str(check["reason"]))
 	return check
@@ -96,5 +105,6 @@ static func message_for(reason: String) -> String:
 	match reason:
 		"": return ""
 		"not_configured": return "Servidor online ainda não configurado. Use \"Criar partida local\" ou \"Entrar em partida LAN\"."
+		"disabled": return "Modo online desligado nesta execução. Use \"Criar partida local\" ou \"Entrar em partida LAN\"."
 		"insecure": return "O servidor online configurado não usa conexão segura (wss://). Conexão bloqueada."
 	return "O endereço do servidor online configurado é inválido. Avise quem publicou esta versão."
