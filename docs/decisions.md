@@ -723,3 +723,47 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
   locais, fora do CI.
 - O atraso é só de teste (`tests/net_delay_peer.gd`), carregado apenas em
   binário de desenvolvimento não exportado.
+
+## Fase 5: partida integrada, casos adversos e build de teste
+
+**Cenário principal**
+- `tests/campaign_coordinator.gd` estende o coordenador de sincronização:
+  oito clientes reais, três rodadas seguidas na mesma sessão, sem reiniciar
+  processos. Rodada 1 e 3 terminam com o assassino abatido; rodada 2 com
+  todos os inocentes abatidos por tiros reais (com recargas e munição
+  coletada).
+- Setup de teste isolado e declarado: só reposicionamento (teleporte com
+  época nova). Coleta, dano, munição, recarga, eliminação e vitória são
+  sempre os reais.
+- O servidor de teste calcula suas próprias expectativas (vivos, alvos do
+  espectador, destinatários do reveal) e os clientes relatam o que receberam.
+- Entre rodadas: reset oficial, callbacks antigos injetados (comando de época
+  velha, alvos e reveal com `round_id` antigo) e estado do cliente limpo.
+
+**Casos adversos**
+- `tests/adverse_coordinator.gd` + `tests/adverse_cases_test.sh`: cada caso
+  numa sessão própria. O servidor pede ações de processo ao harness
+  (`ADVERSE_REQUEST`) e observa o efeito pelo caminho real.
+- Status de saída esperado por processo: 0; 1 só para a recusa prevista (com
+  o motivo no log); 137 só para o processo derrubado com `kill -9`. Nenhum
+  143 genérico é aceito.
+- Correção encontrada pelo teste: dois cliques em "Entrar" no mesmo quadro
+  abriam duas conexões e ligavam os sinais duas vezes. O segundo acionamento
+  agora é ignorado (`MENU_DUPLICATE_IGNORED`).
+- Observado e mantido: quem cai com uma arma leva a arma embora (o item só
+  volta no reset da rodada).
+
+**Sessão gráfica**
+- `tests/campaign_visual_session.sh`: ator e observador em clientes gráficos
+  (xvfb) e seis automatizados. Os gráficos entram primeiro; a seed padrão
+  não faz nenhum deles assassino na rodada 1 e o coordenador falha
+  explicitamente se fizer. Fora do CI.
+
+**Build de teste**
+- O ZIP do workflow Windows leva `VERSAO.txt` (commit, plataforma, protocolo,
+  sha256 dos arquivos); o resumo do job mostra o sha256 do ZIP e o smoke no
+  Windows confere os hashes. O workflow continua rodando só em PR e manual.
+
+**CI**
+- Job `match-tests`: campanha (local e 150 ms com jitter) e os 11 casos
+  adversos, em paralelo aos outros jobs.

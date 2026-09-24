@@ -588,8 +588,15 @@ func _on_frame_drawn() -> void:
 	var cam := arena.camera.global_position
 	recording_rows.append("%d,%s,%.4f,%.4f,%.4f,%.5f,%.5f,%d,%.4f,%.4f,%.5f,%.4f" % [Time.get_ticks_usec(), recording_stage,
 		cam.x, cam.y, cam.z, arena.player_rig.rotation.y, arena.camera.rotation.x, subject, subject_position.x, subject_position.z, subject_yaw, head])
-	if not visual_out.is_empty():
-		get_viewport().get_texture().get_image().save_png("%s/%s_%s_%04d.png" % [visual_out, app.client_label, recording_stage, recording_frame])
+	# `--sync-visual-every=N` grava um quadro a cada N; `--sync-visual-format=jpg`
+	# economiza disco em sessões longas (a telemetria CSV continua quadro a quadro).
+	var every := maxi(1, NetworkConfig.integer_argument(app.arguments, "sync-visual-every", 1))
+	if not visual_out.is_empty() and recording_frame % every == 0:
+		var image := get_viewport().get_texture().get_image()
+		if str(app.arguments.get("sync-visual-format", "png")) == "jpg":
+			image.save_jpg("%s/%s_%s_%04d.jpg" % [visual_out, app.client_label, recording_stage, recording_frame / every], 0.85)
+		else:
+			image.save_png("%s/%s_%s_%04d.png" % [visual_out, app.client_label, recording_stage, recording_frame])
 	recording_frame += 1
 	if Time.get_ticks_msec() >= recording_until_msec:
 		if not visual_out.is_empty():

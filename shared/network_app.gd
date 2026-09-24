@@ -263,6 +263,10 @@ func _start_combat_network_test() -> void:
 	var path := ""
 	if NetworkConfig.bool_argument(arguments, "combat-test"):
 		path = "res://tests/combat_network_coordinator.gd"
+	elif NetworkConfig.bool_argument(arguments, "adverse-test"):
+		path = "res://tests/adverse_coordinator.gd"
+	elif NetworkConfig.bool_argument(arguments, "campaign-test"):
+		path = "res://tests/campaign_coordinator.gd"
 	elif NetworkConfig.bool_argument(arguments, "sync-test"):
 		path = "res://tests/sync_network_coordinator.gd"
 	if path.is_empty():
@@ -272,7 +276,7 @@ func _start_combat_network_test() -> void:
 		fail("COMBAT_TEST_ERROR coordinator_missing")
 		return
 	combat_network_test = script.new()
-	combat_network_test.name = "CombatNetworkCoordinator" if path.contains("combat") else "SyncNetworkCoordinator"
+	combat_network_test.name = "CombatNetworkCoordinator" if path.contains("combat") else ("CampaignCoordinator" if path.contains("campaign") or path.contains("adverse") else "SyncNetworkCoordinator")
 	add_child(combat_network_test)
 
 func _process(_delta: float) -> void:
@@ -429,20 +433,20 @@ func request_join(protocol_version: int, requested_label: String) -> void:
 	# A identidade de rede vem sempre do remetente da RPC, nunca de um argumento.
 	var sender := multiplayer.get_remote_sender_id()
 	if protocol_version != NetworkConfig.PROTOCOL_VERSION:
-		join_rejected.rpc_id(sender, "protocol_version")
+		_refuse_join(sender, "protocol_version")
 		return
 	var reason := lobby.validate_join(sender, requested_label)
 	if not reason.is_empty():
-		join_rejected.rpc_id(sender, reason)
+		_refuse_join(sender, reason)
 		return
 	var state := authoritative_world.add_player(sender)
 	if state.is_empty():
-		join_rejected.rpc_id(sender, "room_unavailable")
+		_refuse_join(sender, "room_unavailable")
 		return
 	var join_reason := round_authority.join(sender, requested_label, Time.get_ticks_msec())
 	if not join_reason.is_empty():
 		authoritative_world.remove_player(sender)
-		join_rejected.rpc_id(sender, join_reason)
+		_refuse_join(sender, join_reason)
 		return
 	print("CLIENT_JOINED id=%s peer_id=%d count=%d" % [lobby.label_for(sender), sender, lobby.size()])
 	print("SERVER_APPEARANCE peer_id=%d appearance=%s" % [sender, lobby.appearance_for(sender)])
@@ -457,6 +461,13 @@ func request_join(protocol_version: int, requested_label: String) -> void:
 	_broadcast_snapshot()
 	_publish_round_state(sender)
 	_maybe_finish_round_privacy_test()
+
+## Recusa pública (sem papel nem estado de rodada) e marcador para os testes.
+func _refuse_join(sender: int, reason: String) -> void:
+	print("JOIN_REFUSED peer_id=%d reason=%s count=%d" % [sender, reason, lobby.size()])
+	if combat_network_test != null and combat_network_test.has_method("observe_join_refused"):
+		combat_network_test.call("observe_join_refused", sender, reason)
+	join_rejected.rpc_id(sender, reason)
 
 @rpc("authority", "call_remote", "reliable")
 func join_accepted(peer_id: int) -> void:
@@ -1064,6 +1075,8 @@ func round_public_state(payload: Dictionary) -> void:
 		# A rodada abriu uma época nova no servidor: espera o próximo ACK.
 		awaiting_epoch_sync = true
 		prediction.clear_look()
+		# Ações sem resultado da rodada anterior não atravessam rodadas.
+		net_stats.clear_actions()
 	if interactive_session and leave_trigger == "active" and state == RoundState.ACTIVE:
 		# Automação de teste: sai pouco depois, como um jogador faria, sem cortar
 		# o servidor no mesmo quadro em que ele avisa os demais.
@@ -1501,10 +1514,18 @@ func start_menu() -> void:
 	match auto:
 		"host": desktop_menu.call_deferred("_on_host_pressed")
 		"join": desktop_menu.call_deferred("_on_join_pressed")
+		# Clique duplo: dois acionamentos no mesmo quadro, antes da troca de cena.
+		"join-twice":
+			desktop_menu.call_deferred("_on_join_pressed")
+			desktop_menu.call_deferred("_on_join_pressed")
+		"host-twice":
+			desktop_menu.call_deferred("_on_host_pressed")
+			desktop_menu.call_deferred("_on_host_pressed")
 		"quit": desktop_menu.call_deferred("emit_signal", "quit_requested")
 
 func _on_menu_host(player_name: String, port: int, lan: bool) -> void:
-	if hosting_pending:
+	if hosting_pending or interactive_session:
+		print("MENU_DUPLICATE_IGNORED action=host")
 		return
 	var error := DesktopSession.start_hosted_server(port, lan)
 	if not error.is_empty():
@@ -1539,7 +1560,10 @@ func _poll_hosting() -> void:
 	_start_interactive_client(pending_player_name, DesktopSession.url_for(DesktopSession.LOOPBACK_ADDRESS, port))
 
 func _on_menu_join(player_name: String, address: String, port: int) -> void:
-	if hosting_pending:
+	# Clique duplo em "Entrar": o segundo acionamento chega antes de o menu
+	# sumir e abriria outra conexão com os sinais ligados duas vezes.
+	if hosting_pending or interactive_session:
+		print("MENU_DUPLICATE_IGNORED action=join")
 		return
 	_start_interactive_client(player_name, DesktopSession.url_for(address, port))
 
