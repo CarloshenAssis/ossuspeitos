@@ -461,3 +461,46 @@ dano, cadência, munição, raycast ou regra de vitória mudou.
   nem licença de terceiros, e o mesmo código roda em Windows e na Web.
 - **Testes:** `tests/combat_feedback_test.gd` confere evento → efeito e roda
   no CI.
+
+## Personagens GLB e aparência pública
+
+Os jogadores remotos usam os oito personagens do pacote `personagem_3d`
+(branch `main`, pasta `models/`), copiados para `assets/characters/` e
+importados pelo Godot. Não há download em tempo de execução. Os modelos foram
+gerados proceduralmente para o projeto (`tools/generate_characters.py` daquele
+repositório, sem recursos externos). O repositório de origem não declara
+licença.
+
+**Atribuição da aparência**
+- O servidor escolhe a aparência na entrada da sessão (`LobbyRegistry.add`),
+  antes de existir papel: a primeira variante livre entre as sessões
+  conectadas, na ordem de `CharacterAppearance.IDS`.
+- Com até oito sessões, as variantes são distintas. A aparência é estável
+  durante a sessão, e quem sai libera a sua variante.
+- Nunca deriva de papel, equipe, inventário ou estado privado.
+
+**Protocolo 7**
+- O roster público carrega `appearance`.
+- O cliente só aceita as chaves `peer_id`, `label`, `connected`,
+  `participant`, `alive` e `appearance`. Um id fora da allowlist vira `ember`
+  e nunca monta caminho de arquivo.
+- Quem entra tarde recebe o roster completo, como antes.
+
+**Visual**
+- Os GLBs têm origem nos pés, 1,80 m, +Y para cima e frente +Z, sem rig nem
+  animação.
+- Só o nó visual `CharacterModel` é ajustado: desce `PLAYER_HEIGHT` (a posição
+  oficial é o centro do corpo) e gira meia volta (a frente do jogo é −Z). A
+  escala é real.
+- Controlador, colisão, hitbox oficial, câmera, tiro e raycast não mudam.
+- O próprio jogador nunca tem corpo, e no espectador o modelo do alvo fica
+  oculto.
+- Não há animação de caminhada, porque os arquivos não têm rig. O corpo desliza
+  e gira pela posição e pelo yaw oficiais.
+
+**Importação**
+- `generate_lods` e `ensure_tangents` estão desligados: cerca de 560
+  triângulos e nenhum normal map.
+- A importação headless do editor imprime `Parameter "t" is null` uma vez por
+  GLB novo, inclusive para um GLB mínimo gerado pelo próprio Godot. É ruído do
+  editor sem tela, e a importação termina com código 0.

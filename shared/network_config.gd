@@ -11,7 +11,9 @@ const MAX_PLAYERS := RoundRules.MAX_PLAYERS
 ## 5: adds private spectator targets and the sanitized final role reveal.
 ## 6: shutdown_prepare/shutdown_ready carry the shutdown generation and a
 ## per-peer token, so only a confirmation of a received preparation counts.
-const PROTOCOL_VERSION := 6
+## 7: round_roster entries carry the public cosmetic `appearance` id
+## (allowlisted by CharacterAppearance); clients drop unknown roster keys.
+const PROTOCOL_VERSION := 7
 const CONNECT_TIMEOUT_SECONDS := 10.0
 
 static func user_arguments() -> Dictionary:

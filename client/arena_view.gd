@@ -29,6 +29,8 @@ var current_zone_name := ""
 var region_chip_top := HudStyle.MARGIN
 var gameplay_visuals := true
 var _alive_flags: Dictionary = {}
+## Aparência cosmética pública por jogador (roster oficial). Nunca vem de papel.
+var _appearances: Dictionary = {}
 ## Último estado oficial do próprio jogador (chega em todo snapshot).
 var _local_state: Dictionary = {}
 const ZONE_SIDES := {
@@ -361,7 +363,7 @@ func _create_avatar(peer_id: int, initial_position: Vector3) -> Node3D:
 	# local (visor, lapelas), a mesma convenção da câmera. É só malha, sem
 	# colisão: disparo e acerto seguem a direção oficial e a autoridade do
 	# servidor, nunca este nó. O modelo é igual para todos os papéis.
-	var avatar := ArenaModels.build_character(peer_id)
+	var avatar := ArenaModels.build_character(appearance_for(peer_id))
 	avatar.position = initial_position
 	add_child(avatar)
 	return avatar
@@ -573,7 +575,29 @@ func apply_roster_alive(entries: Array) -> void:
 		if typeof(raw_entry) != TYPE_DICTIONARY:
 			continue
 		var entry: Dictionary = raw_entry
-		set_player_alive(int(entry.get("peer_id", 0)), bool(entry.get("alive", true)))
+		var peer_id := int(entry.get("peer_id", 0))
+		if entry.has("appearance"):
+			set_appearance(peer_id, entry["appearance"])
+		set_player_alive(peer_id, bool(entry.get("alive", true)))
+
+## Aparência pública (allowlist) de um jogador. Se o corpo já existe com outra
+## aparência, só o nó visual é trocado; posição, yaw e visibilidade ficam.
+func set_appearance(peer_id: int, appearance_id: Variant) -> void:
+	var clean := CharacterAppearance.sanitize(appearance_id)
+	if str(_appearances.get(peer_id, "")) == clean:
+		return
+	_appearances[peer_id] = clean
+	if not avatars.has(peer_id):
+		return
+	var old: Node3D = avatars[peer_id]
+	var fresh := _create_avatar(peer_id, old.position)
+	fresh.rotation = old.rotation
+	fresh.visible = old.visible
+	avatars[peer_id] = fresh
+	old.queue_free()
+
+func appearance_for(peer_id: int) -> String:
+	return CharacterAppearance.sanitize(_appearances.get(peer_id, CharacterAppearance.FALLBACK))
 
 func _create_pickup(entry: Dictionary) -> Node3D:
 	var is_weapon := str(entry.get("type", "")) == "weapon"

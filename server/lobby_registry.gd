@@ -28,6 +28,11 @@ func label_for(peer_id: int) -> String:
 		return ""
 	return str(_entries[peer_id]["label"])
 
+func appearance_for(peer_id: int) -> String:
+	if not _entries.has(peer_id):
+		return ""
+	return str(_entries[peer_id]["appearance"])
+
 func order_for(peer_id: int) -> int:
 	if not _entries.has(peer_id):
 		return -1
@@ -59,10 +64,17 @@ func add(peer_id: int, raw_label: String) -> String:
 	if not reason.is_empty():
 		return reason
 	var clean := RoundRules.sanitize_label(raw_label)
+	# Aparência cosmética pública: a primeira livre entre as sessões atuais.
+	# É decidida aqui, na entrada, antes de qualquer papel existir, e fica
+	# estável enquanto a sessão durar.
+	var used: Array = []
+	for entry in _entries.values():
+		used.append(str(entry["appearance"]))
 	_entries[peer_id] = {
 		"label": clean,
 		"order": _next_order,
 		"connected": true,
+		"appearance": CharacterAppearance.first_free(used),
 	}
 	_labels[clean] = peer_id
 	_next_order += 1
@@ -88,5 +100,6 @@ func public_entries() -> Array:
 			"peer_id": int(peer_id),
 			"label": str(_entries[peer_id]["label"]),
 			"connected": bool(_entries[peer_id]["connected"]),
+			"appearance": str(_entries[peer_id]["appearance"]),
 		})
 	return result

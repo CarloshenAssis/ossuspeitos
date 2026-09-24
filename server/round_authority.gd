@@ -233,7 +233,8 @@ func public_state(now_msec: int) -> Dictionary:
 		"max_players": RoundRules.MAX_PLAYERS,
 	}
 
-## Roster público: identificador, conexão, participação e vida. Sem papel.
+## Roster público: identificador, conexão, participação, vida e aparência
+## cosmética (atribuída na entrada, independente de papel). Sem papel.
 func public_roster() -> Array:
 	var result: Array = []
 	for entry in lobby.public_entries():
@@ -244,6 +245,7 @@ func public_roster() -> Array:
 			"connected": bool(entry["connected"]),
 			"participant": participants.has(peer_id),
 			"alive": bool(alive.get(peer_id, true)),
+			"appearance": str(entry["appearance"]),
 		})
 	return result
 

@@ -279,6 +279,25 @@ assert_no_grep "late-join-received-no-role" 'CLIENT_PRIVATE_ROLE_RECEIVED' "$TMP
 assert_grep "late-join-sees-active-round" 'CLIENT_ROUND_STATE id=client-5 state=ACTIVE' "$TMP_DIR/client-5.log"
 assert_equal "headless-clients-have-no-ui" "$(grep -hc 'CLIENT_UI id=client-[0-9] hud=false arena=false display=headless' "$TMP_DIR"/client-*.log | tr -d ' ' | paste -sd, -)" "1,1,1,1,1"
 
+# Aparência cosmética pública (protocolo 7): o servidor atribui na entrada; todo
+# cliente, inclusive o que entrou tarde, vê o mesmo mapa, com variantes
+# distintas, e nenhum par jogador:aparência diverge do servidor.
+SERVER_APPEARANCES="$(sed -n 's/.*SERVER_APPEARANCE peer_id=\([0-9][0-9]*\) appearance=\([a-z][a-z]*\).*/\1:\2/p' "$TMP_DIR/server.log" | sort)"
+assert_equal "five-server-appearances" "$(wc -l <<<"$SERVER_APPEARANCES" | tr -d ' ')" "5"
+assert_equal "server-appearances-distinct" "$(cut -d: -f2 <<<"$SERVER_APPEARANCES" | sort -u | wc -l | tr -d ' ')" "5"
+for id in 1 2 3 4 5; do
+  CLIENT_MAPS="$(sed -n "s/.*CLIENT_ROSTER_APPEARANCES id=client-$id map=//p" "$TMP_DIR/client-$id.log")"
+  FULL_SEEN=0
+  while IFS= read -r map_line; do
+    [[ -n "$map_line" ]] || continue
+    SORTED="$(tr ',' '\n' <<<"$map_line" | sort)"
+    [[ "$SORTED" == "$SERVER_APPEARANCES" ]] && FULL_SEEN=1
+    UNKNOWN="$(comm -23 <(echo "$SORTED") <(echo "$SERVER_APPEARANCES") | wc -l | tr -d ' ')"
+    [[ "$UNKNOWN" == "0" ]] || { echo "ASSERT_FAILED name=client-$id-appearance-diverges map=$map_line" >&2; exit 1; }
+  done <<<"$CLIENT_MAPS"
+  assert_equal "client-$id-saw-full-appearance-map" "$FULL_SEEN" "1"
+done
+
 # --- Vitória avaliada no servidor --------------------------------------------
 assert_grep "server-evaluated-round-result" 'ROUND_RESULT round_id=1 team=INNOCENTS reason=assassin_down' "$TMP_DIR/server.log"
 assert_grep "duplicate-elimination-rejected" 'ROUND_TEST_ELIMINATION accepted=true repeated_rejected=true' "$TMP_DIR/server.log"

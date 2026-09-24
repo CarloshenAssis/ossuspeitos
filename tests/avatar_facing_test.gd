@@ -79,11 +79,11 @@ func _test_spectated_target_hides_its_visor() -> void:
 	_arena.apply_snapshot([_state(LOCAL, Vector3(0, 1, 0), 0.0), _state(REMOTE, Vector3(3, 1, 3), 0.5), _state(OTHER, Vector3(-3, 1, 3), 1.0)])
 	_arena.set_spectator_target(REMOTE)
 	_arena._process(0.1)
-	_expect(_visor(REMOTE) != null and not _visor(REMOTE).visible, "first-person spectator does not see the target's own visor")
-	_expect(_visor(OTHER) != null and _visor(OTHER).visible, "other players keep their visible front while spectating")
+	_expect(_visor(REMOTE) != null and not _visor(REMOTE).visible, "first-person spectator does not see the target's own model")
+	_expect(_visor(OTHER) != null and _visor(OTHER).visible, "other players keep their model while spectating")
 	_arena.set_spectator_target(0, false)
 	_arena._process(0.1)
-	_expect(_visor(REMOTE) != null and _visor(REMOTE).visible, "visor returns after spectating ends")
+	_expect(_visor(REMOTE) != null and _visor(REMOTE).visible, "model returns after spectating ends")
 
 ## Frente horizontal visível do avatar remoto depois de estabilizar no yaw oficial.
 func _remote_facing(yaw: float) -> Vector3:
@@ -91,21 +91,21 @@ func _remote_facing(yaw: float) -> Vector3:
 	for _i in 30: _arena._process(0.1)
 	return _visible_front(_arena.avatars[REMOTE])
 
-## Direção horizontal para onde a geometria do corpo aponta: soma dos
-## deslocamentos de todas as peças em relação ao eixo. Peças simétricas
-## (braços, pernas, chapéu) se anulam e sobra a frente (visor, lapelas). Uma
-## cápsula sozinha, sem frente, dá zero e as checagens falham.
+## Direção horizontal para onde o rosto do personagem aponta: do centro da
+## malha `Head` ao centro da malha `Nose`, no mundo. Um corpo sem nariz (a
+## cápsula antiga, ou qualquer modelo sem frente) dá zero e as checagens falham.
 func _visible_front(avatar: Node3D) -> Vector3:
-	var sum := Vector3.ZERO
-	for node in avatar.find_children("*", "MeshInstance3D", true, false):
-		var offset: Vector3 = (node as Node3D).global_position - avatar.global_position
-		offset.y = 0.0
-		sum += offset
-	return sum.normalized() if sum.length() > 0.1 else Vector3.ZERO
+	var head := avatar.find_child("Head", true, false) as MeshInstance3D
+	var nose := avatar.find_child("Nose", true, false) as MeshInstance3D
+	if head == null or nose == null:
+		return Vector3.ZERO
+	var offset := (nose.global_transform * nose.get_aabb()).get_center() - (head.global_transform * head.get_aabb()).get_center()
+	offset.y = 0.0
+	return offset.normalized() if offset.length() > 0.05 else Vector3.ZERO
 
 func _visor(peer_id: int) -> Node3D:
 	var avatar: Node3D = _arena.avatars.get(peer_id)
-	return avatar.get_node_or_null("FacingVisor") as Node3D if avatar != null else null
+	return avatar.get_node_or_null(ArenaModels.CHARACTER_MODEL) as Node3D if avatar != null else null
 
 func _official_forward(yaw: float) -> Vector3:
 	return Vector3.FORWARD.rotated(Vector3.UP, yaw)

@@ -27,6 +27,9 @@ func _ready() -> void:
 	# O banner OFFLINE ocupa o topo à esquerda; o chip de região fica logo abaixo.
 	arena_view.region_chip_top = 100.0
 	add_child(arena_view)
+	# Bonecos simulados com personagens distintos (aparência só cosmética).
+	for index in SIMULATED_PLAYER_COUNT:
+		arena_view.set_appearance(index + 2, CharacterAppearance.IDS[(index + 1) % CharacterAppearance.IDS.size()])
 	_add_demo_banner()
 	print("DEMO_READY simulated_players=%d network=disabled" % SIMULATED_PLAYER_COUNT)
 
