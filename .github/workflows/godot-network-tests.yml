@@ -128,6 +128,13 @@ jobs:
             | tee "$RUNNER_TEMP/godot-network-logs/combat-feedback.log"
           grep -q 'COMBAT_FEEDBACK_TEST_OK' "$RUNNER_TEMP/godot-network-logs/combat-feedback.log"
 
+      - name: Validate public character appearance
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/character_appearance_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/character-appearance.log"
+          grep -q 'CHARACTER_APPEARANCE_TEST_OK' "$RUNNER_TEMP/godot-network-logs/character-appearance.log"
+
       - name: Run spectator and final reveal network test
         run: |
           set -o pipefail

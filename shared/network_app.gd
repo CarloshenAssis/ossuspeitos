@@ -360,6 +360,7 @@ func request_join(protocol_version: int, requested_label: String) -> void:
 		join_rejected.rpc_id(sender, join_reason)
 		return
 	print("CLIENT_JOINED id=%s peer_id=%d count=%d" % [lobby.label_for(sender), sender, lobby.size()])
+	print("SERVER_APPEARANCE peer_id=%d appearance=%s" % [sender, lobby.appearance_for(sender)])
 	var spawn: Vector3 = state["position"]
 	print("PLAYER_SPAWNED peer_id=%d position=%.2f,%.2f,%.2f" % [sender, spawn.x, spawn.y, spawn.z])
 	if round_authority.is_waiting_for_next_round(sender):
@@ -835,17 +836,46 @@ func round_roster(entries: Array) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
 		return
 	local_roster_peers.clear()
+	var clean_entries: Array = []
 	for raw_entry in entries:
+		if typeof(raw_entry) != TYPE_DICTIONARY:
+			continue
 		var entry: Dictionary = raw_entry
 		# O roster público nunca traz papel; se trouxesse, o cliente descartaria.
 		if entry.has("role"):
 			print("CLIENT_ROSTER_REJECTED id=%s reason=role_field" % client_label)
 			return
-		local_roster_peers.append(int(entry.get("peer_id", 0)))
+		var clean := sanitize_roster_entry(entry)
+		clean_entries.append(clean)
+		local_roster_peers.append(int(clean["peer_id"]))
+	_log_roster_appearances(clean_entries)
 	if arena_view != null:
-		arena_view.apply_roster_alive(entries)
+		arena_view.apply_roster_alive(clean_entries)
 	if round_hud != null:
-		round_hud.call("apply_roster", entries)
+		round_hud.call("apply_roster", clean_entries)
+
+## Allowlist do roster público (protocolo 7): só estas chaves chegam à arena e
+## ao HUD, e a aparência só vale se for um dos oito ids conhecidos.
+const ROSTER_KEYS := ["peer_id", "label", "connected", "participant", "alive", "appearance"]
+
+static func sanitize_roster_entry(entry: Dictionary) -> Dictionary:
+	var clean := {}
+	for key in ROSTER_KEYS:
+		if entry.has(key):
+			clean[key] = entry[key]
+	clean["peer_id"] = int(clean.get("peer_id", 0)) if typeof(clean.get("peer_id", 0)) == TYPE_INT else 0
+	clean["appearance"] = CharacterAppearance.sanitize(clean.get("appearance", ""))
+	return clean
+
+var _last_appearance_log := ""
+func _log_roster_appearances(entries: Array) -> void:
+	var parts: Array = []
+	for entry in entries:
+		parts.append("%d:%s" % [int(entry["peer_id"]), str(entry["appearance"])])
+	var line := ",".join(parts)
+	if line != _last_appearance_log:
+		_last_appearance_log = line
+		print("CLIENT_ROSTER_APPEARANCES id=%s map=%s" % [client_label, line])
 
 ## Entrega privada do papel. Só chega por `rpc_id` vinda do servidor.
 @rpc("authority", "call_remote", "reliable")

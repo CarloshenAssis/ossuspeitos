@@ -4,29 +4,22 @@ extends RefCounted
 ## Modelos visuais da arena: personagem visto pelos outros, pistola na mão e
 ## pickups de arma e munição. Apresentação pura: nenhum nó tem colisão, e
 ## posição, rotação e visibilidade vêm sempre do estado oficial aplicado pela
-## `ArenaView` (snapshot, inventário privado e `public_pickups`).
+## `ArenaView` (snapshot, inventário privado, `public_pickups` e roster).
 ##
-## Direção visual "mistério": silhuetas escuras de sobretudo e chapéu, rosto
-## sem traços, só um acento de cor por jogador (cachecol e fita do
-## chapéu) para diferenciar pessoas, nunca papéis. Pickups têm brilho frio
-## (arma, ciano) ou quente (munição, cobre; o amarelo segue exclusivo dos
-## caixotes baixos) para serem achados no escuro.
+## Personagem: um dos oito GLBs de `res://assets/characters/` (pacote
+## `personagem_3d`), escolhido pela aparência cosmética pública do roster,
+## nunca pelo papel. Pickups têm brilho frio (arma, ciano) ou quente
+## (munição, cobre; o amarelo segue exclusivo dos caixotes baixos).
 ##
-## Troca de modelo (fase posterior): se existir uma cena em `OVERRIDES[chave]`
-## ela é instanciada no lugar da versão procedural. O personagem precisa
-## manter a frente em -Z local e um filho `FacingVisor`, e nenhum modelo pode
-## trazer colisão.
+## Troca de pistola ou caixa de munição: se existir uma cena em
+## `OVERRIDES[chave]` ela é instanciada no lugar da versão procedural, sem
+## colisão.
 
 const OVERRIDES := {
-	"character": "res://assets/models/character.tscn",
 	"pistol": "res://assets/models/pistol.tscn",
 	"ammo_box": "res://assets/models/ammo_box.tscn",
 }
 
-const COAT := Color(0.12, 0.12, 0.14)
-const COAT_SHADE := Color(0.08, 0.08, 0.1)
-const HAT := Color(0.07, 0.07, 0.08)
-const SKIN := Color(0.46, 0.43, 0.4)
 const VISOR := Color(0.03, 0.03, 0.04)
 const GUNMETAL := Color(0.16, 0.17, 0.19)
 const GRIP := Color(0.24, 0.16, 0.11)
@@ -35,41 +28,50 @@ const AMMO_GLOW := Color(0.95, 0.4, 0.32)
 const CRATE := Color(0.25, 0.2, 0.14)
 const BRASS := Color(0.78, 0.6, 0.3)
 
-## Frente do personagem (-Z local), na altura dos olhos: faixa escura sobre o
-## rosto. A `ArenaView` oculta o modelo do alvo observado pelo espectador.
-const VISOR_OFFSET := Vector3(0.0, 0.76, -0.19)
+## Nome do nó com o GLB dentro da raiz do avatar.
+const CHARACTER_MODEL := "CharacterModel"
+## Os GLBs têm origem nos pés, 1,80 m, +Y para cima e frente em +Z; não têm
+## rig nem animação. No jogo, a posição oficial é o centro do corpo
+## (`MovementRules.PLAYER_HEIGHT` acima do piso) e a frente é -Z (câmera).
+## Só o nó visual é ajustado: desce até o piso e gira meia volta. Escala real.
+const CHARACTER_OFFSET := Vector3(0.0, -MovementRules.PLAYER_HEIGHT, 0.0)
+const CHARACTER_YAW := PI
 
-## Acento discreto e estável por jogador (identidade, não papel).
-static func accent_for(peer_id: int) -> Color:
-	return Color.from_hsv(fmod(float(peer_id) * 0.173, 1.0), 0.5, 0.8)
-
-## Personagem com o centro do corpo na origem (posição oficial) e 2 m de
-## altura, como a cápsula anterior; pés em y = -1.
-static func build_character(peer_id: int) -> Node3D:
+## Raiz do avatar (recebe posição e yaw oficiais) com o GLB da aparência
+## pública. `appearance_id` fora da allowlist cai no padrão.
+static func build_character(appearance_id: Variant) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Character"
-	var override := _override("character")
-	if override != null:
-		root.add_child(override)
-		return root
-	var accent := accent_for(peer_id)
-	for side in [-1.0, 1.0]:
-		var suffix := "L" if side < 0.0 else "R"
-		_part(root, "Leg" + suffix, _cylinder(0.1, 0.1, 0.5), Vector3(0.13 * side, -0.75, 0.0), COAT_SHADE)
-		_part(root, "Arm" + suffix, _capsule(0.085, 0.78), Vector3(0.36 * side, 0.08, 0.0), COAT)
-	_part(root, "CoatSkirt", _cylinder(0.3, 0.44, 0.65), Vector3(0.0, -0.4, 0.0), COAT)
-	_part(root, "Torso", _capsule(0.3, 1.0), Vector3(0.0, 0.08, 0.0), COAT)
-	# Lapelas: duas faixas claras só na frente, reforçam o sentido do corpo.
-	for side in [-1.0, 1.0]:
-		var lapel := _part(root, "LapelL" if side < 0.0 else "LapelR", _box(Vector3(0.08, 0.36, 0.03)), Vector3(0.08 * side, 0.32, -0.28), COAT_SHADE.lightened(0.25))
-		lapel.rotation.z = 0.25 * side
-	_part(root, "Scarf", _torus(0.14, 0.26), Vector3(0.0, 0.56, 0.0), accent)
-	_part(root, "Head", _sphere(0.19), Vector3(0.0, 0.76, 0.0), SKIN)
-	_part(root, "FacingVisor", _box(Vector3(0.3, 0.07, 0.06)), VISOR_OFFSET, VISOR)
-	_part(root, "HatBrim", _cylinder(0.33, 0.33, 0.025), Vector3(0.0, 0.92, 0.0), HAT)
-	_part(root, "HatCrown", _cylinder(0.16, 0.19, 0.17), Vector3(0.0, 1.0, 0.0), HAT)
-	_part(root, "HatBand", _cylinder(0.195, 0.195, 0.04), Vector3(0.0, 0.94, 0.0), accent)
+	var clean := CharacterAppearance.sanitize(appearance_id)
+	root.set_meta("appearance", clean)
+	var scene := load(CharacterAppearance.scene_path(clean)) as PackedScene
+	var model := scene.instantiate() as Node3D
+	model.name = CHARACTER_MODEL
+	model.position = CHARACTER_OFFSET
+	model.rotation.y = CHARACTER_YAW
+	_apply_authored_colors(model)
+	root.add_child(model)
 	return root
+
+## O gerador do pacote gravou a paleta sRGB (ex.: tênis #131518 = 0,075)
+## direto em `baseColorFactor`, que o glTF trata como linear; importado ao pé
+## da letra, tudo fica claro demais em relação à paleta e às prévias. Aqui só a
+## cor é relida como sRGB, numa cópia do material (cacheada por material
+## importado). Geometria, arquivo e demais parâmetros PBR ficam intactos.
+static var _authored_materials: Dictionary = {}
+
+static func _apply_authored_colors(model: Node3D) -> void:
+	for node in model.find_children("*", "MeshInstance3D", true, false):
+		var mesh_node := node as MeshInstance3D
+		for surface in mesh_node.mesh.get_surface_count():
+			var imported := mesh_node.mesh.surface_get_material(surface) as StandardMaterial3D
+			if imported == null:
+				continue
+			if not _authored_materials.has(imported):
+				var authored := imported.duplicate() as StandardMaterial3D
+				authored.albedo_color = imported.albedo_color.srgb_to_linear()
+				_authored_materials[imported] = authored
+			mesh_node.set_surface_override_material(surface, _authored_materials[imported])
 
 ## Pistola com o cano em -Z local (mesma frente da câmera).
 static func build_pistol() -> Node3D:
@@ -182,25 +184,4 @@ static func _cylinder(top: float, bottom: float, height: float) -> CylinderMesh:
 	mesh.bottom_radius = bottom
 	mesh.height = height
 	mesh.radial_segments = 16
-	return mesh
-
-static func _capsule(radius: float, height: float) -> CapsuleMesh:
-	var mesh := CapsuleMesh.new()
-	mesh.radius = radius
-	mesh.height = height
-	mesh.radial_segments = 16
-	return mesh
-
-static func _sphere(radius: float) -> SphereMesh:
-	var mesh := SphereMesh.new()
-	mesh.radius = radius
-	mesh.height = radius * 2.0
-	mesh.radial_segments = 20
-	mesh.rings = 12
-	return mesh
-
-static func _torus(inner: float, outer: float) -> TorusMesh:
-	var mesh := TorusMesh.new()
-	mesh.inner_radius = inner
-	mesh.outer_radius = outer
 	return mesh
