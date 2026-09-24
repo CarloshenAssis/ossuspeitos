@@ -872,3 +872,41 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
   - Sons do menu são sintetizados (`SfxBank`), no máximo um por quadro, e
     nunca em headless.
   - "Reduzir movimento" desliga a oscilação da luz e a animação do indicador.
+
+## Fase 8 — servidor dedicado em container (Railway)
+
+- **Modo e start**
+  - `--mode=dedicated` é o único modo de produção.
+  - Aceita só a lista fechada de argumentos `mode`, `port`, `bind` e
+    `shutdown-file`; qualquer flag de teste encerra com código 2.
+  - Porta: `--port` > `PORT` > 9080. Valor inválido é fatal, e porta ocupada
+    sai com 1, sem trocar de porta.
+  - Bind em `0.0.0.0` só nesse modo; o servidor do menu local continua em
+    loopback ou LAN.
+- **Export dedicado com template de release**
+  - Escolhido em vez de rodar o projeto importado: tira os visuais, desliga
+    os ganchos de teste restritos a debug e gera uma imagem final pequena.
+  - O mapa vem de código, então remover os visuais é seguro.
+- **Sinais**
+  - O Godot 4.4.1 não trata SIGTERM: foi medido, morre com 143.
+  - Um wrapper como PID 1 traduz o sinal num arquivo de parada. O servidor
+    faz o encerramento coordenado existente (`shutdown_prepare`) e sai com 0.
+  - Se o jogo não sair em 8 s, o wrapper manda SIGKILL.
+- **Healthcheck**
+  - Sem healthcheck HTTP: o listener é WebSocket puro.
+  - A prontidão aparece no log `DEDICATED_READY` e é provada pela sonda
+    `--mode=client --probe=true`, um cliente Godot real.
+- **Conexões e log**
+  - Conexão WebSocket sem entrada na sala cai em 15 s.
+  - Recusas de entrada são logadas no máximo 3 vezes por peer.
+  - Snapshots não vão para sockets que já estão fechando, o que evita erros
+    do engine no log.
+- **Download do Godot no build**
+  - O build baixa o Godot oficial com SHA-512 fixado, por Python, sem `apt`.
+  - Aceita uma CA extra opcional (`EXTRA_CA_PEM`) para proxies com TLS
+    próprio; fica vazia no Railway e no CI.
+- **Configuração do Railway**
+  - `railway.json` define só builder, Dockerfile, draining e restart.
+  - Região, réplica única, domínio, variáveis e serverless (desligado) ficam
+    no painel.
+- **Protocolo:** continua 10; a superfície de RPC não mudou.

@@ -109,3 +109,15 @@ por cena.
 | M15 | Controles iguais ao InputMap | `menu_test.gd` | Tela "Como jogar" = InputMap |
 | M16 | Sem mundo antes de entrar | `menu_test.gd` | Nenhuma arena no menu |
 | M17 | Telas sem corte | `menu_capture.gd` (xvfb, fora do CI) | 8 telas em 960×540, 1280×720, 1920×1080 e 1024×768 |
+
+## Fase 8 — servidor dedicado em container
+
+| ID | Requisito | Onde | Resultado esperado |
+| --- | --- | --- | --- |
+| C1 | Configuração do modo dedicado | `dedicated_config_test.gd` | Precedência de porta, PORT inválida fatal, flags de teste recusadas |
+| C2 | Build limpo e verificado | job `server-container` | Download com SHA-512, import e export sem cache do desenvolvedor |
+| C3 | Configuração no container | `container_test.sh` config/runtime | PORT inválida/vazia sai com 2; porta ocupada sai com 1; uid 10001; build release |
+| C4 | Servidor vazio | `container_test.sh` idle | Vivo além dos prazos antigos; TCP e WebSocket sem entrada derrubados; sonda entra depois |
+| C5 | Multiplayer na produção | `container_test.sh` multiplayer | 8 entram, papel privado, aparência igual; 9º e protocolo 9 recusados; adversário sem efeito; nova turma joga |
+| C6 | Encerramento e reinício | `container_test.sh` stop/restart | `docker stop` coordenado, saída 0; reinício sem estado |
+| C7 | Jogo completo no container | `campaign_test.sh` com `CAMPAIGN_SERVER_IMAGE` | 8 clientes, 3 rodadas, reset, pickups, corpos, reveal |

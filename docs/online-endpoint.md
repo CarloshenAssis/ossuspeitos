@@ -47,3 +47,13 @@ não tem contas, autenticação, matchmaking nem pagamento nesta fase.
   por `ProjectSettings` (endpoint trocado sem mudar código).
 - `tests/menu_flow_test.sh`, cenários `online-unconfigured` (nenhuma
   conexão) e `online-configured` (conecta no endereço passado por argumento).
+
+## Servidor (fase 8)
+
+- **Imagem e configuração do Railway:** `docs/railway-deployment.md`.
+- **Verificação:** depois de um domínio real validado, confira com a sonda
+  (um cliente Godot real) antes de distribuir uma build apontando para ele:
+
+  ```
+  godot --headless --path . -- --mode=client --probe=true --url=wss://DOMINIO
+  ```
