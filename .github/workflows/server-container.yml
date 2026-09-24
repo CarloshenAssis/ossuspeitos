@@ -1,0 +1,92 @@
+name: Dedicated server container
+
+# Fase 8: constrói a imagem do servidor dedicado (Dockerfile na raiz, o mesmo
+# que o Railway usa), roda o container real e testa com clientes Godot fora
+# dele. Não publica imagem em registry e não usa credenciais do Railway.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  server-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Godot (clients and unit tests)
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Create log directory
+        run: mkdir -p "$RUNNER_TEMP/container-logs"
+
+      - name: Validate project
+        run: |
+          set -o pipefail
+          godot --headless --path . --editor --quit 2>&1 | tee "$RUNNER_TEMP/container-logs/parser.log"
+
+      - name: Validate dedicated server configuration
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/dedicated_config_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/container-logs/dedicated-config.log"
+          grep -q 'DEDICATED_CONFIG_TEST_OK' "$RUNNER_TEMP/container-logs/dedicated-config.log"
+
+      - name: Build production image (clean, no cache)
+        run: |
+          set -o pipefail
+          start=$(date +%s)
+          docker build --no-cache --progress=plain --build-arg ARMED_MYSTERY_COMMIT="${GITHUB_SHA}" \
+            -t armed-mystery-server:ci . 2>&1 | tee "$RUNNER_TEMP/container-logs/build.log"
+          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" | tee -a "$RUNNER_TEMP/container-logs/build.log"
+          docker image inspect armed-mystery-server:ci --format 'IMAGE_BYTES={{.Size}} USER={{.Config.User}}' \
+            | tee -a "$RUNNER_TEMP/container-logs/build.log"
+          docker image inspect armed-mystery-server:ci --format '{{.Config.User}}' | grep -qx app
+
+      - name: Build test image (same export plus test coordinators)
+        run: |
+          set -o pipefail
+          docker build --progress=plain --target runtime-test -t armed-mystery-server:ci-test . 2>&1 \
+            | tee "$RUNNER_TEMP/container-logs/build-test.log"
+
+      - name: Test production container
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/container-logs/production
+        run: |
+          set -o pipefail
+          IMAGE=armed-mystery-server:ci GODOT_BIN="$(command -v godot)" ./tests/container_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/container-logs/production.log"
+          grep -q 'CONTAINER_TEST_OK' "$RUNNER_TEMP/container-logs/production.log"
+
+      - name: Run eight-client three-round campaign against the container
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/container-logs/campaign
+        run: |
+          set -o pipefail
+          CAMPAIGN_SERVER_IMAGE=armed-mystery-server:ci-test PROFILE=local SEED=1 GODOT_BIN="$(command -v godot)" \
+            ./tests/campaign_test.sh 2>&1 | tee "$RUNNER_TEMP/container-logs/campaign.log"
+          grep -q 'CAMPAIGN_TEST_OK profile=local seed=1 clients=8 rounds=3' "$RUNNER_TEMP/container-logs/campaign.log"
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-test-logs
+          path: ${{ runner.temp }}/container-logs
+          if-no-files-found: warn
+
+      - name: Remove own images
+        if: always()
+        run: docker image rm -f armed-mystery-server:ci armed-mystery-server:ci-test >/dev/null 2>&1 || true

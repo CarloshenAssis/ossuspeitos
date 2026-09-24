@@ -23,7 +23,7 @@ if [[ -n "${TEST_LOG_DIR:-}" ]]; then
 else
   TMP_DIR="$(mktemp -d)"; REMOVE_TMP_DIR=true
 fi
-PIDS=(); NAMES=(); STATUSES=(); WATCHDOG_PID=""
+PIDS=(); NAMES=(); STATUSES=(); WATCHDOG_PID=""; SERVER_CONTAINER=""
 
 cleanup() {
   local status=$?
@@ -32,6 +32,8 @@ cleanup() {
   # Só encerra processos iniciados por este harness (PIDs próprios).
   for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done
   for pid in "${PIDS[@]:-}"; do wait "$pid" 2>/dev/null || true; done
+  # Só o container criado por este harness.
+  [[ -z "${SERVER_CONTAINER:-}" ]] || docker rm -f "$SERVER_CONTAINER" >/dev/null 2>&1 || true
   [[ "$REMOVE_TMP_DIR" != true ]] || rm -rf "$TMP_DIR"
   exit "$status"
 }
@@ -57,7 +59,17 @@ stage() { echo "HARNESS_STAGE $1 run=$RUN_ID t=$(date +%s)"; }
 stage "start profile=$PROFILE seed=$SEED port=$PORT sha=$SHA"
 
 NET_ARGS=()
-"$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 --port="$PORT" \
+# Fase 8: CAMPAIGN_SERVER_IMAGE roda o servidor dentro do container de teste
+# (mesmo export dedicado da produção, com os coordenadores) e os oito clientes
+# continuam fora dele.
+if [[ -n "${CAMPAIGN_SERVER_IMAGE:-}" ]]; then
+  SERVER_CONTAINER="am-campaign-$$"
+  SERVER_CMD=(docker run --rm --name "$SERVER_CONTAINER" -p "127.0.0.1:$PORT:$PORT" "$CAMPAIGN_SERVER_IMAGE"
+    -- --mode=server --bind=0.0.0.0 --port="$PORT")
+else
+  SERVER_CMD=("$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 --port="$PORT")
+fi
+"${SERVER_CMD[@]}" \
   --countdown-seconds=3 --round-end-delay-seconds=3 --round-seed="$SEED" --campaign-test=true \
   --sync-profile="$PROFILE" >"$TMP_DIR/server.log" 2>&1 &
 PIDS+=("$!"); NAMES+=(server); SERVER_PID=$!

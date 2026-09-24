@@ -106,6 +106,20 @@ var status_file_path := ""
 var hosted_server := false
 var hosted_empty_since_msec := 0
 const HOSTED_IDLE_EXIT_MSEC := 20000
+## Servidor dedicado de produção (fase 8, `--mode=dedicated`): configuração
+## resolvida por `DedicatedConfig`, conexões ainda sem entrada (prazo de
+## `request_join`), pedido de encerramento do operador e contadores de log.
+var dedicated := false
+var dedicated_config: Dictionary = {}
+var pending_peers: Dictionary = {}
+var operator_shutdown := false
+var dedicated_started_msec := 0
+var dedicated_next_status_msec := 0
+var dedicated_next_poll_msec := 0
+var dedicated_stats := {"connections": 0, "joins": 0, "refusals": 0, "deadline_drops": 0, "suppressed_logs": 0, "rounds": 0}
+## peer_id -> recusas de entrada já registradas (log limitado por peer).
+var refusal_logs: Dictionary = {}
+const REFUSAL_LOGS_PER_PEER := 3
 
 func _ready() -> void:
 	GameControls.ensure()
@@ -119,6 +133,8 @@ func _ready() -> void:
 		mode = "menu"
 	if mode == "server":
 		start_server()
+	elif mode == "dedicated":
+		start_dedicated()
 	elif mode == "client":
 		start_client()
 	elif mode == "demo":
@@ -133,23 +149,55 @@ func start_demo() -> void:
 	demo.test_mode = str(arguments.get("demo-test", "false")) == "true"
 	add_child(demo)
 
-func start_server() -> void:
+## Servidor dedicado de produção: só a lista fechada de argumentos, porta de
+## `PORT`, escuta em 0.0.0.0, nenhum coordenador de teste, nenhuma
+## apresentação. Erro de configuração sai com 2; falha de bind, com 1.
+func start_dedicated() -> void:
+	dedicated = true
+	dedicated_started_msec = Time.get_ticks_msec()
+	dedicated_config = DedicatedConfig.resolve(arguments, DedicatedConfig.process_environment())
+	print("DEDICATED_START game=armed-mystery commit=%s godot=%s protocol=%d build=%s display=%s capacity=%d" % [
+		dedicated_config["commit"], str(Engine.get_version_info()["string"]), NetworkConfig.PROTOCOL_VERSION,
+		"debug" if OS.is_debug_build() else "release", DisplayServer.get_name(), RoundRules.MAX_PLAYERS])
+	if DisplayServer.get_name() != "headless":
+		(dedicated_config["errors"] as Array).append("o modo dedicado exige --headless")
+	if not (dedicated_config["errors"] as Array).is_empty():
+		for error in dedicated_config["errors"]:
+			printerr("DEDICATED_CONFIG_ERROR %s" % error)
+			print("DEDICATED_CONFIG_ERROR %s" % error)
+		print("DEDICATED_FATAL reason=config exit=%d" % DedicatedConfig.EXIT_CONFIG_ERROR)
+		get_tree().quit(DedicatedConfig.EXIT_CONFIG_ERROR)
+		return
+	start_server(int(dedicated_config["port"]), str(dedicated_config["bind"]))
+
+func start_server(port: int = -1, bind_address: String = "") -> void:
 	spectator_reveal_test_mode = NetworkConfig.bool_argument(arguments, "spectator-reveal-test")
 	authoritative_world = AuthoritativeWorld.new()
 	_start_round_authority()
-	_start_combat_network_test()
+	if not dedicated:
+		_start_combat_network_test()
 	shutdown_prepare_timer = Timer.new()
 	shutdown_prepare_timer.one_shot = true
 	shutdown_prepare_timer.timeout.connect(_server_shutdown_timeout)
 	add_child(shutdown_prepare_timer)
-	var port := configured_port()
-	var bind_address := str(arguments.get("bind", NetworkConfig.DEFAULT_BIND_ADDRESS))
-	status_file_path = str(arguments.get("status-file", ""))
-	hosted_server = NetworkConfig.bool_argument(arguments, "hosted")
+	if port < 0:
+		port = configured_port()
+	if bind_address.is_empty():
+		bind_address = str(arguments.get("bind", NetworkConfig.DEFAULT_BIND_ADDRESS))
+	if not dedicated:
+		status_file_path = str(arguments.get("status-file", ""))
+		hosted_server = NetworkConfig.bool_argument(arguments, "hosted")
 	# Identidade da execução: snapshots de outro servidor são descartados.
 	session_nonce = (randi() & 0x3fffffff) | 1
-	var peer := WebSocketServerTransport.listen(port, bind_address)
+	var opened := WebSocketServerTransport.open(port, bind_address)
+	var peer: WebSocketMultiplayerPeer = opened["peer"]
 	if peer == null:
+		if dedicated:
+			# Sem troca silenciosa de porta: a falha é fatal e explicada.
+			printerr("DEDICATED_FATAL reason=listen_failed bind=%s port=%d error=%s" % [bind_address, port, error_string(int(opened["error"]))])
+			print("DEDICATED_FATAL reason=listen_failed bind=%s port=%d error=%s exit=%d" % [bind_address, port, error_string(int(opened["error"])), DedicatedConfig.EXIT_RUNTIME_ERROR])
+			get_tree().quit(DedicatedConfig.EXIT_RUNTIME_ERROR)
+			return
 		_write_status_file("error:unable_to_listen")
 		fail("SERVER_ERROR unable_to_listen")
 		return
@@ -166,6 +214,12 @@ func start_server() -> void:
 		str(round_hud != null), str(arena_view != null), DisplayServer.get_name()])
 	print("SERVER_READY address=%s port=%d" % [bind_address, port])
 	_write_status_file(DesktopSession.STATUS_READY)
+	if dedicated:
+		# Pronto de verdade: mundo, autoridades e listener criados sem erro.
+		print("DEDICATED_READY bind=%s port=%d port_source=%s capacity=%d protocol=%d shutdown_file=%s" % [
+			bind_address, port, dedicated_config["port_source"], RoundRules.MAX_PLAYERS,
+			NetworkConfig.PROTOCOL_VERSION, "on" if not str(dedicated_config["shutdown_file"]).is_empty() else "off"])
+		dedicated_next_status_msec = Time.get_ticks_msec() + int(dedicated_config["status_interval_seconds"]) * 1000
 
 func _start_round_authority() -> void:
 	round_authority = RoundAuthority.new(lobby, NetworkConfig.integer_argument(arguments, "round-seed", 0))
@@ -338,9 +392,13 @@ func _physics_process(_delta: float) -> void:
 	if mode == "client":
 		_client_command_tick()
 		return
-	if mode != "server" or shutting_down or authoritative_world == null:
+	if (mode != "server" and mode != "dedicated") or authoritative_world == null:
 		return
 	var now_msec := Time.get_ticks_msec()
+	if dedicated:
+		_dedicated_housekeeping(now_msec)
+	if shutting_down:
+		return
 	if hosted_server:
 		_check_hosted_idle(now_msec)
 	server_tick += 1
@@ -362,8 +420,21 @@ func _broadcast_snapshot() -> void:
 		return
 	var players := authoritative_world.snapshot()
 	for peer_id in lobby.peer_ids():
+		# Conexão já fechando (o cliente caiu e o aviso de desconexão ainda não
+		# chegou): enviar só gera erro do engine no log a cada snapshot.
+		if not _peer_socket_open(int(peer_id)):
+			continue
 		world_snapshot.rpc_id(int(peer_id), {"tick": server_tick, "session": session_nonce,
 			"players": players, "ack": authoritative_world.ack_for(int(peer_id))})
+
+func _peer_socket_open(peer_id: int) -> bool:
+	var transport := multiplayer.multiplayer_peer as WebSocketMultiplayerPeer
+	if transport == null:
+		return true
+	if not multiplayer.get_peers().has(peer_id):
+		return false
+	var socket := transport.get_peer(peer_id)
+	return socket != null and socket.get_ready_state() == WebSocketPeer.STATE_OPEN
 
 func _unhandled_input(event: InputEvent) -> void:
 	if interactive_session and event.is_action_pressed("leave_match"):
@@ -394,8 +465,15 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _on_peer_connected(peer_id: int) -> void:
 	print("PEER_CONNECTED peer_id=%d" % peer_id)
+	if dedicated:
+		dedicated_stats["connections"] = int(dedicated_stats["connections"]) + 1
+		pending_peers[peer_id] = Time.get_ticks_msec()
 
 func _on_peer_disconnected(peer_id: int) -> void:
+	pending_peers.erase(peer_id)
+	refusal_logs.erase(peer_id)
+	if dedicated and not lobby.has(peer_id) and not server_terminal:
+		print("PEER_DISCONNECTED peer_id=%d joined=false" % peer_id)
 	if server_terminal or not lobby.has(peer_id):
 		return
 	if authoritative_world != null:
@@ -489,6 +567,9 @@ func request_join(protocol_version: int, requested_label: String) -> void:
 		_refuse_join(sender, join_reason)
 		return
 	print("CLIENT_JOINED id=%s peer_id=%d count=%d" % [lobby.label_for(sender), sender, lobby.size()])
+	if dedicated:
+		pending_peers.erase(sender)
+		dedicated_stats["joins"] = int(dedicated_stats["joins"]) + 1
 	print("SERVER_APPEARANCE peer_id=%d appearance=%s" % [sender, lobby.appearance_for(sender)])
 	var spawn: Vector3 = state["position"]
 	print("PLAYER_SPAWNED peer_id=%d position=%.2f,%.2f,%.2f" % [sender, spawn.x, spawn.y, spawn.z])
@@ -506,6 +587,17 @@ func request_join(protocol_version: int, requested_label: String) -> void:
 
 ## Recusa pública (sem papel nem estado de rodada) e marcador para os testes.
 func _refuse_join(sender: int, reason: String) -> void:
+	if dedicated:
+		# Log limitado por peer: repetir o pedido não inunda o log.
+		dedicated_stats["refusals"] = int(dedicated_stats["refusals"]) + 1
+		var logged := int(refusal_logs.get(sender, 0))
+		refusal_logs[sender] = logged + 1
+		if logged < REFUSAL_LOGS_PER_PEER:
+			print("JOIN_REFUSED peer_id=%d reason=%s count=%d" % [sender, reason, lobby.size()])
+		else:
+			dedicated_stats["suppressed_logs"] = int(dedicated_stats["suppressed_logs"]) + 1
+		join_rejected.rpc_id(sender, reason)
+		return
 	print("JOIN_REFUSED peer_id=%d reason=%s count=%d" % [sender, reason, lobby.size()])
 	if combat_network_test != null and combat_network_test.has_method("observe_join_refused"):
 		combat_network_test.call("observe_join_refused", sender, reason)
@@ -523,6 +615,9 @@ func join_accepted(peer_id: int) -> void:
 	if arena_view != null:
 		arena_view.local_peer_id = peer_id
 	print("JOIN_ACCEPTED id=%s peer_id=%d" % [client_label, peer_id])
+	if NetworkConfig.bool_argument(arguments, "probe"):
+		_finish_probe("joined", "peer_id=%d" % peer_id)
+		return
 	var leave_after := NetworkConfig.integer_argument(arguments, "menu-leave-after-msec", 0)
 	if interactive_session and leave_after > 0:
 		get_tree().create_timer(float(leave_after) / 1000.0).timeout.connect(func():
@@ -544,7 +639,30 @@ func join_rejected(reason: String) -> void:
 		print("JOIN_REJECTED_MESSAGE id=%s text=%s" % [client_label, message])
 		_return_to_menu(message, "join_rejected")
 		return
+	if NetworkConfig.bool_argument(arguments, "probe"):
+		# Sala cheia ou nome em uso ainda provam um servidor vivo falando o
+		# mesmo protocolo; versão diferente não.
+		if reason in ["room_unavailable", "name_taken"]:
+			_finish_probe("refused", reason)
+			return
+		print("PROBE_FAILED url=%s reason=join_rejected:%s" % [str(arguments.get("url", "")), reason])
+		get_tree().quit(1)
+		return
 	fail("JOIN_REJECTED id=%s reason=%s" % [client_label, reason])
+
+## Sonda de prontidão (fase 8): um cliente Godot real conecta, faz o
+## handshake do protocolo e sai. Não joga e não fica na sala.
+var probe_finished := false
+func _finish_probe(result: String, detail: String) -> void:
+	if probe_finished:
+		return
+	probe_finished = true
+	var elapsed := Time.get_ticks_msec() - started_at_msec
+	print("PROBE_OK url=%s result=%s detail=%s protocol=%d elapsed_ms=%d" % [
+		str(arguments.get("url", "")), result, detail, NetworkConfig.PROTOCOL_VERSION, elapsed])
+	if multiplayer.multiplayer_peer != null:
+		multiplayer.multiplayer_peer.close()
+	get_tree().quit(0)
 
 func publish_client_count() -> void:
 	if shutting_down:
@@ -926,7 +1044,8 @@ func _begin_server_shutdown(peer_ids: Array) -> void:
 		return
 	shutting_down = true
 	var generation := shutdown_handshake.begin(peer_ids)
-	print("SERVER_TEST_OK clients=%d" % shutdown_handshake.expected_count())
+	if not operator_shutdown:
+		print("SERVER_TEST_OK clients=%d" % shutdown_handshake.expected_count())
 	for peer_id in shutdown_handshake.expected.keys():
 		# O token só existe depois de registrado o envio para este peer; nenhuma
 		# confirmação anterior pode conhecê-lo.
@@ -1007,6 +1126,8 @@ func _close_server_peer() -> void:
 	round_late_join_peers.clear()
 	multiplayer.multiplayer_peer.close()
 	print("SERVER_SHUTDOWN_COMPLETE closed=%d" % closed_session_count)
+	if dedicated:
+		print("DEDICATED_EXIT code=0 reason=%s" % ("operator" if operator_shutdown else "shutdown"))
 	if combat_network_test != null: print("COMBAT_SHUTDOWN_COMPLETE clients=%d" % closed_session_count)
 	get_tree().quit(0)
 
@@ -1014,7 +1135,83 @@ func _server_shutdown_timeout() -> void:
 	if server_terminal or shutdown_handshake.is_complete():
 		return
 	print("SERVER_SHUTDOWN_TIMEOUT ready=%d remaining=%d" % [shutdown_handshake.ready_count(), lobby.size()])
+	if operator_shutdown:
+		# Encerramento pedido pelo operador: cliente que não confirmou a tempo
+		# é desconectado e o processo sai normalmente (não é falha).
+		print("DEDICATED_SHUTDOWN_DEADLINE ready=%d remaining=%d" % [shutdown_handshake.ready_count(), lobby.size()])
+		_close_server_peer()
+		return
 	get_tree().quit(1)
+
+# --- Servidor dedicado (fase 8) -------------------------------------------------
+
+## Manutenção leve do servidor dedicado, a cada ~0,25 s: pedido de
+## encerramento, prazo de entrada e linha de status periódica.
+func _dedicated_housekeeping(now_msec: int) -> void:
+	if now_msec < dedicated_next_poll_msec:
+		return
+	dedicated_next_poll_msec = now_msec + 250
+	var stop_file := str(dedicated_config.get("shutdown_file", ""))
+	if not operator_shutdown and not stop_file.is_empty() and FileAccess.file_exists(stop_file):
+		_begin_operator_shutdown("signal")
+		return
+	if shutting_down:
+		return
+	for peer_id in pending_peers.keys():
+		if now_msec - int(pending_peers[peer_id]) < DedicatedConfig.JOIN_DEADLINE_MSEC:
+			continue
+		pending_peers.erase(peer_id)
+		dedicated_stats["deadline_drops"] = int(dedicated_stats["deadline_drops"]) + 1
+		if int(dedicated_stats["deadline_drops"]) <= 20:
+			print("DEDICATED_JOIN_DEADLINE peer_id=%d" % int(peer_id))
+		else:
+			dedicated_stats["suppressed_logs"] = int(dedicated_stats["suppressed_logs"]) + 1
+		if multiplayer.multiplayer_peer != null:
+			(multiplayer.multiplayer_peer as WebSocketMultiplayerPeer).disconnect_peer(int(peer_id))
+	var interval := int(dedicated_config.get("status_interval_seconds", 0))
+	if interval > 0 and now_msec >= dedicated_next_status_msec:
+		dedicated_next_status_msec = now_msec + interval * 1000
+		_print_dedicated_status(now_msec)
+
+## Uma linha, sem nomes, papéis ou inventário: só contadores e recursos.
+func _print_dedicated_status(now_msec: int) -> void:
+	var peers := multiplayer.get_peers().size() if multiplayer.multiplayer_peer != null else 0
+	print("DEDICATED_STATUS uptime_s=%d peers=%d lobby=%d pending=%d round_state=%s round_id=%d bodies=%d connections=%d joins=%d refusals=%d deadline_drops=%d suppressed_logs=%d rss_mb=%.1f objects=%d nodes=%d" % [
+		(now_msec - dedicated_started_msec) / 1000, peers, lobby.size(), pending_peers.size(),
+		RoundState.to_label(round_authority.state) if round_authority != null else "none",
+		round_authority.round_id if round_authority != null else 0, body_registry.size(),
+		int(dedicated_stats["connections"]), int(dedicated_stats["joins"]), int(dedicated_stats["refusals"]),
+		int(dedicated_stats["deadline_drops"]), int(dedicated_stats["suppressed_logs"]),
+		_process_rss_mb(),
+		int(Performance.get_monitor(Performance.OBJECT_COUNT)), int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))])
+
+## Memória residente do processo (Linux, /proc). Em build release o contador
+## estático do Godot não é mantido; -1 onde /proc não existe.
+func _process_rss_mb() -> float:
+	var file := FileAccess.open("/proc/self/status", FileAccess.READ)
+	if file == null:
+		return -1.0
+	# Arquivos de /proc informam tamanho 0: lê linha a linha até o fim.
+	while not file.eof_reached():
+		var line := file.get_line()
+		if line.begins_with("VmRSS:"):
+			return float(line.trim_prefix("VmRSS:").strip_edges().split(" ")[0]) / 1024.0
+	return -1.0
+
+## Encerramento pedido pelo operador (SIGTERM traduzido pelo wrapper do
+## container): para de aceitar entradas, avisa os jogadores pelo handshake
+## existente, fecha os peers e sai com 0 dentro de um prazo curto.
+func _begin_operator_shutdown(reason: String) -> void:
+	if operator_shutdown or server_terminal:
+		return
+	operator_shutdown = true
+	print("DEDICATED_SHUTDOWN_REQUESTED reason=%s lobby=%d peers=%d" % [reason, lobby.size(), multiplayer.get_peers().size()])
+	_print_dedicated_status(Time.get_ticks_msec())
+	if lobby.is_empty():
+		shutting_down = true
+		_close_server_peer()
+		return
+	_begin_server_shutdown(lobby.peer_ids())
 
 # --- Ciclo de partida --------------------------------------------------------
 #
@@ -1906,6 +2103,12 @@ func _exit_tree() -> void:
 		DesktopSession.stop_hosted_server("exit")
 
 func fail(message: String) -> void:
+	# A sonda já concluída fecha a própria conexão: a desconexão que se segue
+	# não é falha.
+	if probe_finished:
+		return
 	push_error(message)
 	print(message)
+	if mode == "client" and NetworkConfig.bool_argument(arguments, "probe"):
+		print("PROBE_FAILED url=%s reason=%s" % [str(arguments.get("url", "")), message.get_slice(" ", 0).to_lower()])
 	get_tree().quit(1)

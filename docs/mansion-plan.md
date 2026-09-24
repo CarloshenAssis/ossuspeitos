@@ -15,11 +15,12 @@ tarefa; não versionada). As perspectivas anexadas servem só de atmosfera.
 | 5 — campanha integrada e build | `claude/charming-darwin-kz3xvn`, reiniciada de `f8cd36c` | integrada (ver `docs/test-matrix.md`) | [#20](https://github.com/CarloshenAssis/ossuspeitos/pull/20) | `f10ef87` → merge `f76d4cb` |
 | 6 — reset completo, pickups e corpos | `claude/charming-darwin-kz3xvn`, reiniciada de `f76d4cb` | integrada | [#21](https://github.com/CarloshenAssis/ossuspeitos/pull/21) | `351a291` → merge `f82ad7c` |
 | 6.1 — protocolo 10 | `claude/charming-darwin-kz3xvn`, reiniciada de `f82ad7c` | integrada; build Windows protocolo 10 gerada na main | [#22](https://github.com/CarloshenAssis/ossuspeitos/pull/22) | `8153e64` → merge `18da540` |
-| 7 — menu principal e fluxo de conexão | `claude/charming-darwin-kz3xvn`, reiniciada de `18da540` | em PR | — | — |
+| 7 — menu principal e fluxo de conexão | `claude/charming-darwin-kz3xvn`, reiniciada de `18da540` | integrada | [#23](https://github.com/CarloshenAssis/ossuspeitos/pull/23) | `4eb9ffe` → merge `c91d39c` |
+| 8 — servidor dedicado em container (Railway) | `claude/charming-darwin-kz3xvn`, reiniciada de `c91d39c` | em PR | — | — |
 
 Pendências:
-- fase 7: PR, CI do HEAD e merge.
-- modo online: sem servidor Railway implantado (ver `docs/online-endpoint.md`).
+- fase 8: PR, CI do HEAD e merge; depois, passos no painel do Railway (`docs/railway-deployment.md`).
+- modo online: nenhum cliente testado por `wss://` no domínio público ainda.
 
 Retomada: `git fetch origin && git checkout claude/charming-darwin-kz3xvn`.
 Testes: ver `.github/workflows/godot-network-tests.yml`.
