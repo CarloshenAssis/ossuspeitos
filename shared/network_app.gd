@@ -16,11 +16,31 @@ var completed_peers: Dictionary = {}
 var authoritative_world: AuthoritativeWorld
 var combat_authority: CombatAuthority
 var arena_view: ArenaView
-var snapshot_accumulator := 0.0
-var input_accumulator := 0.0
-var input_sequence := 0
-var pending_yaw_delta := 0.0
-var pending_pitch_delta := 0.0
+## Servidor: tick oficial e identidade desta execução (protocolo 9).
+var server_tick := 0
+var session_nonce := 0
+## peer_id -> motivos de recusa de pacote já registrados (log limitado).
+var command_logs: Dictionary = {}
+## peer_id -> último tick em que um `input_rejected` saiu (no máximo um por tick).
+var input_rejection_ticks: Dictionary = {}
+## Cliente: previsão, fila de envio e identificadores de ação (fase 4).
+var prediction := PlayerPrediction.new()
+var outbox: Array = []
+var ticks_since_send := 0
+var action_ids := {"fire": 0, "reload": 0, "pickup": 0}
+var action_round_id := -1
+## Depois de entrar em ACTIVE, o cliente só comanda com a época que o
+## servidor abriu para a rodada (o primeiro ACK recebido depois do aviso).
+var awaiting_epoch_sync := true
+var snapshot_session := 0
+var last_snapshot_tick := -1
+var test_move_intent := Vector2.ZERO
+var test_movement_started := false
+var window_focused := true
+var net_stats := NetStats.new()
+var net_stats_interval_msec := 0
+var net_stats_last_msec := 0
+const MOUSE_SENSITIVITY := 0.0025
 var client_spawn_known := false
 var client_spawn_position := Vector3.ZERO
 var client_movement_observed := false
@@ -49,7 +69,6 @@ var local_roster_peers: Array = []
 var local_result_round_id := 0
 var role_spoof_attempted := false
 var ack_replay_attempted := false
-var combat_sequence := {"pickup": 0, "fire": 0, "reload": 0}
 var local_combat_state: Dictionary = {}
 var local_spectator_targets: Array = []
 var local_spectator_index := -1
@@ -118,6 +137,8 @@ func start_server() -> void:
 	var bind_address := str(arguments.get("bind", NetworkConfig.DEFAULT_BIND_ADDRESS))
 	status_file_path = str(arguments.get("status-file", ""))
 	hosted_server = NetworkConfig.bool_argument(arguments, "hosted")
+	# Identidade da execução: snapshots de outro servidor são descartados.
+	session_nonce = (randi() & 0x3fffffff) | 1
 	var peer := WebSocketServerTransport.listen(port, bind_address)
 	if peer == null:
 		_write_status_file("error:unable_to_listen")
@@ -177,8 +198,10 @@ func start_client() -> void:
 		return
 	peer = _wrap_test_net_delay(peer)
 	multiplayer.multiplayer_peer = peer
+	net_stats_interval_msec = NetworkConfig.integer_argument(arguments, "net-stats", 0)
 	if DisplayServer.get_name() != "headless":
 		arena_view = ArenaView.new()
+		arena_view.local_view_provider = _local_presented
 		add_child(arena_view)
 		_start_round_hud()
 	print("CLIENT_UI id=%s hud=%s arena=%s display=%s" % [
@@ -260,43 +283,50 @@ func _process(_delta: float) -> void:
 			_return_to_menu("Tempo esgotado ao conectar em %s." % str(arguments.get("url", "")), "timeout")
 			return
 		fail("CLIENT_TIMEOUT id=%s" % client_label)
-	if NetworkConfig.should_poll_human_input(
-			joined, expected_clients, round_test_mode,
-		combat_network_test != null, arena_view != null) and _client_can_gameplay():
-		input_accumulator += _delta
-		if input_accumulator >= 0.05:
-			input_accumulator = 0.0
-			_send_input(Input.get_vector("move_left", "move_right", "move_forward", "move_backward"), pending_yaw_delta, pending_pitch_delta)
-			pending_yaw_delta = 0.0
-			pending_pitch_delta = 0.0
+	if net_stats_interval_msec > 0 and joined and Time.get_ticks_msec() - net_stats_last_msec >= net_stats_interval_msec:
+		net_stats_last_msec = Time.get_ticks_msec()
+		print("NET_STATS id=%s %s" % [client_label, net_stats.summary(prediction, arena_view.interpolator if arena_view != null else null)])
 
-func _physics_process(delta: float) -> void:
+func _physics_process(_delta: float) -> void:
+	if mode == "client":
+		_client_command_tick()
+		return
 	if mode != "server" or shutting_down or authoritative_world == null:
 		return
 	var now_msec := Time.get_ticks_msec()
 	if hosted_server:
 		_check_hosted_idle(now_msec)
-	authoritative_world.step(delta, now_msec)
+	server_tick += 1
+	authoritative_world.step(_command_gate, _run_command_action, _on_command_rejected)
 	if combat_authority != null:
 		combat_authority.tick(now_msec)
 	if round_authority != null:
 		round_authority.tick(now_msec)
 		if round_authority.consume_countdown_tick(now_msec):
 			_publish_round_state()
-	snapshot_accumulator += delta
-	if snapshot_accumulator >= 0.05:
-		snapshot_accumulator = 0.0
-		world_snapshot.rpc(authoritative_world.snapshot())
+	if server_tick % NetSync.SNAPSHOT_INTERVAL_TICKS == 0:
+		_broadcast_snapshot()
+
+## Snapshot por destinatário: estados públicos iguais para todos e o ACK
+## privado do próprio jogador (sequência resolvida, época, baldes de mira).
+func _broadcast_snapshot() -> void:
+	if shutting_down or authoritative_world == null:
+		return
+	var players := authoritative_world.snapshot()
+	for peer_id in lobby.peer_ids():
+		world_snapshot.rpc_id(int(peer_id), {"tick": server_tick, "session": session_nonce,
+			"players": players, "ack": authoritative_world.ack_for(int(peer_id))})
 
 func _unhandled_input(event: InputEvent) -> void:
 	if interactive_session and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F10:
 		_return_to_menu("Você saiu da partida.", "left")
 		return
-	if mode == "client" and event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		pending_yaw_delta = clampf(pending_yaw_delta - event.relative.x * 0.0025, -MovementRules.MAX_YAW_DELTA, MovementRules.MAX_YAW_DELTA)
-		# Mouse para cima = olhar para cima (pitch positivo). O servidor acumula e
-		# limita; o cliente só pede a variação.
-		pending_pitch_delta = clampf(pending_pitch_delta - event.relative.y * 0.0025, -MovementRules.MAX_PITCH_DELTA, MovementRules.MAX_PITCH_DELTA)
+	if mode == "client" and event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED \
+			and _commands_enabled():
+		# Mouse para a direita reduz o yaw; para cima (relative.y < 0) olha para
+		# cima. O delta é consumido uma vez: a câmera o mostra no próximo quadro
+		# e o próximo comando o leva (limitado como no servidor).
+		prediction.add_look(-event.relative.x * MOUSE_SENSITIVITY, -event.relative.y * MOUSE_SENSITIVITY, Time.get_ticks_usec())
 	if mode != "client" or not joined or shutdown_prepare_received or arena_view == null:
 		return
 	if not _client_can_gameplay():
@@ -304,17 +334,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			if event.keycode == KEY_Q: _cycle_spectator(-1)
 			elif event.keycode == KEY_E: _cycle_spectator(1)
 		return
+	if not _commands_enabled():
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		combat_sequence["fire"] += 1
-		request_fire.rpc_id(1, combat_sequence["fire"], arena_view.camera_origin(), arena_view.camera_direction())
+		_queue_local_action(NetSync.ACTION_FIRE)
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_R:
-		combat_sequence["reload"] += 1
-		request_reload.rpc_id(1, combat_sequence["reload"])
+		_queue_local_action(NetSync.ACTION_RELOAD)
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
 		var pickup_id: String = arena_view.nearest_available_pickup()
 		if not pickup_id.is_empty():
-			combat_sequence["pickup"] += 1
-			request_pickup.rpc_id(1, pickup_id, combat_sequence["pickup"])
+			_queue_local_action(NetSync.ACTION_PICKUP, pickup_id)
 
 func _on_peer_connected(peer_id: int) -> void:
 	print("PEER_CONNECTED peer_id=%d" % peer_id)
@@ -343,6 +372,8 @@ func _on_peer_disconnected(peer_id: int) -> void:
 		return
 	completed_peers.erase(peer_id)
 	impossible_input_rejected_peers.erase(peer_id)
+	command_logs.erase(peer_id)
+	input_rejection_ticks.erase(peer_id)
 	round_ack_peers.erase(peer_id)
 	round_late_join_peers.erase(peer_id)
 	publish_client_count()
@@ -411,7 +442,7 @@ func request_join(protocol_version: int, requested_label: String) -> void:
 			sender, round_authority.round_id, round_late_join_peers.size()])
 	join_accepted.rpc_id(sender, sender)
 	publish_client_count()
-	world_snapshot.rpc(authoritative_world.snapshot())
+	_broadcast_snapshot()
 	_publish_round_state(sender)
 	_maybe_finish_round_privacy_test()
 
@@ -451,9 +482,10 @@ func client_count_changed(count: int) -> void:
 		_try_start_test_movement()
 
 func _try_start_test_movement() -> void:
-	if not test_roster_ready or not client_spawn_known or input_sequence != 0:
+	if not test_roster_ready or not client_spawn_known or test_movement_started:
 		return
 	if expected_clients > 0:
+		test_movement_started = true
 		var client_number := int(client_label.trim_prefix("client-"))
 		var directions := [Vector2.RIGHT, Vector2.LEFT, Vector2.DOWN, Vector2.UP]
 		test_direction = directions[(client_number - 1) % directions.size()]
@@ -485,50 +517,251 @@ func test_pitch_delta() -> float:
 	var client_number := int(client_label.trim_prefix("client-"))
 	return [0.3, -0.2, -0.3, 0.2][(client_number - 1) % 4]
 
+## Intenção de teste (clientes headless): vale até ser trocada e segue pelo
+## mesmo fluxo de comandos do jogador humano, um comando por tick.
 func _send_input(move: Vector2, yaw_delta: float, pitch_delta: float = 0.0) -> void:
+	test_move_intent = move
+	prediction.add_look(yaw_delta, pitch_delta)
+
+# --- Comandos (protocolo 9) ---------------------------------------------------
+
+func _movement_test_client() -> bool:
+	return expected_clients > 0
+
+## O cliente só comanda com estado previsto válido, na época aberta pelo
+## servidor, e quando pode agir (ou no teste de movimento sem rodada).
+func _commands_enabled() -> bool:
+	return mode == "client" and joined and client_connected and not shutdown_prepare_received \
+		and prediction.has_state and not awaiting_epoch_sync \
+		and (_client_can_gameplay() or _movement_test_client())
+
+func _sample_move() -> Vector2:
+	if NetworkConfig.should_poll_human_input(joined, expected_clients, round_test_mode,
+			combat_network_test != null, arena_view != null):
+		# Sem foco não há movimento (e o mouse residual já foi descartado).
+		if not window_focused:
+			return Vector2.ZERO
+		return Input.get_vector("move_left", "move_right", "move_forward", "move_backward")
+	return test_move_intent
+
+## Um comando por tick fixo de física: amostra, simula localmente, guarda para
+## replay e envia em lote (ou na hora, se carrega ação).
+func _client_command_tick() -> void:
+	if not _commands_enabled():
+		if not outbox.is_empty():
+			_flush_commands()
+		return
+	var command := prediction.build_command(_sample_move())
+	outbox.append(command)
+	ticks_since_send += 1
+	net_stats.pending_observed(prediction.pending.size(), prediction.oldest_pending_age_usec())
+	if ticks_since_send >= NetSync.SEND_INTERVAL_TICKS or not (command["action"] as Dictionary).is_empty() \
+			or outbox.size() >= NetSync.MAX_COMMANDS_PER_PACKET:
+		_flush_commands()
+
+func _flush_commands() -> void:
+	ticks_since_send = 0
+	if shutdown_prepare_received or not client_connected:
+		outbox.clear()
+		return
+	while not outbox.is_empty():
+		var first: Dictionary = outbox[0]
+		var encoded: Array = []
+		var count := 0
+		while count < outbox.size() and count < NetSync.MAX_COMMANDS_PER_PACKET \
+				and int((outbox[count] as Dictionary)["epoch"]) == int(first["epoch"]) \
+				and int((outbox[count] as Dictionary)["seq"]) == int(first["seq"]) + count:
+			var command: Dictionary = outbox[count]
+			encoded.append(NetSync.encode_command(command["move"], float(command["yaw_delta"]),
+				float(command["pitch_delta"]), NetSync.encode_action(command["action"])))
+			count += 1
+		outbox = outbox.slice(count)
+		submit_commands.rpc_id(1, NetSync.encode_packet(int(first["epoch"]), int(first["seq"]), encoded))
+		net_stats.sent_commands += count
+		net_stats.sent_packets += 1
+
+## Identificador de ação por rodada: recomeça em 1 quando a rodada privada
+## muda (o servidor também zera por rodada).
+func _next_action_id(kind: String) -> int:
+	var round_id := int(local_combat_state.get("round_id", 0))
+	if round_id != action_round_id:
+		action_round_id = round_id
+		action_ids = {"fire": 0, "reload": 0, "pickup": 0}
+	return int(action_ids[kind]) + 1
+
+func _queue_local_action(kind: String, pickup_id: String = "") -> bool:
+	var id := _next_action_id(kind)
+	var action := {"kind": kind, "id": id}
+	if kind == NetSync.ACTION_PICKUP:
+		action["pickup_id"] = pickup_id
+	if not prediction.queue_action(action):
+		return false
+	action_ids[kind] = id
+	net_stats.action_started(kind, id)
+	if kind == NetSync.ACTION_FIRE and arena_view != null:
+		arena_view.predict_local_shot(id)
+	return true
+
+## Teste: ação com identificador escolhido pelo coordenador, pelo mesmo fluxo.
+func queue_test_action(kind: String, id: int, pickup_id: String = "") -> bool:
+	var action := {"kind": kind, "id": id}
+	if kind == NetSync.ACTION_PICKUP:
+		action["pickup_id"] = pickup_id
+	return prediction.queue_action(action)
+
+## Teste: pacote montado à mão, fora da previsão (espectador ou rodada
+## encerrada), com sequências novas desta conexão.
+func send_test_packet(actions: Array, move: Vector2 = Vector2.ZERO) -> void:
 	if shutdown_prepare_received or not client_connected:
 		return
-	input_sequence += 1
-	submit_input.rpc_id(1, input_sequence, move, yaw_delta, pitch_delta)
+	var encoded: Array = []
+	for action in actions:
+		encoded.append(NetSync.encode_command(move, 0.0, 0.0, NetSync.encode_action(action)))
+	var first_seq := prediction.next_seq
+	prediction.next_seq += encoded.size()
+	submit_commands.rpc_id(1, NetSync.encode_packet(prediction.epoch, first_seq, encoded))
+
+func _local_presented(delta: float) -> Dictionary:
+	if not _commands_enabled():
+		return {}
+	var presented := prediction.presented(Engine.get_physics_interpolation_fraction(), delta)
+	if int(presented.get("look_latency_usec", 0)) > 0:
+		net_stats.record(net_stats.look_latency_ms, float(presented["look_latency_usec"]) / 1000.0)
+	return presented
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
-func submit_input(sequence: int, move: Vector2, yaw_delta: float, pitch_delta: float) -> void:
+func submit_commands(payload: Variant) -> void:
 	if not multiplayer.is_server() or shutting_down:
 		return
+	# Remetente derivado da conexão; o pacote não carrega identidade.
 	var sender := multiplayer.get_remote_sender_id()
-	if not lobby.has(sender):
+	if not lobby.has(sender) or authoritative_world == null:
 		return
-	var movement_test := NetworkConfig.integer_argument(arguments, "stop-after-clients", 0) > 0
-	if not movement_test and (round_authority.state != RoundState.ACTIVE or not round_authority.is_participant(sender) or not round_authority.is_alive(sender)):
-		if spectator_reveal_test_mode and sender == spectator_test_dead_peer \
-				and round_authority.state == RoundState.ACTIVE and not round_authority.is_alive(sender):
-			spectator_test_movement_blocked = true
-			_maybe_finish_spectator_probe()
-		return
-	var reason := authoritative_world.accept_input(sender, sequence, move, yaw_delta, Time.get_ticks_msec(), pitch_delta)
+	var result := authoritative_world.receive_commands(sender, payload, Time.get_ticks_msec())
+	var reason := str(result.get("reason", ""))
 	if not reason.is_empty():
-		print("INPUT_REJECTED peer_id=%d reason=%s" % [sender, reason])
-		input_rejected.rpc_id(sender, reason, sequence)
-		if reason == "move_magnitude":
-			impossible_input_rejected_peers[sender] = true
+		_log_command_rejection(sender, reason)
+	for dropped in result.get("dropped_actions", []):
+		_reject_action(sender, dropped["action"], str(dropped["reason"]))
+	if int(result.get("queued", 0)) > 0 and authoritative_world.states.has(sender):
+		var state: Dictionary = authoritative_world.states[sender]
+		if not bool(state["movement_logged"]):
+			state["movement_logged"] = true
+			print("MOVEMENT_AUTHORIZED peer_id=%d" % sender)
+
+## Uma linha por peer e motivo: pacote hostil repetido não vira spam de log.
+func _log_command_rejection(sender: int, reason: String) -> void:
+	var logged: Dictionary = command_logs.get(sender, {})
+	if logged.has(reason) or logged.size() >= 16:
 		return
-	var state: Dictionary = authoritative_world.states[sender]
-	if not bool(state["movement_logged"]):
-		state["movement_logged"] = true
-		print("MOVEMENT_AUTHORIZED peer_id=%d" % sender)
+	logged[reason] = true
+	command_logs[sender] = logged
+	print("COMMANDS_REJECTED peer_id=%d reason=%s" % [sender, reason])
+
+## Pode o jogador agir neste tick? Vazio se sim; senão o motivo.
+func _command_gate(peer_id: int) -> String:
+	if NetworkConfig.integer_argument(arguments, "stop-after-clients", 0) > 0:
+		return ""
+	if round_authority == null or round_authority.state != RoundState.ACTIVE:
+		return "round_not_active"
+	if not round_authority.is_participant(peer_id):
+		return "not_participant"
+	if not round_authority.is_alive(peer_id):
+		return "player_dead"
+	return ""
+
+## Ação no ponto causal: mira do comando já aplicada, movimento do tick não.
+func _run_command_action(peer_id: int, action: Dictionary, _seq: int) -> void:
+	var kind := str(action["kind"])
+	var id := int(action["id"])
+	var now := Time.get_ticks_msec()
+	var result: Dictionary
+	if kind == NetSync.ACTION_FIRE:
+		result = combat_authority.request_fire(peer_id, id, now)
+	elif kind == NetSync.ACTION_RELOAD:
+		result = combat_authority.request_reload(peer_id, id, now)
+	else:
+		result = combat_authority.request_pickup(peer_id, action.get("pickup_id", ""), id, now)
+	_report_action_result(peer_id, kind, id, result)
+
+func _report_action_result(peer_id: int, kind: String, id: int, result: Dictionary) -> void:
+	_observe_spectator_block(peer_id, kind, result)
+	if combat_network_test != null: combat_network_test.call("observe_server_action", peer_id, kind, id, result)
+	if not lobby.has(peer_id) or shutting_down:
+		return
+	if not bool(result.get("accepted", false)):
+		combat_action_rejected.rpc_id(peer_id, kind, id, _safe_combat_reason(result.get("reason", "rejected")))
+	elif kind == NetSync.ACTION_FIRE and bool(result.get("hit", false)):
+		combat_hit_confirmed.rpc_id(peer_id)
+
+## Ação que não chegou a executar (comando recusado ou descartado): resultado
+## explícito, pelo mesmo caminho das recusas de combate.
+func _reject_action(peer_id: int, action: Dictionary, reason: String) -> void:
+	if action.is_empty():
+		return
+	_report_action_result(peer_id, str(action["kind"]), int(action["id"]), {"accepted": false, "reason": reason})
+
+func _on_command_rejected(peer_id: int, seq: int, action: Dictionary, reason: String) -> void:
+	var gate_reasons := ["round_not_active", "not_participant", "player_dead", "stale_epoch"]
+	if spectator_reveal_test_mode and peer_id == spectator_test_dead_peer and reason == "player_dead" \
+			and round_authority.state == RoundState.ACTIVE:
+		spectator_test_movement_blocked = true
+		_maybe_finish_spectator_probe()
+	if reason not in gate_reasons:
+		# Comando inválido de verdade (magnitude, não finito, taxa de mira).
+		if reason == "move_magnitude":
+			impossible_input_rejected_peers[peer_id] = true
+		if int(input_rejection_ticks.get(peer_id, -1)) != server_tick and lobby.has(peer_id) and not shutting_down:
+			input_rejection_ticks[peer_id] = server_tick
+			print("INPUT_REJECTED peer_id=%d reason=%s" % [peer_id, reason])
+			input_rejected.rpc_id(peer_id, reason, seq)
+	_reject_action(peer_id, action, reason if reason in gate_reasons else "input_rejected")
 
 @rpc("authority", "call_remote", "reliable")
 func input_rejected(reason: String, _sequence: int) -> void:
-	if expected_clients > 0 and client_label == "client-1" and reason == "move_magnitude" and not client_movement_observed:
+	net_stats.count_rejection("input_" + reason)
+	# Teste de movimento: a intenção impossível vale até a primeira recusa; as
+	# recusas seguintes dos comandos já em trânsito não repetem a troca.
+	if expected_clients > 0 and client_label == "client-1" and reason == "move_magnitude" and not client_movement_observed \
+			and test_move_intent.length() > 1.0:
 		print("CLIENT_IMPOSSIBLE_INPUT_REJECTED id=%s" % client_label)
 		_send_input(test_direction, 0.0, test_pitch_delta())
 
+## Snapshot por destinatário. Descarta outra sessão de servidor e tick antigo
+## ou repetido; reconcilia a previsão com o ACK privado.
 @rpc("authority", "call_remote", "unreliable_ordered")
-func world_snapshot(states: Array) -> void:
+func world_snapshot(payload: Dictionary) -> void:
 	if multiplayer.is_server() or shutdown_prepare_received:
 		return
+	if typeof(payload.get("tick")) != TYPE_INT or typeof(payload.get("session")) != TYPE_INT \
+			or typeof(payload.get("players")) != TYPE_ARRAY or typeof(payload.get("ack", {})) != TYPE_DICTIONARY:
+		return
+	var session := int(payload["session"])
+	if snapshot_session == 0:
+		snapshot_session = session
+	elif session != snapshot_session:
+		net_stats.foreign_session_snapshots += 1
+		return
+	var tick := int(payload["tick"])
+	if tick <= last_snapshot_tick:
+		net_stats.stale_snapshots += 1
+		return
+	last_snapshot_tick = tick
+	net_stats.snapshot_received()
+	var states: Array = []
+	for raw_state in payload["players"]:
+		if typeof(raw_state) == TYPE_DICTIONARY and typeof((raw_state as Dictionary).get("peer_id")) == TYPE_INT \
+				and typeof((raw_state as Dictionary).get("position")) == TYPE_VECTOR3:
+			states.append(raw_state)
+	var ack: Dictionary = payload.get("ack", {})
+	var own_id := multiplayer.get_unique_id()
+	for raw_state in states:
+		var state: Dictionary = raw_state
+		if int(state["peer_id"]) == own_id and not ack.is_empty():
+			prediction.reconcile(ack, state)
+			awaiting_epoch_sync = false
 	if arena_view != null:
-		arena_view.apply_snapshot(states)
+		arena_view.apply_snapshot(states, tick)
 		_update_pickup_prompt()
 	if expected_clients > 0:
 		_log_observed_pitches(states)
@@ -537,16 +770,14 @@ func world_snapshot(states: Array) -> void:
 			if int((raw_spectator_state as Dictionary).get("peer_id", 0)) == _spectator_target():
 				spectator_test_follow_confirmed = true
 				print("SPECTATOR_FOLLOW_OK id=%s" % client_label)
-				_send_input(Vector2.RIGHT, 0.0)
-				combat_sequence["pickup"] += 1
-				request_pickup.rpc_id(1, "weapon_0", combat_sequence["pickup"])
-				combat_sequence["fire"] += 1
-				request_fire.rpc_id(1, combat_sequence["fire"], Vector3.ZERO, Vector3.FORWARD)
-				combat_sequence["reload"] += 1
-				request_reload.rpc_id(1, combat_sequence["reload"])
+				# Morto tentando andar, coletar, atirar e recarregar pelo fluxo
+				# normal de comandos: o servidor recusa cada um (player_dead).
+				send_test_packet([
+					{"kind": NetSync.ACTION_PICKUP, "id": 1, "pickup_id": "weapon_0"},
+					{"kind": NetSync.ACTION_FIRE, "id": 1},
+					{"kind": NetSync.ACTION_RELOAD, "id": 1}], Vector2.RIGHT)
 				spectator_test_followed.rpc_id(1)
 				break
-	var own_id := multiplayer.get_unique_id()
 	for raw_state in states:
 		var state: Dictionary = raw_state
 		if int(state["peer_id"]) != own_id:
@@ -671,6 +902,8 @@ func _close_server_peer() -> void:
 		combat_authority.clear_round()
 	completed_peers.clear()
 	impossible_input_rejected_peers.clear()
+	command_logs.clear()
+	input_rejection_ticks.clear()
 	shutdown_handshake.clear()
 	shutdown_ready_rejections_logged.clear()
 	round_ack_peers.clear()
@@ -704,6 +937,10 @@ func _on_round_state_changed(state: int, round_id: int) -> void:
 
 func _on_round_roles_ready(round_id: int, participant_ids: Array) -> void:
 	combat_authority.begin_round(round_id, participant_ids)
+	# Nova época de controle: comandos da fase anterior (ainda em trânsito)
+	# são recusados sem efeito, com resultado explícito para suas ações.
+	for raw_peer_id in participant_ids:
+		authoritative_world.bump_epoch(int(raw_peer_id))
 	# Somente a contagem agregada vai para o log: nunca a associação peer/papel.
 	var counts := round_authority.role_counts()
 	print("ROUND_ROLE_COUNTS assassin=%d detective=%d victim=%d" % [
@@ -721,9 +958,9 @@ func _on_round_roles_ready(round_id: int, participant_ids: Array) -> void:
 	print("ROUND_ROLES_DELIVERED round_id=%d peers=%d" % [round_id, delivered])
 
 func _on_round_alive_changed(round_id: int, peer_id: int, alive: bool) -> void:
-	if not alive and authoritative_world.states.has(peer_id):
-		authoritative_world.states[peer_id]["input"] = Vector2.ZERO
-		authoritative_world.states[peer_id]["velocity"] = Vector3.ZERO
+	if not alive:
+		# Eliminado: nova época (fila antiga recusada) e velocidade zerada.
+		authoritative_world.bump_epoch(peer_id)
 	print("ROUND_ALIVE_CHANGED round_id=%d peer_id=%d alive=%s" % [round_id, peer_id, str(alive)])
 	_publish_round_state()
 
@@ -789,8 +1026,13 @@ func _publish_round_state(target_peer_id: int = 0) -> void:
 func round_public_state(payload: Dictionary) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
 		return
+	var previous_state := int(local_round_public.get("state", RoundState.WAITING))
 	local_round_public = payload
 	var state := int(payload.get("state", RoundState.WAITING))
+	if state == RoundState.ACTIVE and previous_state != RoundState.ACTIVE:
+		# A rodada abriu uma época nova no servidor: espera o próximo ACK.
+		awaiting_epoch_sync = true
+		prediction.clear_look()
 	if interactive_session and leave_trigger == "active" and state == RoundState.ACTIVE:
 		# Automação de teste: sai pouco depois, como um jogador faria, sem cortar
 		# o servidor no mesmo quadro em que ele avisa os demais.
@@ -1092,47 +1334,6 @@ func _cycle_spectator(direction: int) -> void:
 	if arena_view != null: arena_view.set_spectator_target(_spectator_target())
 	_update_round_hud()
 
-@rpc("any_peer", "call_remote", "reliable")
-func request_pickup(pickup_id: Variant, sequence: Variant) -> void:
-	if not multiplayer.is_server() or shutting_down or combat_authority == null:
-		return
-	var sender := multiplayer.get_remote_sender_id()
-	if not lobby.has(sender):
-		return
-	var result := combat_authority.request_pickup(sender, pickup_id, sequence, Time.get_ticks_msec())
-	_observe_spectator_block(sender, "pickup", result)
-	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "pickup", sequence, result)
-	if not bool(result.get("accepted", false)):
-		combat_action_rejected.rpc_id(sender, "pickup", int(sequence) if typeof(sequence) == TYPE_INT else -1, _safe_combat_reason(result.get("reason", "rejected")))
-
-@rpc("any_peer", "call_remote", "reliable")
-func request_fire(sequence: Variant, claimed_origin: Variant, claimed_direction: Variant) -> void:
-	if not multiplayer.is_server() or shutting_down or combat_authority == null:
-		return
-	var sender := multiplayer.get_remote_sender_id()
-	if not lobby.has(sender):
-		return
-	var result := combat_authority.request_fire(sender, sequence, claimed_origin, claimed_direction, Time.get_ticks_msec())
-	_observe_spectator_block(sender, "fire", result)
-	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "fire", sequence, result)
-	if not bool(result.get("accepted", false)):
-		combat_action_rejected.rpc_id(sender, "fire", int(sequence) if typeof(sequence) == TYPE_INT else -1, _safe_combat_reason(result.get("reason", "rejected")))
-	elif bool(result.get("hit", false)):
-		combat_hit_confirmed.rpc_id(sender)
-
-@rpc("any_peer", "call_remote", "reliable")
-func request_reload(sequence: Variant) -> void:
-	if not multiplayer.is_server() or shutting_down or combat_authority == null:
-		return
-	var sender := multiplayer.get_remote_sender_id()
-	if not lobby.has(sender):
-		return
-	var result := combat_authority.request_reload(sender, sequence, Time.get_ticks_msec())
-	_observe_spectator_block(sender, "reload", result)
-	if combat_network_test != null: combat_network_test.call("observe_server_action", sender, "reload", sequence, result)
-	if not bool(result.get("accepted", false)):
-		combat_action_rejected.rpc_id(sender, "reload", int(sequence) if typeof(sequence) == TYPE_INT else -1, _safe_combat_reason(result.get("reason", "rejected")))
-
 func _observe_spectator_block(sender: int, action: String, result: Dictionary) -> void:
 	if not spectator_reveal_test_mode or sender != spectator_test_dead_peer \
 			or str(result.get("reason", "")) != "player_dead": return
@@ -1169,6 +1370,8 @@ func pickup_public_state(payload: Array) -> void:
 func combat_public_shot(payload: Dictionary) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1: return
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "shot", payload)
+	if int(payload.get("shooter_peer_id", 0)) == multiplayer.get_unique_id():
+		net_stats.action_resolved(NetSync.ACTION_FIRE, net_stats.oldest_action(NetSync.ACTION_FIRE))
 	if arena_view != null:
 		arena_view.show_shot(payload)
 
@@ -1191,8 +1394,12 @@ func combat_action_rejected(action: String, sequence: int, reason: String) -> vo
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "rejection", {"action": action, "sequence": sequence, "reason": reason})
 	print("COMBAT_REJECTED id=%s action=%s sequence=%d reason=%s" % [client_label, action, sequence, reason])
 	if not multiplayer.is_server() and multiplayer.get_remote_sender_id() == 1:
+		net_stats.count_rejection("%s_%s" % [action, reason])
+		net_stats.action_resolved(action, sequence)
 		if round_hud != null: round_hud.call("show_rejection", action, reason)
-		if arena_view != null: arena_view.show_rejection(action, reason)
+		if arena_view != null:
+			if action == NetSync.ACTION_FIRE: arena_view.discard_predicted_shot(sequence)
+			arena_view.show_rejection(action, reason)
 
 func _on_pickups_changed(snapshot: Array) -> void:
 	if multiplayer.is_server() and not shutting_down:
@@ -1215,7 +1422,7 @@ func _on_combat_player_eliminated(peer_id: int, _instigator_peer_id: int) -> voi
 
 func _safe_combat_reason(raw_reason: Variant) -> String:
 	var reason := str(raw_reason)
-	var allowed := ["round_not_active", "unknown_peer", "player_dead", "invalid_sequence", "replay", "sequence_jump", "rate_limited", "invalid_pickup", "item_not_found", "item_unavailable", "out_of_range", "inventory_full", "incompatible_item", "no_equipped_weapon", "reserve_full", "empty_magazine", "reloading", "fire_rate", "invalid_origin", "non_finite", "implausible_origin", "invalid_direction", "direction_not_normalized", "direction_vertical", "direction_yaw_divergence", "direction_pitch_divergence", "invalid_pitch", "magazine_full", "reserve_empty", "already_reloading"]
+	var allowed := ["round_not_active", "unknown_peer", "player_dead", "invalid_sequence", "replay", "sequence_jump", "rate_limited", "invalid_pickup", "item_not_found", "item_unavailable", "out_of_range", "inventory_full", "incompatible_item", "no_equipped_weapon", "reserve_full", "empty_magazine", "reloading", "fire_rate", "invalid_origin", "non_finite", "implausible_origin", "invalid_direction", "direction_not_normalized", "direction_vertical", "direction_yaw_divergence", "direction_pitch_divergence", "invalid_pitch", "magazine_full", "reserve_empty", "already_reloading", "stale_epoch", "not_participant", "input_rejected", "queue_full"]
 	return reason if reason in allowed else "rejected"
 
 # --- Teste local no PC --------------------------------------------------------
@@ -1373,6 +1580,13 @@ func _check_hosted_idle(now_msec: int) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		DesktopSession.stop_hosted_server("window_closed")
+	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		# Sem foco: sem movimento e sem giro residual ao voltar.
+		window_focused = false
+		prediction.clear_look()
+	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		window_focused = true
+		prediction.clear_look()
 
 func _exit_tree() -> void:
 	# Sair do jogo por qualquer caminho derruba o servidor hospedado; recarregar a

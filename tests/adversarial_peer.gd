@@ -21,16 +21,17 @@ var session_attacks_done := false
 
 func run_preauth_attacks() -> void:
 	# RPC sensível antes de existir sessão para o remetente.
-	_send("submit_input_before_join", func(): submit_input.rpc_id(1, 1, Vector2.ZERO, 0.0, 0.0))
+	_send("submit_input_before_join", func(): submit_commands.rpc_id(1, [1, 1, [[0.0, 0.0, 0.0, 0.0, []]]]))
 	_send("ack_before_join", func(): round_role_acknowledged.rpc_id(1, 1))
 	_send("shutdown_ready_before_join", func(): shutdown_ready.rpc_id(1, 1, 1))
 	_send("test_completed_before_join", func(): client_test_completed.rpc_id(1))
-	_send("pickup_before_join", func(): request_pickup.rpc_id(1, "weapon_0", 1))
-	_send("fire_before_join", func(): request_fire.rpc_id(1, 1, Vector3.ZERO, Vector3.FORWARD))
-	_send("reload_before_join", func(): request_reload.rpc_id(1, 1))
-	_send("pickup_wrong_types", func(): request_pickup.rpc_id(1, ["weapon_0"], "sequence"))
-	_send("fire_wrong_types", func(): request_fire.rpc_id(1, {"sequence": 1}, "origin", [0, 0, -1]))
-	_send("reload_wrong_type", func(): request_reload.rpc_id(1, {"sequence": 1}))
+	# Protocolo 9: ações só existem dentro de comandos.
+	_send("pickup_before_join", func(): submit_commands.rpc_id(1, [1, 2, [[0.0, 0.0, 0.0, 0.0, ["pickup", 1, "weapon_0"]]]]))
+	_send("fire_before_join", func(): submit_commands.rpc_id(1, [1, 3, [[0.0, 0.0, 0.0, 0.0, ["fire", 1]]]]))
+	_send("reload_before_join", func(): submit_commands.rpc_id(1, [1, 4, [[0.0, 0.0, 0.0, 0.0, ["reload", 1]]]]))
+	_send("pickup_wrong_types", func(): submit_commands.rpc_id(1, [1, 5, [[0.0, 0.0, 0.0, 0.0, ["pickup", "1", ["weapon_0"]]]]]))
+	_send("fire_wrong_types", func(): submit_commands.rpc_id(1, [1, 6, [[0.0, 0.0, 0.0, 0.0, ["fire", {"sequence": 1}, Vector3.ZERO, Vector3.FORWARD]]]]))
+	_send("reload_wrong_type", func(): submit_commands.rpc_id(1, [1, 7, [[0.0, 0.0, 0.0, 0.0, ["reload", 1.5]]]]))
 
 	# Tipos incorretos numa RPC que o servidor declara tipada.
 	_send("join_wrong_types", func(): request_join.rpc_id(1, "not-an-int", 12345))
@@ -41,8 +42,8 @@ func run_preauth_attacks() -> void:
 	_send("join_extreme_protocol", func(): request_join.rpc_id(1, 9223372036854775807, label))
 
 	# Entrada de movimento malformada antes de existir sessão.
-	_send("input_non_finite", func(): submit_input.rpc_id(1, 2, Vector2(NAN, INF), NAN, INF))
-	_send("input_wrong_types", func(): submit_input.rpc_id(1, "seq", {"x": 1}, [1, 2, 3], "up"))
+	_send("input_non_finite", func(): submit_commands.rpc_id(1, [1, 8, [[NAN, INF, NAN, INF, []]]]))
+	_send("input_wrong_types", func(): submit_commands.rpc_id(1, ["epoch", "seq", {"x": 1}]))
 
 	# Tentativa de se passar pelo servidor numa RPC de autoridade.
 	_send("forge_public_state", func(): round_public_state.rpc_id(1, {"state": RoundState.ACTIVE, "winning_team": Role.TEAM_ASSASSIN}))
@@ -72,15 +73,26 @@ func run_session_attacks() -> void:
 	_send("shutdown_ready_guessed_token", func(): shutdown_ready.rpc_id(1, 1, 123456789))
 	_send("shutdown_ready_wrong_types", func(): shutdown_ready.rpc_id(1, "1", [0]))
 	_send("test_completed_unsolicited", func(): client_test_completed.rpc_id(1))
-	_send("missing_pickup", func(): request_pickup.rpc_id(1, "does_not_exist", 2))
-	_send("impossible_origin", func(): request_fire.rpc_id(1, 2, Vector3(999, 999, 999), Vector3.FORWARD))
-	_send("invalid_direction", func(): request_fire.rpc_id(1, 3, Vector3.ZERO, Vector3(NAN, 0, 0)))
-	_send("replayed_fire_sequence", func(): request_fire.rpc_id(1, 3, Vector3.ZERO, Vector3.FORWARD))
+	# Sessão aceita, mas sem ser participante da rodada: comandos (inclusive com
+	# ações) são resolvidos como recusados e nada muda no estado oficial.
+	_send("missing_pickup", func(): submit_commands.rpc_id(1, [1, 1, [[0.0, 0.0, 0.0, 0.0, ["pickup", 2, "does_not_exist"]]]]))
+	_send("impossible_origin", func(): submit_commands.rpc_id(1, [1, 2, [[0.0, 0.0, 0.0, 0.0, ["fire", 2, Vector3(999, 999, 999)]]]]))
+	_send("invalid_direction", func(): submit_commands.rpc_id(1, [1, 3, [[99.0, 0.0, 9.0, NAN, ["fire", 3]]]]))
+	_send("replayed_fire_sequence", func(): submit_commands.rpc_id(1, [1, 3, [[0.0, 0.0, 0.0, 0.0, ["fire", 3]]]]))
+	_send("oversized_batch", func(): submit_commands.rpc_id(1, [1, 4, _batch(NetSync.MAX_COMMANDS_PER_PACKET + 1)]))
+	_send("sequence_far_ahead", func(): submit_commands.rpc_id(1, [1, 100000, _batch(1)]))
+	_send("stale_epoch_commands", func(): submit_commands.rpc_id(1, [999, 5, _batch(2)]))
 	for index in 40:
 		round_role_acknowledged.rpc_id(1, index)
 	attacks_sent += 40
 	print("ATTACKER_SENT id=%s attack=ack_spam count=40" % label)
 	finished.emit()
+
+func _batch(count: int) -> Array:
+	var commands: Array = []
+	for index in count:
+		commands.append([1.0, 0.0, 0.0, 0.0, []])
+	return commands
 
 func _send(description: String, action: Callable) -> void:
 	attacks_sent += 1
@@ -140,18 +152,6 @@ func request_join(_protocol_version, _requested_label) -> void:
 func pickup_public_state(_payload: Array) -> void:
 	pass
 
-@rpc("any_peer", "call_remote", "reliable")
-func request_fire(_sequence: Variant, _claimed_origin: Variant, _claimed_direction: Variant) -> void:
-	pass
-
-@rpc("any_peer", "call_remote", "reliable")
-func request_pickup(_pickup_id: Variant, _sequence: Variant) -> void:
-	pass
-
-@rpc("any_peer", "call_remote", "reliable")
-func request_reload(_sequence: Variant) -> void:
-	pass
-
 @rpc("authority", "call_remote", "reliable")
 func round_final_reveal(_payload: Dictionary) -> void:
 	print("ATTACKER_UNEXPECTED_FINAL_REVEAL")
@@ -189,9 +189,9 @@ func shutdown_prepare(generation, token) -> void:
 	# aceitasse o ready não solicitado fecharia a sessão antes deste ponto.
 	await get_tree().create_timer(0.5).timeout
 	print("ATTACKER_SHUTDOWN_PREPARE id=%s" % label)
-	_send("pickup_during_shutdown", func(): request_pickup.rpc_id(1, "weapon_0", 63))
-	_send("fire_during_shutdown", func(): request_fire.rpc_id(1, 63, Vector3.ZERO, Vector3.FORWARD))
-	_send("reload_during_shutdown", func(): request_reload.rpc_id(1, 63))
+	_send("pickup_during_shutdown", func(): submit_commands.rpc_id(1, [1, 20, [[0.0, 0.0, 0.0, 0.0, ["pickup", 63, "weapon_0"]]]]))
+	_send("fire_during_shutdown", func(): submit_commands.rpc_id(1, [1, 21, [[0.0, 0.0, 0.0, 0.0, ["fire", 63]]]]))
+	_send("reload_during_shutdown", func(): submit_commands.rpc_id(1, [1, 22, [[0.0, 0.0, 0.0, 0.0, ["reload", 63]]]]))
 	if typeof(generation) != TYPE_INT or typeof(token) != TYPE_INT:
 		return
 	# Geração obsoleta e token trocado, com o token real já em mãos.
@@ -214,9 +214,21 @@ func spectator_test_followed() -> void:
 	pass
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
-func submit_input(_sequence, _move, _yaw_delta, _pitch_delta) -> void:
+func submit_commands(_payload) -> void:
 	pass
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
-func world_snapshot(_states) -> void:
-	pass
+func world_snapshot(payload) -> void:
+	# Snapshot público: só as chaves de movimento; vida, inventário ou papel de
+	# outro jogador nunca aparecem. O ACK é só do próprio atacante.
+	if typeof(payload) != TYPE_DICTIONARY or typeof((payload as Dictionary).get("players")) != TYPE_ARRAY:
+		return
+	var allowed := ["peer_id", "position", "velocity", "yaw", "pitch", "spawn_index", "epoch"]
+	for player in (payload as Dictionary)["players"]:
+		for key in (player as Dictionary).keys():
+			if str(key) not in allowed:
+				print("ATTACKER_SNAPSHOT_HAS_PRIVATE id=%s key=%s" % [label, str(key)])
+	var ack: Variant = (payload as Dictionary).get("ack", {})
+	if typeof(ack) == TYPE_DICTIONARY and (ack as Dictionary).keys().size() > 0 \
+			and (ack as Dictionary).keys() != ["seq", "epoch", "yaw_tokens", "pitch_tokens"]:
+		print("ATTACKER_SNAPSHOT_HAS_PRIVATE id=%s key=ack" % label)

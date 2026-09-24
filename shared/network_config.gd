@@ -15,7 +15,13 @@ const MAX_PLAYERS := RoundRules.MAX_PLAYERS
 ## (allowlisted by CharacterAppearance); clients drop unknown roster keys.
 ## 8: submit_input carries pitch_delta and world snapshots carry the official
 ## pitch (vertical aim), which the server also uses for every shot.
-const PROTOCOL_VERSION := 8
+## 9: tick commands (`submit_commands`: epoch, first sequence, one-tick
+## commands with look deltas and an optional fire/reload/pickup action executed
+## at that exact point). The separate request_fire/reload/pickup RPCs and
+## `submit_input` are gone; fire carries no client origin or direction.
+## `world_snapshot` is per recipient: {tick, session, players (+ public epoch),
+## ack (own last resolved sequence, epoch, aim buckets)}.
+const PROTOCOL_VERSION := 9
 const CONNECT_TIMEOUT_SECONDS := 10.0
 
 static func user_arguments() -> Dictionary:

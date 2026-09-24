@@ -103,7 +103,7 @@ fi
 # Todo dicionário indexado por peer_id limpo no encerramento também precisa ser
 # limpo na desconexão, senão um ciclo de reconexões cresce sem limite.
 DISCONNECT_BLOCK="$(awk '/^func _on_peer_disconnected/,/^$/' "$ROOT/shared/network_app.gd")"
-for registry in completed_peers impossible_input_rejected_peers round_ack_peers round_late_join_peers shutdown_ready_rejections_logged; do
+for registry in completed_peers impossible_input_rejected_peers round_ack_peers round_late_join_peers shutdown_ready_rejections_logged command_logs input_rejection_ticks; do
 	if grep -q "${registry}\.erase(peer_id)" <<<"$DISCONNECT_BLOCK"; then
 		check_ok "per-peer-registry-cleared-on-disconnect-$registry"
 	else
@@ -255,7 +255,13 @@ assert_grep "attacker-registered-as-late-join" 'ROUND_LATE_JOIN peer_id=[0-9]+ r
 # --- Argumentos malformados são recusados pela camada de RPC -----------------
 # O Godot recusa a conversão antes de executar o corpo tipado do servidor.
 assert_grep "wrong-typed-join-refused" "RPC - 'Node\(network_app.gd\)::request_join': Cannot convert argument" "$TMP_DIR/server.log"
-assert_grep "wrong-typed-input-refused" "RPC - 'Node\(network_app.gd\)::submit_input': Cannot convert argument" "$TMP_DIR/server.log"
+# Protocolo 9: o atacante entra por último e o próprio join dispara o
+# encerramento, então os pacotes de comando dele chegam com o servidor já em
+# shutdown e são ignorados (como antes as RPCs de ação). A recusa de pacotes
+# malformados com rodada ativa é coberta por `netcode_test.gd` e
+# `netcode_network_test.sh`. Aqui: nenhum erro de script por eles.
+assert_no_grep "no-script-error-from-hostile-commands" 'SCRIPT ERROR' "$TMP_DIR/server.log"
+assert_no_grep "snapshot-carries-no-private-fields" 'ATTACKER_SNAPSHOT_HAS_PRIVATE' "$TMP_DIR/attacker.log"
 assert_grep "huge-label-refused" 'JOIN_REJECTED|invalid_client' "$TMP_DIR/attacker.log"
 assert_grep "duplicate-session-refused" 'ATTACKER_JOIN_REJECTED id=attacker reason=invalid_client' "$TMP_DIR/attacker.log"
 

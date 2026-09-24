@@ -72,6 +72,22 @@ var character_animation := true
 ## Distância a partir da qual o corpo remoto salta para a posição oficial em
 ## vez de deslizar (reposicionamento), sem virar passada.
 const SNAP_DISTANCE := 2.5
+## Apresentação multiplayer (fase 4). A `ArenaView` é o único escritor do rig
+## local (posição/yaw) e do pitch da câmera, e da raiz/cabeça dos avatares,
+## uma vez por quadro:
+## - remotos e alvo do espectador: `interpolator` (buffer oficial com atraso);
+## - jogador local controlando: `local_view_provider` (previsão da rede);
+## - fora disso (lobby, morto sem alvo, demo): o último estado oficial.
+var interpolator := RemoteInterpolator.new()
+var local_view_provider: Callable
+## Disparos locais antecipados (som/recuo) aguardando o resultado oficial,
+## por identificador de ação da rodada.
+var predicted_shots: Array = []
+var _last_predicted_shot_msec := -100000
+var unconfirmed_predicted_shots := 0
+const PREDICTED_SHOT_TIMEOUT_MSEC := 2000
+## Margem sobre a cadência oficial para antecipar o efeito (o servidor decide).
+const PREDICTED_SHOT_MARGIN_MSEC := 50
 
 func _ready() -> void:
 	_ensure_input_actions()
@@ -160,24 +176,25 @@ func _ensure_input_actions() -> void:
 		event.physical_keycode = bindings[action]
 		InputMap.action_add_event(action, event)
 
-func apply_snapshot(states: Array) -> void:
+## Estados oficiais de um snapshot. `tick` é o tick do servidor; sem ele
+## (demo offline, testes) vale a chegada no relógio local. Aqui só entram
+## dados: quem escreve transforms é `_process`.
+func apply_snapshot(states: Array, tick: int = -1) -> void:
 	var present: Dictionary = {}
+	interpolator.push(tick if tick >= 0 else interpolator.synthetic_tick(), states)
 	for raw_state in states:
 		var state: Dictionary = raw_state
 		var peer_id := int(state["peer_id"])
 		present[peer_id] = true
-		if spectator_target_peer_id == peer_id:
-			_place_rig(state)
 		# O próprio jogador nunca tem corpo visível: a câmera fica dentro dele.
 		# Vale também como espectador, senão o corpo criado nessa fase fica em
 		# volta da câmera na rodada seguinte.
 		if peer_id == local_peer_id:
 			_local_state = state
-			if spectator_target_peer_id == 0:
-				_place_rig(state)
 			continue
 		if not avatars.has(peer_id):
 			avatars[peer_id] = _create_avatar(peer_id, state["position"])
+			(avatars[peer_id] as Node3D).rotation.y = float(state.get("yaw", 0.0))
 			(avatars[peer_id] as Node3D).visible = bool(_alive_flags.get(peer_id, true))
 		targets[peer_id] = state
 	for peer_id in avatars.keys():
@@ -186,38 +203,62 @@ func apply_snapshot(states: Array) -> void:
 			avatars.erase(peer_id)
 			targets.erase(peer_id)
 			animators.erase(peer_id)
+			interpolator.remove(int(peer_id))
+	if not _local_state.is_empty() and not present.has(local_peer_id):
+		_local_state = {}
 
-func _place_rig(state: Dictionary) -> void:
-	player_rig.position = state["position"]
-	player_rig.rotation.y = float(state["yaw"])
-	# Pitch oficial na câmera (próprio jogador, ou o alvo observado): a mira,
-	# o retículo no centro e a pistola na mão sobem e descem juntos.
-	camera.rotation.x = MovementRules.clamp_pitch(state.get("pitch", 0.0))
+## Único escritor do rig local e do pitch da câmera. A câmera é filha do rig:
+## o yaw fica só no rig e o pitch só na câmera, sem reaplicar nada do pai.
+func _write_rig(position: Vector3, yaw: float, pitch: float) -> void:
+	player_rig.position = position
+	player_rig.rotation.y = yaw
+	# Pitch na câmera (próprio jogador, ou o alvo observado): a mira, o
+	# retículo no centro e a pistola na mão sobem e descem juntos.
+	camera.rotation.x = MovementRules.clamp_pitch(pitch)
 	_update_zone_label(player_rig.position)
 
+## Fonte da visão local neste quadro. O espectador usa a apresentação
+## interpolada do alvo (nunca a previsão do morto); trocar de alvo não
+## interpola a câmera entre posições desconexas.
+func _update_local_view(delta: float) -> void:
+	if spectator_target_peer_id != 0:
+		var target := interpolator.sample(spectator_target_peer_id)
+		if not target.is_empty():
+			_write_rig(target["position"], float(target["yaw"]), float(target["pitch"]))
+			return
+	var presented: Dictionary = local_view_provider.call(delta) if local_view_provider.is_valid() else {}
+	if not presented.is_empty():
+		_write_rig(presented["position"], float(presented["yaw"]), float(presented["pitch"]))
+		return
+	if not _local_state.is_empty():
+		_write_rig(_local_state["position"], float(_local_state.get("yaw", 0.0)), float(_local_state.get("pitch", 0.0)))
+
 func _process(delta: float) -> void:
-	var weight := 1.0 - exp(-12.0 * delta)
+	interpolator.advance(delta)
 	for peer_id in targets:
 		if not avatars.has(peer_id):
 			continue
 		var avatar: Node3D = avatars[peer_id]
-		var state: Dictionary = targets[peer_id]
-		var official: Vector3 = state["position"]
+		var sample := interpolator.sample(int(peer_id))
+		if sample.is_empty():
+			continue
+		var official: Vector3 = sample["position"]
 		var animator: CharacterAnimator = animators.get(peer_id)
-		# Reposicionamento (nova rodada, teleporte de teste, correção grande):
-		# salta direto, sem varrer o cenário nem contar como passada.
-		if avatar.position.distance_to(official) > SNAP_DISTANCE:
+		# Descontinuidade explícita (época nova: rodada, eliminação,
+		# reposicionamento) ou salto grande: vai direto, sem varrer o cenário
+		# nem contar como passada.
+		if bool(sample["discontinuity"]) or avatar.position.distance_to(official) > SNAP_DISTANCE:
 			avatar.position = official
 			if animator != null:
 				animator.reset(official)
 		else:
-			avatar.position = avatar.position.lerp(official, weight)
-		avatar.rotation.y = lerp_angle(avatar.rotation.y, float(state["yaw"]), weight)
+			avatar.position = official
+		avatar.rotation.y = float(sample["yaw"])
 		# Só a cabeça acompanha o pitch oficial; o corpo continua de pé. A
 		# referência vem do rig (sem busca de nó por quadro).
 		var head: Node3D = animator.rig.get("head") if animator != null and animator.is_valid() else avatar.find_child(ArenaModels.HEAD_PIVOT, true, false) as Node3D
 		if head != null:
-			head.rotation.x = lerpf(head.rotation.x, ArenaModels.head_rotation_for_pitch(state.get("pitch", 0.0)), weight)
+			head.rotation.x = ArenaModels.head_rotation_for_pitch(float(sample["pitch"]))
 		# Em primeira pessoa como espectador, a câmera fica dentro do alvo:
 		# chapéu, braços e visor dele ficariam colados à lente.
 		var show_model: bool = peer_id != spectator_target_peer_id
@@ -228,6 +269,8 @@ func _process(delta: float) -> void:
 				animator.update(avatar.position, avatar.rotation.y, delta)
 			elif animator.amplitude > 0.0 or animator.speed > 0.0:
 				animator.rest()
+	_update_local_view(delta)
+	_expire_predicted_shots()
 	_visual_time += delta
 	for pickup_id in pickup_nodes:
 		var spin := (pickup_nodes[pickup_id] as Node3D).get_node_or_null("Spin") as Node3D
@@ -378,6 +421,9 @@ func apply_combat_state(state: Dictionary) -> void:
 			"hurt":
 				fx.play_ui("hurt")
 				_damage_kick()
+	if state.is_empty() or int(state.get("round_id", 0)) != int(_combat_prev.get("round_id", 0)):
+		# Nenhum disparo antecipado atravessa rodadas.
+		predicted_shots.clear()
 	if state.is_empty():
 		# Estado limpo (nova rodada, fim): nenhum efeito ou pose antiga.
 		fx.clear()
@@ -463,11 +509,10 @@ func _damage_kick() -> void:
 ## segue posicao/yaw oficiais recebidos em snapshots; nunca envia controle.
 func set_spectator_target(peer_id: int, spectator_active: bool = true) -> void:
 	spectator_target_peer_id = peer_id
-	# Fim do modo espectador: volta já à última posição oficial do próprio
-	# jogador. Esperar o próximo snapshot deixaria a câmera, por alguns quadros,
-	# dentro do corpo (agora visível de novo) de quem era observado.
-	if peer_id == 0 and not _local_state.is_empty():
-		_place_rig(_local_state)
+	# Troca de alvo ou fim do modo espectador: a câmera vai já para a nova
+	# fonte (sem interpolar através de paredes). Esperar o próximo quadro
+	# deixaria a câmera dentro do corpo, agora visível, de quem era observado.
+	_update_local_view(0.0)
 	if spectator_active:
 		gameplay_visuals = false
 	_refresh_gameplay_visuals()
@@ -534,8 +579,13 @@ func show_shot(payload: Dictionary) -> void:
 	# Quem atirou vem no evento público; o alvo não. O próprio disparo tem som
 	# e recuo na primeira pessoa; o dos outros tem clarão e som na origem.
 	if int(payload.get("shooter_peer_id", 0)) == local_peer_id and local_peer_id != 0:
-		fx.play_ui("shot")
-		_recoil()
+		# Disparo já antecipado no clique: o oficial confirma sem repetir som e
+		# recuo. Sem antecipação, o efeito sai agora.
+		if predicted_shots.is_empty():
+			fx.play_ui("shot")
+			_recoil()
+		else:
+			predicted_shots.pop_front()
 	else:
 		fx.muzzle_flash(start, finish - start)
 		fx.play_world("shot", start)
@@ -543,6 +593,39 @@ func show_shot(payload: Dictionary) -> void:
 	# mancha no centro da tela; aí basta o retorno de dano do estado privado.
 	if finish.distance_to(camera_origin()) > IMPACT_CAMERA_CLEARANCE:
 		fx.impact(finish, bool(payload.get("hit_player", false)))
+
+## Efeito local imediato do próprio disparo (som e recuo), só quando o estado
+## oficial conhecido permite atirar. Tracer, impacto, dano e hit marker
+## continuam esperando o resultado oficial.
+func predict_local_shot(action_id: int) -> bool:
+	if not can_predict_fire():
+		return false
+	var now := Time.get_ticks_msec()
+	predicted_shots.append({"id": action_id, "msec": now})
+	_last_predicted_shot_msec = now
+	fx.play_ui("shot")
+	_recoil()
+	return true
+
+func can_predict_fire() -> bool:
+	if not gameplay_visuals or not _combat_has_weapon or bool(_combat_prev.get("reloading", false)):
+		return false
+	if int(_combat_prev.get("magazine", 0)) - predicted_shots.size() <= 0:
+		return false
+	return Time.get_ticks_msec() - _last_predicted_shot_msec >= WeaponRules.COMMON_FIRE_INTERVAL_MSEC + PREDICTED_SHOT_MARGIN_MSEC
+
+## Recusa oficial de um disparo antecipado: some da fila sem repetir efeito.
+func discard_predicted_shot(action_id: int) -> void:
+	for index in predicted_shots.size():
+		if int(predicted_shots[index]["id"]) == action_id:
+			predicted_shots.remove_at(index)
+			return
+
+func _expire_predicted_shots() -> void:
+	var now := Time.get_ticks_msec()
+	while not predicted_shots.is_empty() and now - int(predicted_shots[0]["msec"]) > PREDICTED_SHOT_TIMEOUT_MSEC:
+		predicted_shots.pop_front()
+		unconfirmed_predicted_shots += 1
 
 func show_hit_marker() -> void:
 	if crosshair != null and crosshair.visible:

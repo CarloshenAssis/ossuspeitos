@@ -345,6 +345,9 @@ func _test_view_integration() -> void:
 	var avatar: Node3D = _view.avatars[peer]
 	var animator: CharacterAnimator = _view.animators[peer]
 	_expect(animator != null and animator.is_valid(), "remote avatars get an animator")
+	# A câmera local vai para o estado oficial no primeiro quadro; daí em diante
+	# nada dos remotos pode movê-la.
+	_view._process(0.0)
 	var camera_before := _view.camera.global_transform
 	var position := start
 	for frame in 90:

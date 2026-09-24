@@ -52,7 +52,7 @@ func _test_client_security_surface() -> void:
 	var source := FileAccess.get_file_as_string("res://shared/network_app.gd")
 	_expect(source.contains("multiplayer.get_remote_sender_id()"), "RPC identity uses the remote sender")
 	_expect(not source.contains("func request_reveal") and not source.contains("func request_spectator_target"), "client has no reveal or arbitrary-target request RPC")
-	_expect(source.contains("and _client_can_gameplay()"), "dead client does not poll movement input")
+	_expect(source.contains("and (_client_can_gameplay() or _movement_test_client())"), "dead client does not send movement commands")
 	_expect(source.contains("if not _client_can_gameplay():"), "dead client routes keys locally before combat")
 	_expect(source.contains("round_private_spectator_targets.rpc_id(peer_id"), "spectator targets are delivered privately")
 	_expect(source.contains("round_final_reveal.rpc_id(peer_id"), "reveal is sent only to each connected participant")

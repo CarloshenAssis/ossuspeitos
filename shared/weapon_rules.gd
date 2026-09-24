@@ -13,6 +13,9 @@ const MAX_AIM_YAW_RADIANS := deg_to_rad(70.0)
 ## Tolerância entre o pitch que a câmera do cliente usou e o pitch oficial
 ## (latência de um snapshot). A componente vertical do disparo é sempre a oficial.
 const MAX_AIM_PITCH_RADIANS := deg_to_rad(25.0)
+## Cadência da pistola comum (pública): o servidor a usa na definição oficial e
+## o cliente só para decidir se antecipa o efeito local de um disparo.
+const COMMON_FIRE_INTERVAL_MSEC := 400
 
 static func validate_definition(definition: Variant) -> String:
 	if not definition is WeaponDefinition:

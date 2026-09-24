@@ -588,9 +588,7 @@ func _test_official_fire_uses_the_mansion() -> void:
 		world.states[1]["yaw"] = float(entry["yaw"])
 		world.states[1]["pitch"] = float(entry["pitch"])
 		world.states[2]["position"] = entry["target"]
-		var eye: Vector3 = (entry["shooter"] as Vector3) + Vector3.UP * ArenaRules.EYE_HEIGHT
-		var direction := MovementRules.aim_direction(float(entry["yaw"]), float(entry["pitch"]))
-		var result := combat.request_fire(1, 1, eye, direction, 5000)
+		var result := combat.request_fire(1, 1, 5000)
 		_expect(bool(result.get("accepted", false)), "official fire %s is accepted (%s)" % [entry["name"], str(result)])
 		var hit := int(result.get("hit_peer_id", 0)) == 2
 		_expect(hit == bool(entry["hit"]), "official fire %s %s the target (%s)" % [entry["name"], "hits" if entry["hit"] else "misses", str(result)])
@@ -770,7 +768,7 @@ func _yaw_to(from: Vector3, to: Vector3) -> float:
 func _run_forward(state: Dictionary, ticks: int) -> void:
 	for tick in ticks:
 		state["last_input_msec"] = tick * 16
-		MovementRules.integrate(state, 1.0 / 60.0, tick * 16)
+		MovementRules.step_movement(state, state["input"], 1.0 / 60.0)
 
 ## Segue os pontos só com "para frente" e yaw (como um jogador com mouse),
 ## integrando o movimento oficial a 60 Hz. Retorna se chegou ao último ponto.
@@ -786,7 +784,7 @@ func _drive(state: Dictionary, points: Array, timeout: float, visited: Dictionar
 			continue
 		state["yaw"] = _yaw_to(position, goal)
 		state["last_input_msec"] = tick * 16
-		MovementRules.integrate(state, 1.0 / 60.0, tick * 16)
+		MovementRules.step_movement(state, state["input"], 1.0 / 60.0)
 		state["distance"] = float(state["distance"]) + (state["position"] as Vector3).distance_to(position)
 		var zone := str(ArenaRules.zone_at(state["position"]).get("id", ""))
 		if visited.has(zone):

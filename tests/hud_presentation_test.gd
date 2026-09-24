@@ -112,8 +112,10 @@ func _test_gameplay_visuals() -> void:
 	_expect(_arena.crosshair.visible and not _arena.weapon_model.visible, "without an official weapon there is nothing in hand")
 	_arena.local_peer_id = OWN
 	_arena.apply_snapshot([{"peer_id": OWN, "position": Vector3(13.5, 1, 9), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
+	_arena._process(0.0)
 	_expect(_arena.region_chip.visible and _arena.region_side.text == "SC" and _arena.region_name.text == "SALÃO CENTRAL", "region chip names the official room with its initials")
 	_arena.apply_snapshot([{"peer_id": OWN, "position": Vector3(10, 1, 2.5), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
+	_arena._process(0.0)
 	_expect(_arena.region_side.text == "CR" and _arena.region_name.text == "CORREDOR NORTE", "corridors are named too")
 
 # --- Layout -----------------------------------------------------------------------
