@@ -645,43 +645,35 @@ func _test_zones_orient_players() -> void:
 
 # --- Cliente -------------------------------------------------------------------
 
-## Instancia a mansão do cliente e compara nó a nó com `ArenaRules.BLOCKERS`.
-## Qualquer mesh que não seja volume oficial é piso (abaixo de y = 0) ou
-## recurso de inspeção, oculto na apresentação normal.
+## Instancia a mansão do cliente e compara com `ArenaRules.BLOCKERS`: cada
+## volume oficial é desenhado uma vez, com a mesma caixa (registro de
+## `MansionArt`; o detalhamento visual fica em `mansion_art_test`). Fora das
+## malhas da mansão só existem recursos de inspeção, ocultos por padrão.
 func _test_client_meshes_match_official_blockers() -> void:
 	var view := _client_view
-	var by_id: Dictionary = {}
+	var drawn := {}
+	for item in view.art.items:
+		# Paredes, vergas e tetos são desenhados como a própria caixa (`blocker`);
+		# móveis registram o volume (`volume`) e são compostos por peças que o
+		# preenchem exatamente, conferidas em `mansion_art_test`.
+		if str(item["kind"]) in ["blocker", "volume"]:
+			_expect(not drawn.has(str(item["id"])), "official blocker %s is drawn once" % item["id"])
+			drawn[str(item["id"])] = item["aabb"]
 	for blocker in ArenaRules.BLOCKERS:
-		by_id[str(blocker["id"])] = blocker
-	var matched: Dictionary = {}
+		var id := str(blocker["id"])
+		var box := AABB((blocker["center"] as Vector3) - (blocker["size"] as Vector3) * 0.5, blocker["size"])
+		_expect(drawn.has(id) and (drawn[id] as AABB).is_equal_approx(box), "official blocker %s is drawn with its exact box" % id)
+	_expect(drawn.size() == ArenaRules.BLOCKERS.size(), "every official blocker is rendered (%d/%d)" % [drawn.size(), ArenaRules.BLOCKERS.size()])
 	var debug_nodes := 0
 	for child in view.get_children():
 		var decor := str(child.get_meta("arena_decor", ""))
 		if decor == "debug":
 			debug_nodes += 1
 			_expect(not (child as Node3D).visible, "debug overlay %s is hidden in the normal presentation" % child.name)
-			continue
-		if child is MeshInstance3D:
-			var mesh_node := child as MeshInstance3D
-			if mesh_node.has_meta("arena_blocker_id"):
-				var id := str(mesh_node.get_meta("arena_blocker_id"))
-				_expect(by_id.has(id), "client mesh %s is an official blocker" % id)
-				_expect(not matched.has(id), "official blocker %s has a single mesh" % id)
-				matched[id] = true
-				if by_id.has(id):
-					var box := mesh_node.mesh as BoxMesh
-					_expect(box != null and box.size.is_equal_approx(by_id[id]["size"]), "mesh %s size equals the official box" % id)
-					_expect(mesh_node.position.is_equal_approx(by_id[id]["center"]), "mesh %s position equals the official box" % id)
-					_expect(mesh_node.rotation.is_zero_approx() and mesh_node.scale.is_equal_approx(Vector3.ONE), "mesh %s is not rotated or scaled" % id)
-					_expect(mesh_node.visible, "mesh %s is visible" % id)
-			else:
-				_expect(decor == "floor", "unlisted mesh %s is floor decor" % mesh_node.name)
-				var aabb := mesh_node.get_aabb()
-				var top := mesh_node.position.y + aabb.position.y + aabb.size.y
-				_expect(top <= 0.0 + EPSILON, "floor decor %s stays under the official floor (top=%.3f)" % [mesh_node.name, top])
+		elif child is MeshInstance3D:
+			_expect(child in view.art.meshes, "mesh %s belongs to the mansion art" % child.name)
 		elif child is Label3D:
 			_expect(false, "label %s is not a debug overlay" % (child as Label3D).text)
-	_expect(matched.size() == ArenaRules.BLOCKERS.size(), "every official blocker is rendered (%d/%d)" % [matched.size(), ArenaRules.BLOCKERS.size()])
 	_expect(debug_nodes >= MansionMap.rooms().size(), "room names exist for inspection (%d debug nodes)" % debug_nodes)
 	# Inspeção: liga nomes e recorta o teto só na apresentação.
 	var before := ArenaRules.first_blocker_distance(Vector3(13.5, 1.7, 12.0), Vector3.UP, 50.0)
@@ -704,13 +696,13 @@ func _test_client_meshes_match_official_blockers() -> void:
 		view.apply_pickups([])
 		view.apply_pickups(_pickup_entries(round_id))
 	_expect(view.pickup_nodes.size() == 8, "three round resets keep exactly eight pickup nodes (%d)" % view.pickup_nodes.size())
-	_expect(_count_blocker_nodes(view) == blocker_nodes_before and blocker_nodes_before == ArenaRules.BLOCKERS.size(), "round resets never rebuild or duplicate the mansion")
+	_expect(_count_blocker_nodes(view) == blocker_nodes_before and blocker_nodes_before == view.art.meshes.size(), "round resets never rebuild or duplicate the mansion")
 	view.free()
 
 func _count_blocker_nodes(view: ArenaView) -> int:
 	var count := 0
 	for child in view.get_children():
-		if child.has_meta("arena_blocker_id") and not child.is_queued_for_deletion():
+		if child is MeshInstance3D and child in view.art.meshes and not child.is_queued_for_deletion():
 			count += 1
 	return count
 

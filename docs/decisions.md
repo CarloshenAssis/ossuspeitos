@@ -584,3 +584,41 @@ Detalhes, dimensões e checkpoint: `docs/mansion-plan.md`.
   - fim da rodada;
   - rodada seguinte, com oito pickups sem duplicação, corpos livres e
     aparências mantidas.
+
+## Identidade visual da mansão (fase 2)
+
+**Direção**
+- Mansão estilizada low-poly:
+  - gesso creme fosco em cima e lambris de madeira embaixo, com rodapé,
+    guarda-cadeira e sanca;
+  - pisos por ambiente: xadrez no Salão, tábuas, azulejo claro e carpetes;
+  - luz quente.
+- Quadros abstratos próprios nos cômodos e corredores.
+
+**Mapa físico intacto**
+- `client/mansion_art.gd` só desenha. Os volumes, vãos, spawns e pickups da
+  fase 1 não mudaram.
+- `mansion_art_test` compara uma impressão digital SHA-256 do mapa físico com
+  a aprovada na fase 1.
+- Cada volume oficial é desenhado de um de dois jeitos:
+  - com a mesma caixa;
+  - com peças cuja união é exatamente o volume: estantes (fundo, laterais,
+    prateleiras e livros recuados), lareira (boca aberta), camas, bancada,
+    colunas, banheira etc.
+- Decoração sem física, sempre de um destes tipos:
+  - colada à parede (até 12 cm);
+  - acima das cabeças (a partir de 2,05 m);
+  - sobre ou encostada a um móvel (até 0,2 m, menos que a folga de 0,45 m do
+    corpo);
+  - rente ao piso (até 3 cm).
+- Cadeiras ficam sob a mesa. Nada entra em vão de porta nem cobre pickup.
+
+**Custo**
+- Geometria agrupada por espaço e material em `ArrayMesh`. Cada malha recebe
+  no máximo 5 luzes, abaixo do limite de 8 por objeto do renderer
+  Compatibility.
+- 24 luzes pontuais, todas sem sombra.
+- 40 materiais compartilhados.
+- 5 texturas procedurais de até 64 px, geradas no projeto. Nada é baixado.
+- Mapeamento triplanar só nos pisos e no lambri. Com triplanar também nas
+  paredes, o quadro custava cerca de 20% mais no renderizador por software.
