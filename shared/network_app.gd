@@ -165,15 +165,17 @@ func start_client() -> void:
 	spectator_reveal_test_mode = NetworkConfig.bool_argument(arguments, "spectator-reveal-test")
 	if spectator_reveal_test_mode: round_test_mode = true
 	_start_combat_network_test()
+	_start_latency_probe()
 	started_at_msec = Time.get_ticks_msec()
 	var url := str(arguments.get("url", "ws://%s:%d" % [NetworkConfig.DEFAULT_HOST, configured_port()]))
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
-	var peer := WebSocketClientTransport.connect_to_url(url)
+	var peer: MultiplayerPeer = WebSocketClientTransport.connect_to_url(url)
 	if peer == null:
 		fail("CLIENT_ERROR id=%s unable_to_connect" % client_label)
 		return
+	peer = _wrap_test_net_delay(peer)
 	multiplayer.multiplayer_peer = peer
 	if DisplayServer.get_name() != "headless":
 		arena_view = ArenaView.new()
@@ -199,6 +201,38 @@ func configured_port() -> int:
 	if env_port.is_valid_int():
 		fallback = env_port.to_int()
 	return NetworkConfig.integer_argument(arguments, "port", fallback)
+
+## Atraso de aplicação só de teste (`tests/net_delay_peer.gd`). Exige binário
+## de desenvolvimento não exportado: a build de jogo nunca aceita o argumento.
+var test_net_peer: MultiplayerPeer
+func _wrap_test_net_delay(peer: MultiplayerPeer) -> MultiplayerPeer:
+	var profile := str(arguments.get("test-net-profile", ""))
+	if profile.is_empty():
+		return peer
+	if not OS.is_debug_build() or OS.has_feature("template"):
+		print("TEST_NET_PROFILE_IGNORED id=%s reason=exported_build" % client_label)
+		return peer
+	var script := load("res://tests/net_delay_peer.gd") as GDScript
+	if script == null or not script.call("is_known_profile", profile):
+		fail("TEST_NET_PROFILE_ERROR id=%s profile=%s" % [client_label, profile])
+		return peer
+	test_net_peer = script.new(peer, profile, NetworkConfig.integer_argument(arguments, "test-net-seed", 1))
+	print("TEST_NET_PROFILE id=%s profile=%s seed=%d" % [client_label, profile, NetworkConfig.integer_argument(arguments, "test-net-seed", 1)])
+	return test_net_peer
+
+## Sonda de latência/suavidade (fase 4), só em teste explícito.
+var latency_probe: Node
+func _start_latency_probe() -> void:
+	var role := str(arguments.get("latency-probe", ""))
+	if role.is_empty():
+		return
+	var script := load("res://tests/latency_probe.gd") as GDScript
+	if script == null:
+		fail("LATENCY_PROBE_ERROR missing")
+		return
+	latency_probe = script.new()
+	latency_probe.name = "LatencyProbe"
+	add_child(latency_probe)
 
 func _start_combat_network_test() -> void:
 	if not NetworkConfig.bool_argument(arguments, "combat-test"):
