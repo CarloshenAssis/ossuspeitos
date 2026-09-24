@@ -69,12 +69,38 @@ jobs:
           fi
 
       - name: Package test ZIP
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           cp build/windows/ArmedMystery.exe build/windows/ArmedMystery.console.exe build/package/
           cp docs/windows-playtest.txt build/package/LEIA-ME.txt
+          # Identificação da build: commit de origem, plataforma, versão do
+          # protocolo (quem cria e quem entra precisam da mesma) e checksums.
+          protocol="$(sed -n 's/^const PROTOCOL_VERSION := \([0-9]*\).*/\1/p' shared/network_config.gd)"
+          test -n "$protocol"
+          {
+            echo "Armed Mystery - build de teste"
+            echo "commit: $SOURCE_SHA"
+            echo "plataforma: Windows x86_64"
+            echo "protocolo: $protocol"
+            echo "godot: 4.4.1"
+            echo "gerado em: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "sha256:"
+            (cd build/package && sha256sum ArmedMystery.exe ArmedMystery.console.exe LEIA-ME.txt)
+          } > build/package/VERSAO.txt
+          cat build/package/VERSAO.txt
           (cd build/package && zip -9 -r ../armed-mystery-windows-playtest.zip .)
           unzip -l build/armed-mystery-windows-playtest.zip
           test -s build/armed-mystery-windows-playtest.zip
+          zip_sum="$(sha256sum build/armed-mystery-windows-playtest.zip | cut -d' ' -f1)"
+          echo "WINDOWS_PLAYTEST_ZIP sha256=$zip_sum commit=$SOURCE_SHA protocol=$protocol"
+          {
+            echo "### Build de teste Windows"
+            echo ""
+            echo "- commit: \`$SOURCE_SHA\`"
+            echo "- plataforma: Windows x86_64 · protocolo $protocol · Godot 4.4.1"
+            echo "- armed-mystery-windows-playtest.zip sha256: \`$zip_sum\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Windows playtest ZIP
         uses: actions/upload-artifact@v4
@@ -115,6 +141,9 @@ jobs:
           test -s playtest/ArmedMystery.exe
           test -s playtest/ArmedMystery.console.exe
           test -s playtest/LEIA-ME.txt
+          test -s playtest/VERSAO.txt
+          cat playtest/VERSAO.txt
+          (cd playtest && sed -n '/^sha256:/,$p' VERSAO.txt | tail -n +2 | sha256sum -c -)
 
       # Mesmo fluxo do jogador, com o executável exportado e sem o projeto:
       # menu -> servidor headless em processo separado -> três clientes pelo menu.

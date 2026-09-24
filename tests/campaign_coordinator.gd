@@ -56,6 +56,9 @@ var previous_epochs: Dictionary = {}
 
 # --- Servidor ----------------------------------------------------------------
 
+func expected_players() -> int:
+	return NetworkConfig.integer_argument(app.arguments, "campaign-clients", 8)
+
 func _server_tick() -> void:
 	if stage == "SHUTDOWN" or stage == "DONE":
 		return
@@ -63,7 +66,7 @@ func _server_tick() -> void:
 		if app.round_authority.state != RoundState.ACTIVE or app.combat_authority.active_round_id <= 0:
 			return
 		peers = app.round_authority.participants.keys()
-		if peers.size() != 8:
+		if peers.size() != expected_players() or (visual and graphical_peers.size() < 2):
 			return
 		peers.sort()
 		for peer_id in peers:
@@ -131,6 +134,10 @@ func _plan_round() -> void:
 	if round_number > 1:
 		_add("stale_callbacks", {"run": _inject_stale_callbacks, "delay": 300, "done": func(): return reports.size() == peers.size(), "check": _check_stale_rejected})
 	_add("resources", {"run": func(): _request_all_state("resources"), "done": func(): return reports.size() == peers.size(), "check": _record_resources})
+	if round_number == 2:
+		_visual("new_round", 3.0, func():
+			_rec(visual_actor, "new_round_actor", 3.0)
+			_rec(visual_observer, "new_round_observer", 3.0))
 	match round_number:
 		1: _plan_round_one()
 		2: _plan_round_two()
@@ -140,9 +147,25 @@ func _plan_round_one() -> void:
 	shooter_peer = victims[0]
 	spectator_a = victims[1]
 	spectator_b = victims[2]
+	if visual:
+		# Ator e observador são os dois clientes gráficos; nenhum pode ser o
+		# assassino (a seed é escolhida para isso e a falha é explícita).
+		var candidates: Array = []
+		for peer_id in peers:
+			if graphical_peers.has(int(peer_id)) and int(peer_id) != assassin:
+				candidates.append(int(peer_id))
+		if candidates.size() < 2:
+			_fail("VISUAL_SEED_UNSUITABLE graphical=%d" % graphical_peers.size())
+			return
+		shooter_peer = candidates[0]
+		spectator_a = candidates[1]
+		spectator_b = victims.filter(func(p): return int(p) not in [shooter_peer, spectator_a])[0]
+		visual_actor = shooter_peer
+		visual_observer = spectator_a
+		print("CAMPAIGN_VISUAL_ACTORS actor=%d observer=%d" % [visual_actor, visual_observer])
 	# Rota: porta leste do Salão → corredor → Cozinha, com outro jogador parado
 	# no corredor (não há colisão entre jogadores; a passagem é visual).
-	_add("navigation", {"run": func():
+	_add("navigation", _recorded({"run": func():
 		_scatter([shooter_peer, spectator_a])
 		app.authoritative_world.teleport(shooter_peer, MOVE_START, -PI * 0.5, 0.0)
 		app.authoritative_world.teleport(spectator_a, Vector3(20.0, 1.0, 11.5), PI * 0.5, 0.0)
@@ -153,14 +176,37 @@ func _plan_round_one() -> void:
 	, "done": func():
 		_track_move(shooter_peer)
 		return reports.has(shooter_peer)
-	, "check": _check_navigation, "timeout": 40000})
-	_add("pickup_weapon", _pickup_step(shooter_peer, 1, "weapon_1"))
+	, "check": _check_navigation, "timeout": 40000}, [[shooter_peer, "nav_actor", 6.5], [spectator_a, "nav_observer", 6.5]]))
+	_add("pickup_weapon", _recorded(_pickup_step(shooter_peer, 1, "weapon_1"), [[shooter_peer, "pickup", 3.0]]))
 	_add("pickup_ammo", _pickup_step(shooter_peer, 5, "ammo_1"))
-	_add("hit", _fire_step(shooter_peer, spectator_a, 1, 66, true))
+	_visual("vertical_aim", 5.0, func():
+		_scatter([shooter_peer, spectator_a])
+		app.authoritative_world.teleport(shooter_peer, LANE_FROM, PI * 0.5, 0.0)
+		app.authoritative_world.teleport(spectator_a, LANE_TO, -PI * 0.5, 0.0)
+		_rec(shooter_peer, "vertical_actor", 5.0)
+		_rec(spectator_a, "vertical_observer", 5.0)
+		var script: Array = []
+		for i in 30: script.append({})
+		for i in 40: script.append({"look": Vector2(0.0, 0.015)})
+		for i in 20: script.append({})
+		for i in 70: script.append({"look": Vector2(0.0, -0.015)})
+		for i in 20: script.append({})
+		for i in 30: script.append({"look": Vector2(0.0, 0.015)})
+		get_tree().create_timer(0.8).timeout.connect(func(): _send_script(shooter_peer, "SCRIPT", script)))
+	_add("hit", _recorded(_fire_step(shooter_peer, spectator_a, 1, 66, true), [[shooter_peer, "hit", 3.0], [spectator_a, "hit_target", 3.0]]))
 	_add("miss", _miss_step(shooter_peer, spectator_a))
-	_add("obstructed", _wall_step(shooter_peer, spectator_a))
-	_add("eliminate_first", _fire_step(shooter_peer, spectator_a, 2, 0, true))
+	_add("obstructed", _recorded(_wall_step(shooter_peer, spectator_a), [[shooter_peer, "wall", 3.0]]))
+	_add("eliminate_first", _recorded(_fire_step(shooter_peer, spectator_a, 2, 0, true), [[shooter_peer, "kill", 4.0], [spectator_a, "death", 4.0]]))
 	_add("spectator_first", {"run": func(): _request_state(spectator_a, "spectator"), "done": func(): return reports.has(spectator_a), "check": func(): return _check_spectator(spectator_a)})
+	_visual("spectator_view", 5.0, func():
+		_rec(spectator_a, "spectator", 5.0, shooter_peer)
+		var script: Array = []
+		for i in 20: script.append({})
+		for i in 60: script.append({"move": Vector2(0, -1)})
+		for i in 20: script.append({"look": Vector2(0.04, 0.0)})
+		for i in 60: script.append({"move": Vector2(0, -1)})
+		for i in 40: script.append({})
+		_send_script(shooter_peer, "SCRIPT", script))
 	_add("dead_actions_blocked", {"run": func():
 		campaign_results.clear()
 		sync_campaign_dead_probe.rpc_id(spectator_a)
@@ -211,6 +257,10 @@ func _add_round_end(reason: String, team: int) -> void:
 		for peer_id in peers:
 			previous_epochs[int(peer_id)] = int(app.authoritative_world.states[int(peer_id)]["epoch"])
 		return ""})
+	if round_number == 1:
+		_visual("reveal", 2.5, func():
+			_rec(visual_actor, "reveal_actor", 2.5)
+			_rec(visual_observer, "reveal_observer", 2.5))
 	_add("reveal_delivered", {"run": func(): _request_all_state("reveal"), "delay": 800, "done": func(): return reports.size() == peers.size(), "check": _check_reveal})
 	if round_number < 3:
 		_add("next_round", {"done": func():
@@ -225,6 +275,40 @@ func _add_round_end(reason: String, team: int) -> void:
 			print("CAMPAIGN_SERVER_OK clients=%d rounds=%d profile=%s" % [peers.size(), round_number, str(app.arguments.get("sync-profile", "local"))])
 			stage = "SHUTDOWN"
 			app._begin_server_shutdown(app.lobby.peer_ids())})
+
+# --- Modo visual (sessão gráfica) ---------------------------------------------------
+
+var visual_actor := 0
+var visual_observer := 0
+
+func _rec(peer_id: int, recording: String, seconds: float, follow: int = 0) -> void:
+	if visual and peer_id != 0:
+		sync_visual_record.rpc_id(peer_id, "r%d_%s" % [round_number, recording], seconds, follow)
+
+## Passo que só existe na sessão gráfica: executa e espera a gravação.
+func _visual(step_name: String, seconds: float, run: Callable) -> void:
+	if visual:
+		_add("visual_" + step_name, _recorded({"run": run}, [[0, "", seconds]]))
+
+## Grava durante um passo existente sem mudar o que ele verifica: o passo só
+## termina depois da gravação mais longa.
+func _recorded(step: Dictionary, recordings: Array) -> Dictionary:
+	if not visual:
+		return step
+	var started := [0]
+	var longest := 0.0
+	for recording in recordings:
+		longest = maxf(longest, float(recording[2]))
+	var run: Callable = step.get("run", func(): pass)
+	var done: Callable = step.get("done", func(): return true)
+	step["run"] = func():
+		started[0] = Time.get_ticks_msec()
+		for recording in recordings:
+			_rec(int(recording[0]), str(recording[1]), float(recording[2]), int(recording[3]) if recording.size() > 3 else 0)
+		run.call()
+	step["done"] = func(): return bool(done.call()) and Time.get_ticks_msec() - int(started[0]) > int(longest * 1000.0) + 400
+	step["timeout"] = maxi(int(step.get("timeout", STEP_TIMEOUT_MSEC)), int(longest * 1000.0) + 20000)
+	return step
 
 # --- Passos reutilizáveis ----------------------------------------------------------
 

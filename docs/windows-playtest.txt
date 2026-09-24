@@ -7,6 +7,12 @@ ARQUIVOS
 - ArmedMystery.exe ......... o jogo (os dados já vêm dentro do .exe).
 - ArmedMystery.console.exe . o mesmo jogo, mas abre um console com o log.
                              Use-o se algo der errado.
+- VERSAO.txt ............... commit, plataforma, versão do protocolo e
+                             checksums (sha256) desta build.
+
+VERSÃO
+Todos os jogadores precisam da MESMA build (mesmo "protocolo" em VERSAO.txt).
+Com builds diferentes a entrada é recusada com "Versão diferente do jogo".
 
 ABRIR
 1. Extraia o ZIP inteiro numa pasta (não rode de dentro do ZIP).
@@ -28,6 +34,20 @@ PARTIDA NA REDE LOCAL (LAN)
 3. Nos outros PCs: "Entrar em partida" com o IP mostrado (ex.: 192.168.0.10).
 Sem essa opção, a sala só aceita conexões deste mesmo PC.
 
+A RODADA
+- De 4 a 8 jogadores. Com 4 conectados começa uma contagem regressiva.
+- Cada um recebe um papel secreto: 1 assassino, 1 detetive, o resto vítimas.
+  Só você vê o seu papel.
+- Armas e munição ficam espalhadas pela mansão: pegue com E.
+- Inocentes vencem quando o assassino cai; o assassino vence quando todos os
+  inocentes caem. No fim, os papéis de todos são revelados e, depois de
+  alguns segundos, começa a próxima rodada na mesma sala.
+- Quem é eliminado vira espectador (não anda, não atira, não coleta).
+- Quem entra com a rodada em andamento (ou no fim dela) espera e joga a
+  próxima. Sala com 8 jogadores recusa o nono ("Sala cheia").
+- Quem sai no meio da rodada conta como eliminado. Pode voltar com o mesmo
+  nome e joga a próxima rodada.
+
 CONTROLES
 - WASD: mover · mouse: girar (clique na janela para capturar o mouse)
 - Clique esquerdo: atirar · R: recarregar · E: pegar arma/munição
@@ -44,4 +64,9 @@ PROBLEMAS COMUNS
   outra porta (a mesma porta em quem cria e em quem entra).
 - "Não foi possível conectar": confira IP e porta, se a sala foi criada e,
   na LAN, se o anfitrião marcou a opção LAN e liberou o firewall.
+- "Sala cheia, em andamento com 8 jogadores ou nome já usado": use outro
+  nome ou espere alguém sair.
 - Log do servidor da sala: %APPDATA%\Godot\app_userdata\Armed Mystery\hosted-server.log
+- Log de um jogador: abra ArmedMystery.console.exe em vez do .exe; o log
+  aparece na janela de console. Ao relatar um problema, mande esse log, o
+  hosted-server.log e o conteúdo de VERSAO.txt.

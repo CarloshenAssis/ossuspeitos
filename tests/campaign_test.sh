@@ -72,10 +72,12 @@ for id in $(seq 1 "$CLIENTS"); do
 done
 stage "clients_started count=$CLIENTS"
 (
-  sleep 420
+  trap 'kill "$sleep_pid" 2>/dev/null; exit 0' TERM
+  sleep 420 & sleep_pid=$!
+  wait "$sleep_pid"
   echo "watchdog run=$RUN_ID" >"$TMP_DIR/timeout.log"
   for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
-) & WATCHDOG_PID=$!
+) >/dev/null 2>&1 & WATCHDOG_PID=$!
 
 for i in "${!PIDS[@]}"; do
   if wait "${PIDS[$i]}"; then status=0; else status=$?; fi

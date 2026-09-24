@@ -282,3 +282,56 @@ jobs:
           name: godot-netcode-test-logs
           path: ${{ runner.temp }}/godot-netcode-logs
           if-no-files-found: warn
+
+  # Fase 5: partida integrada (8 clientes, 3 rodadas na mesma sessão) e casos
+  # adversos, cada um em sessão própria com status de saída esperado por
+  # processo. Job próprio, em paralelo, dentro do prazo de 15 minutos.
+  match-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Create log directory
+        run: mkdir -p "$RUNNER_TEMP/godot-match-logs"
+
+      - name: Validate project
+        run: |
+          set -o pipefail
+          godot --headless --path . --editor --quit 2>&1 \
+            | tee "$RUNNER_TEMP/godot-match-logs/parser.log"
+
+      - name: Run eight-client three-round campaign (local and 150 ms with jitter)
+        run: |
+          set -o pipefail
+          for config in "local 1" "rtt150j 4"; do
+            set -- $config
+            TEST_LOG_DIR="$RUNNER_TEMP/godot-match-logs/campaign-$1-$2" PROFILE="$1" SEED="$2" \
+              GODOT_BIN="$(command -v godot)" ./tests/campaign_test.sh 2>&1 \
+              | tee "$RUNNER_TEMP/godot-match-logs/campaign-$1-$2.log"
+            grep -q "CAMPAIGN_TEST_OK profile=$1 seed=$2 clients=8 rounds=3" "$RUNNER_TEMP/godot-match-logs/campaign-$1-$2.log"
+          done
+
+      - name: Run adverse cases
+        run: |
+          set -o pipefail
+          TEST_LOG_DIR="$RUNNER_TEMP/godot-match-logs/adverse" SEED=1 GODOT_BIN="$(command -v godot)" \
+            ./tests/adverse_cases_test.sh 2>&1 | tee "$RUNNER_TEMP/godot-match-logs/adverse.log"
+          grep -q 'ADVERSE_CASES_TEST_OK cases=11 ' "$RUNNER_TEMP/godot-match-logs/adverse.log"
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-match-test-logs
+          path: ${{ runner.temp }}/godot-match-logs
+          if-no-files-found: warn
