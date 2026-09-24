@@ -24,7 +24,7 @@ var active_round_id := 0
 func _init(rounds: RoundAuthority, authoritative_world: AuthoritativeWorld) -> void:
 	round_authority = rounds
 	world = authoritative_world
-	var definition := WeaponDefinition.new(COMMON_WEAPON_ID, 34, 6, 18, 400, 20.0, 1200, 0.0)
+	var definition := WeaponDefinition.new(COMMON_WEAPON_ID, 34, 6, 18, WeaponRules.COMMON_FIRE_INTERVAL_MSEC, 20.0, 1200, 0.0)
 	inventory = InventoryAuthority.new({COMMON_WEAPON_ID: definition})
 	combat_rules = CombatRules.new(inventory)
 
@@ -96,13 +96,18 @@ func request_reload(peer_id: int, sequence: Variant, now_msec: int) -> Dictionar
 	private_state_changed.emit(peer_id, private_state(peer_id))
 	return {"accepted": true}
 
-func request_fire(peer_id: int, sequence: Variant, claimed_origin: Variant, claimed_direction: Variant, now_msec: int) -> Dictionary:
+## Tiro no ponto causal do comando que o carrega (protocolo 9): origem no olho
+## oficial e direção pela mira oficial já com a variação desse comando. O
+## cliente não envia origem nem direção; alvos são avaliados na simulação
+## oficial deste instante (sem rebobinamento).
+func request_fire(peer_id: int, sequence: Variant, now_msec: int) -> Dictionary:
 	var rejection := _gate(peer_id, "fire", sequence, now_msec)
 	if not rejection.is_empty():
 		return _rejected(rejection)
 	var state: Dictionary = world.states[peer_id]
 	var eye := (state["position"] as Vector3) + Vector3.UP * ArenaRules.EYE_HEIGHT
-	var intent := {"sequence": sequence, "origin": claimed_origin, "direction": claimed_direction}
+	var aim := MovementRules.aim_direction(float(state["yaw"]), float(state.get("pitch", 0.0)))
+	var intent := {"sequence": sequence, "origin": eye, "direction": aim}
 	var context := {"alive": true, "round_active": true, "eye_position": eye, "yaw": state["yaw"],
 		"pitch": MovementRules.clamp_pitch(state.get("pitch", 0.0))}
 	var shot := combat_rules.request_shot(peer_id, intent, context, now_msec)

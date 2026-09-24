@@ -62,6 +62,7 @@ func _test_local_aim_follows_the_official_yaw() -> void:
 		_arena.apply_combat_state({"round_id": 1, "health": 100, "weapon_id": "common_pistol" if armed else "", "magazine": 6, "reserve": 0, "reloading": false})
 		for yaw in YAWS:
 			_arena.apply_snapshot([_state(LOCAL, Vector3(0, 1, 0), yaw), _state(REMOTE, Vector3(3, 1, 3), 0.0)])
+			_arena._process(0.0)
 			var aim := _arena.camera_direction()
 			_expect(aim.distance_to(_official_forward(yaw)) < 0.001, "local aim follows official yaw %.2f (armed=%s)" % [yaw, str(armed)])
 

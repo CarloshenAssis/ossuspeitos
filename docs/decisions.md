@@ -668,3 +668,58 @@ Detalhes, dimensões e checkpoint: `docs/mansion-plan.md`.
 - Saltos de mais de 1,5 m entre quadros reiniciam a referência.
 - A velocidade apresentada é limitada a 1,5 × 5 m/s.
 - Correções acima de 2,5 m saltam o corpo em vez de deslizá-lo.
+
+## Fase 4: resposta local, reconciliação e apresentação (protocolo 9)
+
+Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
+
+**Comandos de um tick**
+- O cliente manda `submit_commands` com época, primeira sequência e comandos
+  de um tick (movimento, deltas de mira e uma ação opcional).
+- O servidor consome um por tick, com fila limitada e orçamento de tempo real.
+  O dt não viaja no pacote.
+- O ACK cumulativo vem no snapshot de cada destinatário, junto com a época e os
+  baldes de mira oficiais.
+- Comando recusado, perdido ou de época antiga é aposentado pelo ACK; a ação
+  dentro dele recebe resultado explícito.
+
+**Ordem causal do tiro (solução única)**
+- A ação vai **dentro** do comando e é executada entre a mira desse comando e o
+  movimento do tick.
+- O cliente não envia origem nem direção. O tiro sai do olho oficial com a mira
+  oficial daquele ponto; a cadência usa o relógio oficial.
+- As RPCs `request_fire`, `request_reload`, `request_pickup` e `submit_input`
+  foram removidas.
+
+**Previsão local**
+- A previsão usa o mesmo integrador e a mesma colisão compartilhada, sem relógio
+  de parede.
+- O mouse aparece no quadro seguinte.
+- Correções pequenas são amortecidas, com prazo; as grandes, e a troca de
+  época, saltam.
+- A `ArenaView` é o único escritor dos transforms: o yaw fica no rig e o pitch
+  na câmera.
+
+**Remotos e espectador**
+- Buffer com atraso de dois snapshots mais o jitter medido.
+- Relógio de apresentação monotônico que se ajusta no máximo ±10%.
+- Extrapolação curta com a colisão oficial.
+- Caminho em L ou retenção nas quinas.
+- A época pública marca as descontinuidades.
+
+**Sem compensação de latência nesta fase.**
+
+**Também corrigido**
+- Ids de ação por rodada (antes, depois de 63 ações a arma parava de
+  funcionar nas rodadas seguintes).
+- Mira em precisão dupla (um `Vector2` de 32 bits travava a mira no limite do
+  balde).
+
+**Testes**
+- `tests/netcode_test.gd` (camada A).
+- `tests/sync_network_test.sh` (camada B, perfis de 0, 80 e 150 ms com jitter e
+  interrupção), num job próprio do CI.
+- `tests/sync_visual_session.sh` e `tests/latency_probe.sh`: medidas gráficas
+  locais, fora do CI.
+- O atraso é só de teste (`tests/net_delay_peer.gd`), carregado apenas em
+  binário de desenvolvimento não exportado.

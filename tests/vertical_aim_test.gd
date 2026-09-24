@@ -62,39 +62,35 @@ func _test_pitch_input_authority() -> void:
 	input_world.add_player(SHOOTER)
 	var state: Dictionary = input_world.states[SHOOTER]
 	_expect(float(state["pitch"]) == 0.0, "players spawn looking level")
-	var sequence := 0
-	var now := 1_000
-	# Olhar para cima em passos válidos até o limite, sem passar dele.
+	# Protocolo 9: cada comando vale um tick; o balde de mira se repõe por tick
+	# simulado. Olhar para cima em passos válidos até o limite, sem passar dele.
 	for step in 12:
-		sequence += 1
-		now += 200
-		input_world.accept_input(SHOOTER, sequence, Vector2.ZERO, 0.0, now, 0.3)
+		MovementRules.simulate_command(state, Vector2.ZERO, 0.0, 0.3)
+		_idle(state, 8)
 	_expect(is_equal_approx(float(state["pitch"]), MovementRules.MAX_PITCH), "looking up stops at the official limit (%.3f)" % float(state["pitch"]))
 	for step in 24:
-		sequence += 1
-		now += 200
-		input_world.accept_input(SHOOTER, sequence, Vector2.ZERO, 0.0, now, -0.3)
+		MovementRules.simulate_command(state, Vector2.ZERO, 0.0, -0.3)
+		_idle(state, 8)
 	_expect(is_equal_approx(float(state["pitch"]), -MovementRules.MAX_PITCH), "looking down stops at the official limit")
 	var before := float(state["pitch"])
 	for bad in [NAN, INF, -INF]:
-		sequence += 1
-		now += 200
-		_expect(input_world.accept_input(SHOOTER, sequence, Vector2.ZERO, 0.0, now, bad) == "non_finite", "pitch %s is rejected" % str(bad))
+		_expect(MovementRules.simulate_command(state, Vector2.ZERO, 0.0, bad) == "non_finite", "pitch %s is rejected" % str(bad))
 		_expect(float(state["pitch"]) == before, "rejected pitch %s changes nothing" % str(bad))
-	sequence += 1
-	now += 200
-	_expect(input_world.accept_input(SHOOTER, sequence, Vector2.ZERO, 0.0, now, MovementRules.MAX_PITCH_DELTA + 0.01) == "pitch_delta", "oversized pitch step is rejected")
-	# Rajada: sem tempo para repor os tokens, o terceiro passo grande é recusado.
+	_expect(MovementRules.simulate_command(state, Vector2.ZERO, 0.0, MovementRules.MAX_PITCH_DELTA + 0.01) == "pitch_delta", "oversized pitch step is rejected")
+	# Rajada: sem ticks para repor o balde, o terceiro passo grande é recusado.
+	_idle(state, 30)
 	var reasons := []
 	for step in 3:
-		sequence += 1
-		now += 1
-		reasons.append(input_world.accept_input(SHOOTER, sequence, Vector2.ZERO, 0.0, now, 0.35))
-	_expect(reasons.has("pitch_rate"), "pitch has a rate limit like yaw (%s)" % str(reasons))
+		reasons.append(MovementRules.simulate_command(state, Vector2.ZERO, 0.0, 0.35))
+	_expect(reasons == ["", "", "pitch_rate"], "pitch has a rate limit like yaw (%s)" % str(reasons))
 	var snapshot: Dictionary = input_world.snapshot()[0]
 	_expect(snapshot.has("pitch") and is_equal_approx(float(snapshot["pitch"]), MovementRules.clamp_pitch(state["pitch"])), "snapshot carries the official pitch")
 	state["pitch"] = NAN
 	_expect(float(input_world.snapshot()[0]["pitch"]) == 0.0, "a corrupted pitch never leaves the server")
+
+func _idle(state: Dictionary, ticks: int) -> void:
+	for tick in ticks:
+		MovementRules.simulate_command(state, Vector2.ZERO, 0.0, 0.0)
 
 # --- Disparo com o pitch oficial -------------------------------------------------
 
@@ -120,7 +116,7 @@ func _setup_combat() -> void:
 ## metros à frente.
 const LANE_START := Vector3(12, MovementRules.PLAYER_HEIGHT, 16)
 
-func _shot(pitch: float, distance: float, claimed: Variant = null) -> Dictionary:
+func _shot(pitch: float, distance: float) -> Dictionary:
 	world.states[SHOOTER]["position"] = LANE_START
 	world.states[SHOOTER]["yaw"] = 0.0
 	world.states[SHOOTER]["pitch"] = pitch
@@ -130,12 +126,10 @@ func _shot(pitch: float, distance: float, claimed: Variant = null) -> Dictionary
 	authority.inventory.inventories[SHOOTER]["magazine"] = 6
 	_now += 1000
 	_sequence += 1
-	var eye: Vector3 = world.states[SHOOTER]["position"] + Vector3.UP * ArenaRules.EYE_HEIGHT
-	var direction: Vector3 = claimed if claimed != null else MovementRules.aim_direction(0.0, pitch)
 	var events: Array = []
 	var capture := func(event: Dictionary): events.append(event)
 	authority.shot_resolved.connect(capture)
-	var result := authority.request_fire(SHOOTER, _sequence, eye, direction, _now)
+	var result := authority.request_fire(SHOOTER, _sequence, _now)
 	authority.shot_resolved.disconnect(capture)
 	result["event"] = events[0] if not events.is_empty() else {}
 	result["target_health"] = authority.health[TARGET]
@@ -164,29 +158,32 @@ func _test_shooting_up_and_down() -> void:
 	var slight_up := _shot(0.05, 5.0)
 	_expect(slight_up["hit"], "a slight upward aim still hits the body")
 	# Pitch fora do limite no estado nunca vira disparo absurdo: usa o limite.
-	var over := _shot(9.0, 5.0, MovementRules.aim_direction(0.0, MovementRules.MAX_PITCH))
+	var over := _shot(9.0, 5.0)
 	var over_event: Dictionary = over["event"]
 	var slope := ((over_event["end"] as Vector3).y - (over_event["origin"] as Vector3).y) / absf((over_event["end"] as Vector3).z - (over_event["origin"] as Vector3).z)
 	_expect(over["accepted"] and is_equal_approx(slope, tan(MovementRules.MAX_PITCH)), "an out-of-range official pitch fires at the limit")
 
 func _test_claimed_direction_is_not_trusted() -> void:
-	# O cliente não escolhe a vertical: mirar para cima com o pitch oficial
-	# nivelado é recusado, e o alvo não perde vida.
-	var cheat_up := _shot(0.0, 5.0, MovementRules.aim_direction(0.0, 0.8))
-	_expect(not cheat_up["accepted"] and cheat_up["reason"] == "direction_pitch_divergence" and cheat_up["target_health"] == 100, "claimed pitch far from the official pitch is rejected")
-	var cheat_level := _shot(0.8, 5.0, Vector3.FORWARD)
-	_expect(not cheat_level["accepted"] and cheat_level["reason"] == "direction_pitch_divergence", "a level claim while the official aim is high is rejected")
-	# Dentro da tolerância de latência, o disparo usa o pitch oficial, não o declarado.
-	var near_claim := _shot(-0.5, 2.0, MovementRules.aim_direction(0.0, -0.3))
-	var near_event: Dictionary = near_claim["event"]
-	var near_slope := ((near_event["end"] as Vector3).y - (near_event["origin"] as Vector3).y) / absf((near_event["end"] as Vector3).z - (near_event["origin"] as Vector3).z)
-	_expect(near_claim["accepted"] and is_equal_approx(near_slope, tan(-0.5)), "the shot follows the official pitch, not the claimed one")
+	# Protocolo 9: o cliente não declara origem nem direção; a autoridade tira a
+	# direção da mira oficial. As regras de combate continuam recusando uma
+	# intenção cuja direção diverge da mira oficial (defesa em profundidade).
+	var eye := LANE_START + Vector3.UP * ArenaRules.EYE_HEIGHT
+	var context := {"alive": true, "round_active": true, "eye_position": eye, "yaw": 0.0, "pitch": 0.0}
+	authority.inventory.inventories[SHOOTER]["magazine"] = 6
+	var rules := CombatRules.new(authority.inventory)
+	var next_seq := int(authority.inventory.inventories[SHOOTER]["last_sequence"]) + 1
+	var cheat_up := rules.request_shot(SHOOTER, {"sequence": next_seq, "origin": eye, "direction": MovementRules.aim_direction(0.0, 0.8)}, context, _now + 5000)
+	_expect(not cheat_up["accepted"] and cheat_up["reason"] == "direction_pitch_divergence", "an intent far from the official pitch is rejected by the rules")
 	for bad in [Vector3(NAN, 0, -1), Vector3(0, INF, -1), Vector3(0, 0, -INF)]:
-		var result := _shot(0.0, 5.0, bad)
+		var result := rules.request_shot(SHOOTER, {"sequence": next_seq, "origin": eye, "direction": bad}, context, _now + 5000)
 		_expect(not result["accepted"] and result["reason"] == "non_finite", "non-finite direction %s is rejected" % str(bad))
-	_expect(not _shot(0.0, 5.0, Vector3(0, 1, 0))["accepted"], "straight up is never a valid claim")
-	var forged := CombatRules.new(authority.inventory).request_shot(SHOOTER, {"sequence": 999, "origin": Vector3.ZERO, "direction": Vector3.FORWARD, "end": Vector3(6, 1, 3), "hit": true}, {"alive": true, "round_active": true, "eye_position": Vector3.ZERO, "yaw": 0.0, "pitch": 0.0}, _now + 5000)
+	var forged := rules.request_shot(SHOOTER, {"sequence": 999, "origin": Vector3.ZERO, "direction": Vector3.FORWARD, "end": Vector3(6, 1, 3), "hit": true}, {"alive": true, "round_active": true, "eye_position": Vector3.ZERO, "yaw": 0.0, "pitch": 0.0}, _now + 5000)
 	_expect(not forged["accepted"] and forged["reason"] == "forbidden_field", "a declared impact point or hit is refused")
+	# O disparo oficial segue a mira oficial, seja qual for a câmera do cliente.
+	var aimed := _shot(-0.5, 2.0)
+	var aimed_event: Dictionary = aimed["event"]
+	var slope := ((aimed_event["end"] as Vector3).y - (aimed_event["origin"] as Vector3).y) / absf((aimed_event["end"] as Vector3).z - (aimed_event["origin"] as Vector3).z)
+	_expect(aimed["accepted"] and is_equal_approx(slope, tan(-0.5)), "the shot follows the official pitch")
 
 func _test_walls_still_block() -> void:
 	# Parede entre a Sala de Jantar e o Salão: nem nivelado nem levemente para cima.
@@ -199,8 +196,7 @@ func _test_walls_still_block() -> void:
 		authority.inventory.inventories[SHOOTER]["magazine"] = 6
 		_now += 1000
 		_sequence += 1
-		var eye: Vector3 = world.states[SHOOTER]["position"] + Vector3.UP * ArenaRules.EYE_HEIGHT
-		var result := authority.request_fire(SHOOTER, _sequence, eye, MovementRules.aim_direction(0.0, pitch), _now)
+		var result := authority.request_fire(SHOOTER, _sequence, _now)
 		_expect(result["accepted"] and not result["hit"] and authority.health[TARGET] == 100, "the dining-hall wall blocks a shot at pitch %.1f" % pitch)
 
 # --- Cliente --------------------------------------------------------------------
@@ -211,13 +207,17 @@ func _state(peer_id: int, position: Vector3, yaw: float, pitch: Variant) -> Dict
 func _test_client_camera_follows_official_pitch() -> void:
 	for pitch in [0.0, 0.6, -0.6, MovementRules.MAX_PITCH]:
 		_arena.apply_snapshot([_state(SHOOTER, Vector3(0, 1, 0), 0.7, pitch)])
+		_arena._process(0.016)
 		_expect(is_equal_approx(_arena.camera.rotation.x, pitch), "camera pitch follows the official pitch %.2f" % pitch)
 		_expect(_arena.camera_direction().distance_to(MovementRules.aim_direction(0.7, pitch)) < 0.001, "the fired direction is the official aim at pitch %.2f" % pitch)
 	_arena.apply_snapshot([_state(SHOOTER, Vector3(0, 1, 0), 0.0, 5.0)])
+	_arena._process(0.016)
 	_expect(is_equal_approx(_arena.camera.rotation.x, MovementRules.MAX_PITCH), "an out-of-range snapshot pitch is clamped on the client")
 	_arena.apply_snapshot([_state(SHOOTER, Vector3(0, 1, 0), 0.0, NAN)])
+	_arena._process(0.016)
 	_expect(_arena.camera.rotation.x == 0.0, "a NaN snapshot pitch levels the camera")
 	_arena.apply_snapshot([{"peer_id": SHOOTER, "position": Vector3(0, 1, 0), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
+	_arena._process(0.016)
 	_expect(_arena.camera.rotation.x == 0.0, "a snapshot without pitch is level")
 	_expect(_arena.camera.global_position.is_equal_approx(Vector3(0, 1 + ArenaRules.EYE_HEIGHT, 0)), "pitch never moves the eye (shot origin)")
 
@@ -225,6 +225,7 @@ func _test_spectator_sees_target_pitch() -> void:
 	_arena.apply_snapshot([_state(SHOOTER, Vector3(0, 1, 0), 0.0, 0.0), _state(TARGET, Vector3(3, 1, 3), 1.0, -0.4)])
 	_arena.set_spectator_target(TARGET)
 	_arena.apply_snapshot([_state(SHOOTER, Vector3(0, 1, 0), 0.0, 0.0), _state(TARGET, Vector3(3, 1, 3), 1.0, -0.4)])
+	_arena._process(0.016)
 	_expect(is_equal_approx(_arena.camera.rotation.x, -0.4) and _arena.camera_direction().distance_to(MovementRules.aim_direction(1.0, -0.4)) < 0.001, "the spectator camera looks where the target officially aims")
 	_arena.set_spectator_target(0, false)
 	_expect(is_equal_approx(_arena.camera.rotation.x, 0.0), "leaving spectator returns to the own pitch")

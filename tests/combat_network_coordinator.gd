@@ -71,7 +71,10 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if app.mode == "server":
 		_server_tick()
-	elif not pending_command.is_empty():
+		return
+	if not _retry_action.is_empty() and app.queue_test_action(str(_retry_action["kind"]), int(_retry_action["id"]), str(_retry_action["pickup_id"])):
+		_retry_action = {}
+	if not pending_command.is_empty():
 		_try_run_client_command()
 
 func _server_tick() -> void:
@@ -354,25 +357,38 @@ func _try_run_client_command() -> void:
 		print("COMBAT_PRIVATE_STATE_OK id=%s updates=%d" % [app.client_label, private_updates])
 		processed_commands[received_command_id] = true
 		combat_test_ack.rpc_id(1, round_id, command, received_command_id, "ready")
+	# Protocolo 9: cada ação entra no fluxo normal de comandos do cliente (um
+	# por tick), com o identificador escolhido pelo coordenador.
 	elif command == "CONTEST" and own_id in payload["actors"]:
-		app.request_pickup.rpc_id(1, payload["pickup_id"], payload["sequence"])
+		_queue_action(NetSync.ACTION_PICKUP, payload["sequence"], payload["pickup_id"])
 	elif command == "ARM" and own_id == int(payload["actor"]):
-		app.request_pickup.rpc_id(1, payload["pickup_id"], payload["sequence"])
+		_queue_action(NetSync.ACTION_PICKUP, payload["sequence"], payload["pickup_id"])
 	elif command == "AMMO" and own_id == int(payload["actor"]):
-		app.request_pickup.rpc_id(1, payload["pickup_id"], payload["sequence"])
+		_queue_action(NetSync.ACTION_PICKUP, payload["sequence"], payload["pickup_id"])
 	elif command.begins_with("FIRE") or command == "SPECTATOR_FIRE" or command == "REPLAY" or command == "RATE" or command == "CADENCE" or command == "WALL":
-		if own_id == int(payload["actor"]): app.request_fire.rpc_id(1, payload["sequence"], payload["origin"], payload["direction"])
+		if own_id == int(payload["actor"]): _queue_action(NetSync.ACTION_FIRE, payload["sequence"])
 	elif command == "RELOAD" and own_id == int(payload["actor"]):
-		app.request_reload.rpc_id(1, payload["sequence"])
+		_queue_action(NetSync.ACTION_RELOAD, payload["sequence"])
 	elif command == "POST_END":
 		post_end_rejections = 0
 		post_end_command_active = true
-		app.request_pickup.rpc_id(1, "weapon_0", payload["sequence"])
-		app.request_fire.rpc_id(1, payload["sequence"], Vector3.ZERO, Vector3.FORWARD)
-		app.request_reload.rpc_id(1, payload["sequence"])
+		# Rodada encerrada: o cliente não comanda mais; o pacote vai montado à mão
+		# pelo mesmo RPC e o servidor recusa as três ações.
+		app.send_test_packet([
+			{"kind": NetSync.ACTION_PICKUP, "id": int(payload["sequence"]), "pickup_id": "weapon_0"},
+			{"kind": NetSync.ACTION_FIRE, "id": int(payload["sequence"])},
+			{"kind": NetSync.ACTION_RELOAD, "id": int(payload["sequence"])}])
 	if command != "INITIAL" or processed_commands.has(received_command_id):
 		processed_commands[received_command_id] = true
 		pending_command.clear()
+
+## Uma ação por tick: se já há outra na fila deste tick, tenta no próximo
+## quadro (o comando do coordenador só é dado por concluído quando entra).
+func _queue_action(kind: String, id: Variant, pickup_id: Variant = "") -> void:
+	if not app.queue_test_action(kind, int(id), str(pickup_id)):
+		_retry_action = {"kind": kind, "id": int(id), "pickup_id": str(pickup_id)}
+
+var _retry_action: Dictionary = {}
 
 func _enter(next: String, recipients: Array, payload: Dictionary = {}) -> void:
 	print("COMBAT_STAGE_EXIT stage=%s result=transition" % stage)
@@ -498,13 +514,12 @@ func _check_new_round() -> bool:
 	return true
 
 func _fire_payload(sequence: int) -> Dictionary:
-	return {"actor": shooter, "sequence": sequence,
-		"origin": app.authoritative_world.states[shooter]["position"] + Vector3.UP * ArenaRules.EYE_HEIGHT,
-		"direction": Vector3.FORWARD}
+	# Sem origem nem direção: o servidor usa o olho e a mira oficiais.
+	return {"actor": shooter, "sequence": sequence}
 
 func _set_position(peer_id: int, position: Vector3) -> void:
 	var state: Dictionary = app.authoritative_world.states[peer_id]
-	state["position"] = position; state["input"] = Vector2.ZERO; state["velocity"] = Vector3.ZERO
+	state["position"] = position; state["velocity"] = Vector3.ZERO
 
 func _last_shot() -> int:
 	return int(app.combat_authority.inventory.inventories[shooter]["last_shot_msec"])
@@ -581,7 +596,8 @@ static func validate_test_lane(states: Dictionary, alive: Dictionary, shooter_id
 		if states[bystanders[index]]["position"] != SAFE_POSITIONS[index]: return "bystander_position_not_applied"
 	for peer_id in states:
 		if (states[peer_id]["velocity"] as Vector3).length_squared() > 0.000001: return "participant_moving"
-		if (states[peer_id]["input"] as Vector2).length_squared() > 0.000001: return "participant_input_active"
+		for queued in states[peer_id].get("queue", []):
+			if ((queued as Dictionary)["move"] as Vector2).length_squared() > 0.000001: return "participant_input_active"
 	var origin := shooter_position + Vector3.UP * ArenaRules.EYE_HEIGHT
 	var target_distance := ArenaRules.ray_player(origin, Vector3.FORWARD, 20.0, target_position)
 	if target_distance < 0.0: return "target_not_intersected"

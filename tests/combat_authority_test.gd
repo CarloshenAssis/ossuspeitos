@@ -56,25 +56,27 @@ func _test_fire_damage_and_validation() -> void:
 	world.states[1]["position"] = Vector3(12, 0, 15.5)
 	world.states[1]["yaw"] = 0.0
 	world.states[2]["position"] = Vector3(12, 0, 10.5)
-	var eye: Vector3 = world.states[1]["position"] + Vector3.UP * ArenaRules.EYE_HEIGHT
-	_expect(authority.request_fire(1, 1, eye + Vector3(2, 0, 0), Vector3.FORWARD, 1000)["reason"] == "implausible_origin", "impossible origin")
-	_expect(authority.request_fire(1, 1, eye, "bad", 1000)["reason"] == "invalid_direction", "invalid direction")
-	_expect(authority.request_fire(1, 1, eye, Vector3.BACK, 1000)["reason"] == "direction_yaw_divergence", "yaw divergence")
-	var first := authority.request_fire(1, 1, eye, Vector3.FORWARD, 1000)
+	# Protocolo 9: o cliente não declara origem nem direção. O rumo é o da mira
+	# oficial; de costas para o alvo, o tiro é aceito e não acerta.
+	world.states[1]["yaw"] = PI
+	var away := authority.request_fire(1, 1, 1000)
+	_expect(away["accepted"] and not away["hit"] and authority.health[2] == 100, "official yaw decides the direction (facing away misses)")
+	world.states[1]["yaw"] = 0.0
+	var first := authority.request_fire(1, 2, 1500)
 	_expect(first["accepted"], "valid official shot")
 	_expect(authority.health[2] == 66, "official 34 damage applied")
-	_expect(authority.request_fire(1, 1, eye, Vector3.FORWARD, 1500)["reason"] == "replay", "sequence replay rejected")
+	_expect(authority.request_fire(1, 2, 2000)["reason"] == "replay", "sequence replay rejected")
 	_expect(authority.health[2] == 66, "damage exactly once")
 	var inventory_before_rate_limit := authority.inventory.get_inventory(1)
-	var rate_result := authority.request_fire(1, 2, eye, Vector3.FORWARD, 1050)
+	var rate_result := authority.request_fire(1, 3, 1550)
 	_expect(rate_result.get("reason", "accepted") == "rate_limited",
-		"action rate limit action=fire previous_timestamp=1000 current_timestamp=1050 interval=%d previous_sequence=1 current_sequence=2 expected=rate_limited actual=%s" % [
+		"action rate limit action=fire previous_timestamp=1500 current_timestamp=1550 interval=%d previous_sequence=2 current_sequence=3 expected=rate_limited actual=%s" % [
 			CombatAuthority.ACTION_INTERVAL_MSEC, str(rate_result.get("reason", "accepted"))])
 	_expect(authority.inventory.get_inventory(1) == inventory_before_rate_limit, "rate-limited action preserves inventory")
-	_expect(authority.request_fire(1, 2, eye, Vector3.FORWARD, 1300)["reason"] == "fire_rate", "weapon cadence")
-	_expect(authority.request_fire(1, {"damage": 999}, eye, Vector3.FORWARD, 1500)["reason"] == "invalid_sequence", "client cannot choose damage or victim")
+	_expect(authority.request_fire(1, 3, 1800)["reason"] == "fire_rate", "weapon cadence")
+	_expect(authority.request_fire(1, {"damage": 999}, 2000)["reason"] == "invalid_sequence", "client cannot choose damage or victim")
 	authority.inventory.inventories[1]["magazine"] = 0
-	_expect(authority.request_fire(1, 2, eye, Vector3.FORWARD, 1500)["reason"] == "empty_magazine", "empty magazine")
+	_expect(authority.request_fire(1, 3, 2000)["reason"] == "empty_magazine", "empty magazine")
 	authority.inventory.inventories[1]["reserve"] = 6
 	_expect(authority.request_reload(1, 1, 1600)["accepted"], "reload starts")
 	authority.tick(2800)
@@ -90,21 +92,21 @@ func _test_raycast_and_death() -> void:
 	authority.inventory.inventories[1]["magazine"] = 6
 	authority.inventory.inventories[1]["last_shot_msec"] = -1
 	var eye: Vector3 = world.states[1]["position"] + Vector3.UP * ArenaRules.EYE_HEIGHT
-	_expect(authority.request_fire(1, 2, eye, Vector3.FORWARD, 3000)["accepted"], "raycast shot accepted")
+	_expect(authority.request_fire(1, 3, 3000)["accepted"], "raycast shot accepted")
 	_expect(authority.health[2] == 0 and not rounds.is_alive(2), "nearest target eliminated through RoundAuthority")
 	var dead_health: int = authority.health[2]
 	# Ray now passes dead player and reaches the next live player.
-	_expect(authority.request_fire(1, 3, eye, Vector3.FORWARD, 3400)["accepted"], "dead hitbox ignored")
+	_expect(authority.request_fire(1, 4, 3400)["accepted"], "dead hitbox ignored")
 	_expect(authority.health[2] == dead_health and authority.health[3] == 66, "dead target takes no new damage")
 	# The wall between the dining room and the hall wins before a target behind it.
 	world.states[1]["position"] = Vector3(10, 0, 20.3)
 	world.states[3]["position"] = Vector3(10, 0, 15.5)
 	eye = world.states[1]["position"] + Vector3.UP * ArenaRules.EYE_HEIGHT
 	var before: int = authority.health[3]
-	authority.request_fire(1, 4, eye, Vector3.FORWARD, 3800)
+	authority.request_fire(1, 5, 3800)
 	_expect(authority.health[3] == before, "wall blocks shot")
 	rounds.alive[1] = false
-	_expect(authority.request_fire(1, 5, eye, Vector3.FORWARD, 4200)["reason"] == "player_dead", "dead player cannot fire")
+	_expect(authority.request_fire(1, 6, 4200)["reason"] == "player_dead", "dead player cannot fire")
 	_expect(authority.request_pickup(1, "ammo_0", 3, 4200)["reason"] == "player_dead", "dead player cannot collect")
 	_expect(authority.request_reload(1, 2, 4200)["reason"] == "player_dead", "dead player cannot reload")
 
@@ -144,7 +146,7 @@ func _safe_reason(reason: String) -> String:
 func _test_inactive_and_cleanup() -> void:
 	rounds.state = RoundState.ENDED
 	_expect(authority.request_pickup(4, "weapon_3", 1, 5000)["reason"] == "round_not_active", "inactive round rejects pickup")
-	_expect(authority.request_fire(4, 1, Vector3.ZERO, Vector3.FORWARD, 5000)["reason"] == "round_not_active", "inactive round rejects fire")
+	_expect(authority.request_fire(4, 1, 5000)["reason"] == "round_not_active", "inactive round rejects fire")
 	authority.clear_round()
 	_expect(authority.health.is_empty() and authority.public_pickups().is_empty() and authority.inventory.inventories.is_empty(), "round cleanup removes health inventory pickups")
 
