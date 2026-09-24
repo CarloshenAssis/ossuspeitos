@@ -32,8 +32,16 @@ var remote_moving_frames := 0
 var remote_still_frames := 0
 var remote_jumps := 0
 var _last_remote_pos := Vector3.INF
+var _last_official_speed := 0.0
 var _last_frame_usec := 0
 var frame_intervals: Array = []
+var dump_rows: Array = []
+var last_process_delta := 0.0
+var steady_speeds: Array = []
+var consumed_usec := 0
+var consumed_frames := 0
+var consumed_samples: Array = []
+var consumed_frame_counts: Array = []
 var mover_direction := 1
 var mover_switch_usec := 0
 var mover_until_usec := 0
@@ -53,7 +61,15 @@ func _ready_for_gameplay() -> bool:
 	return app.joined and app.arena_view != null and app._client_can_gameplay() \
 		and not app.arena_view._local_state.is_empty()
 
-func _process(_delta: float) -> void:
+## Momento em que o jogo consome o evento de mouse injetado (antes do
+## `_unhandled_input` da rede), para medir consumo → quadro desenhado.
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion and phase == "MOUSE" and trial_waiting and consumed_usec == 0:
+		consumed_usec = Time.get_ticks_usec()
+		consumed_frames = 0
+
+func _process(delta: float) -> void:
+	last_process_delta = delta
 	var now := Time.get_ticks_usec()
 	if phase == "WAIT_ACTIVE":
 		if _ready_for_gameplay():
@@ -99,8 +115,14 @@ func _on_frame_drawn() -> void:
 	if role != "observer" or app.arena_view == null:
 		return
 	if phase == "MOUSE" and trial_waiting:
+		if consumed_usec > 0:
+			consumed_frames += 1
 		if absf(angle_difference(trial_ref, app.arena_view.camera.global_rotation.y)) > 0.01:
 			_record(mouse_samples, float(now - trial_start_usec) / 1000.0)
+			if consumed_usec > 0:
+				_record(consumed_samples, float(now - consumed_usec) / 1000.0)
+				_record(consumed_frame_counts, float(consumed_frames))
+			consumed_usec = 0
 			trial_waiting = false
 			trial += 1
 			next_trial_usec = now + rng.randi_range(150_000, 320_000)
@@ -132,8 +154,17 @@ func _sample_remote() -> void:
 	if _last_remote_pos != Vector3.INF and frame_intervals.size() > 0:
 		var dt: float = float(frame_intervals[-1]) / 1000.0
 		var speed := Vector2(position.x - _last_remote_pos.x, position.z - _last_remote_pos.z).length() / maxf(dt, 0.001)
+		# Mesma medida pelo delta de processamento (o tempo que a apresentação
+		# usa), sem o ruído do tempo de desenho do renderizador por software.
+		var process_speed := Vector2(position.x - _last_remote_pos.x, position.z - _last_remote_pos.z).length() / maxf(last_process_delta, 0.001)
 		var official: Dictionary = app.arena_view.targets.get(mover, {})
 		var official_speed := (official.get("velocity", Vector3.ZERO) as Vector3).length()
+		if dump_rows.size() < 4000:
+			dump_rows.append("%d,%.4f,%.4f,%.4f,%.3f,%.3f,%.4f,%.4f" % [Time.get_ticks_usec(), dt, position.x, position.z, speed, official_speed,
+				(official.get("position", Vector3.ZERO) as Vector3).x, (official.get("position", Vector3.ZERO) as Vector3).z])
+		if official_speed > 4.99 and _last_official_speed > 4.99:
+			_record(steady_speeds, process_speed)
+		_last_official_speed = official_speed
 		if official_speed > 3.0:
 			remote_moving_frames += 1
 			_record(remote_speeds, speed)
@@ -207,9 +238,17 @@ func _report() -> void:
 	if app.test_net_peer != null:
 		net = app.test_net_peer.call("summary")
 	print("LATENCY_PROBE_RESULT kind=mouse_to_frame_ms %s" % stats(mouse_samples))
+	print("LATENCY_PROBE_RESULT kind=mouse_consumed_to_frame_ms %s frames_until_visible=%s" % [stats(consumed_samples), stats(consumed_frame_counts)])
 	print("LATENCY_PROBE_RESULT kind=key_to_frame_ms %s" % stats(key_samples))
+	print("LATENCY_PROBE_RESULT kind=remote_steady_speed %s cv=%.3f" % [stats(steady_speeds), coefficient_of_variation(steady_speeds)])
 	print("LATENCY_PROBE_RESULT kind=frame_interval_ms %s" % stats(frame_intervals))
 	print("LATENCY_PROBE_RESULT kind=remote_speed %s cv=%.3f moving_frames=%d still_frames=%d jumps=%d" % [
 		stats(remote_speeds), coefficient_of_variation(remote_speeds), remote_moving_frames, remote_still_frames, remote_jumps])
 	print("LATENCY_PROBE_NET %s" % net)
+	var dump_path := str(app.arguments.get("latency-probe-dump", ""))
+	if not dump_path.is_empty():
+		var file := FileAccess.open(dump_path, FileAccess.WRITE)
+		if file != null:
+			file.store_string("usec,dt,x,z,speed,official_speed,official_x,official_z\n" + "\n".join(dump_rows))
+			file.close()
 	print("LATENCY_PROBE_DONE role=observer")

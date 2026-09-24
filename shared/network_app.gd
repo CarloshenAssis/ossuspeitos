@@ -258,14 +258,21 @@ func _start_latency_probe() -> void:
 	add_child(latency_probe)
 
 func _start_combat_network_test() -> void:
-	if not NetworkConfig.bool_argument(arguments, "combat-test"):
+	# Coordenadores de teste explícitos: combate (fase 1+) ou sincronização
+	# (fase 4). Ambos observam pelos mesmos ganchos.
+	var path := ""
+	if NetworkConfig.bool_argument(arguments, "combat-test"):
+		path = "res://tests/combat_network_coordinator.gd"
+	elif NetworkConfig.bool_argument(arguments, "sync-test"):
+		path = "res://tests/sync_network_coordinator.gd"
+	if path.is_empty():
 		return
-	var script := load("res://tests/combat_network_coordinator.gd") as GDScript
+	var script := load(path) as GDScript
 	if script == null:
 		fail("COMBAT_TEST_ERROR coordinator_missing")
 		return
 	combat_network_test = script.new()
-	combat_network_test.name = "CombatNetworkCoordinator"
+	combat_network_test.name = "CombatNetworkCoordinator" if path.contains("combat") else "SyncNetworkCoordinator"
 	add_child(combat_network_test)
 
 func _process(_delta: float) -> void:
@@ -381,7 +388,12 @@ func _on_peer_disconnected(peer_id: int) -> void:
 func _on_connected_to_server() -> void:
 	client_connected = true
 	print("CLIENT_CONNECTED id=%s peer_id=%d" % [client_label, multiplayer.get_unique_id()])
-	request_join.rpc_id(1, NetworkConfig.PROTOCOL_VERSION, client_label)
+	# Teste de incompatibilidade: um binário de desenvolvimento pode se
+	# anunciar com outra versão; a build exportada sempre usa a própria.
+	var version := NetworkConfig.PROTOCOL_VERSION
+	if arguments.has("test-protocol-version") and OS.is_debug_build() and not OS.has_feature("template"):
+		version = NetworkConfig.integer_argument(arguments, "test-protocol-version", version)
+	request_join.rpc_id(1, version, client_label)
 
 func _on_connection_failed() -> void:
 	client_connected = false
@@ -551,6 +563,8 @@ func _client_command_tick() -> void:
 		if not outbox.is_empty():
 			_flush_commands()
 		return
+	if not test_script.is_empty():
+		_apply_test_script_tick()
 	var command := prediction.build_command(_sample_move())
 	outbox.append(command)
 	ticks_since_send += 1
@@ -579,6 +593,26 @@ func _flush_commands() -> void:
 		submit_commands.rpc_id(1, NetSync.encode_packet(int(first["epoch"]), int(first["seq"]), encoded))
 		net_stats.sent_commands += count
 		net_stats.sent_packets += 1
+
+## Roteiro de teste por tick (coordenador de sincronização): cada entrada
+## define movimento e mira do tick e, opcionalmente, uma ação antes ou depois
+## do giro do mesmo tick, pelo mesmo caminho do jogador humano.
+var test_script: Array = []
+func _apply_test_script_tick() -> void:
+	var entry: Dictionary = test_script.pop_front()
+	test_move_intent = entry.get("move", Vector2.ZERO)
+	var look: Vector2 = entry.get("look", Vector2.ZERO)
+	var action: Dictionary = entry.get("action", {})
+	if str(entry.get("order", "look_then_action")) == "action_then_look":
+		_queue_script_action(action)
+		prediction.add_look(look.x, look.y)
+	else:
+		prediction.add_look(look.x, look.y)
+		_queue_script_action(action)
+
+func _queue_script_action(action: Dictionary) -> void:
+	if not action.is_empty() and prediction.queue_action(action):
+		net_stats.action_started(str(action["kind"]), int(action["id"]))
 
 ## Identificador de ação por rodada: recomeça em 1 quando a rodada privada
 ## muda (o servidor também zera por rodada).
@@ -733,19 +767,15 @@ func input_rejected(reason: String, _sequence: int) -> void:
 func world_snapshot(payload: Dictionary) -> void:
 	if multiplayer.is_server() or shutdown_prepare_received:
 		return
-	if typeof(payload.get("tick")) != TYPE_INT or typeof(payload.get("session")) != TYPE_INT \
-			or typeof(payload.get("players")) != TYPE_ARRAY or typeof(payload.get("ack", {})) != TYPE_DICTIONARY:
-		return
-	var session := int(payload["session"])
-	if snapshot_session == 0:
-		snapshot_session = session
-	elif session != snapshot_session:
+	var rejection := snapshot_rejection(payload, snapshot_session, last_snapshot_tick)
+	if rejection == "foreign_session":
 		net_stats.foreign_session_snapshots += 1
-		return
-	var tick := int(payload["tick"])
-	if tick <= last_snapshot_tick:
+	elif rejection == "stale_tick":
 		net_stats.stale_snapshots += 1
+	if not rejection.is_empty():
 		return
+	snapshot_session = int(payload["session"])
+	var tick := int(payload["tick"])
 	last_snapshot_tick = tick
 	net_stats.snapshot_received()
 	var states: Array = []
@@ -754,6 +784,7 @@ func world_snapshot(payload: Dictionary) -> void:
 				and typeof((raw_state as Dictionary).get("position")) == TYPE_VECTOR3:
 			states.append(raw_state)
 	var ack: Dictionary = payload.get("ack", {})
+	if combat_network_test != null: combat_network_test.call("observe_client_event", "snapshot", payload)
 	var own_id := multiplayer.get_unique_id()
 	for raw_state in states:
 		var state: Dictionary = raw_state
@@ -1163,6 +1194,18 @@ func round_roster(entries: Array) -> void:
 		arena_view.apply_roster_alive(clean_entries)
 	if round_hud != null:
 		round_hud.call("apply_roster", clean_entries)
+
+## Filtro de snapshot (protocolo 9): tipos exatos, mesma sessão de servidor
+## da conexão e tick estritamente crescente. Vazio se aceito.
+static func snapshot_rejection(payload: Dictionary, known_session: int, last_tick: int) -> String:
+	if typeof(payload.get("tick")) != TYPE_INT or typeof(payload.get("session")) != TYPE_INT \
+			or typeof(payload.get("players")) != TYPE_ARRAY or typeof(payload.get("ack", {})) != TYPE_DICTIONARY:
+		return "malformed"
+	if known_session != 0 and int(payload["session"]) != known_session:
+		return "foreign_session"
+	if int(payload["tick"]) <= last_tick:
+		return "stale_tick"
+	return ""
 
 ## Allowlist do roster público (protocolo 7): só estas chaves chegam à arena e
 ## ao HUD, e a aparência só vale se for um dos oito ids conhecidos.

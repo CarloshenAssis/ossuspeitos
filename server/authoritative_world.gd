@@ -137,7 +137,7 @@ func step(gate: Callable, run_action: Callable, reject: Callable) -> void:
 		var state: Dictionary = states[peer_id]
 		state["budget"] = minf(float(NetSync.MAX_BUDGET_TICKS), float(state["budget"]) + 1.0)
 		var queue: Array = state["queue"]
-		var allowed := 1 if queue.size() <= NetSync.TARGET_QUEUE_COMMANDS else NetSync.MAX_SIMULATED_PER_TICK
+		var allowed := _allowed_this_tick(state)
 		var simulated := 0
 		var examined := 0
 		while not queue.is_empty() and simulated < allowed and examined < NetSync.MAX_QUEUE_COMMANDS \
@@ -173,6 +173,19 @@ func step(gate: Callable, run_action: Callable, reject: Callable) -> void:
 		# Fila vazia: comandos descartados (fila cheia) já estão resolvidos.
 		if states.has(peer_id) and queue.is_empty() and int(state["last_resolved"]) < int(state["last_received"]):
 			state["last_resolved"] = int(state["last_received"])
+
+## Quantos comandos simular neste tick (ver `NetSync.CATCH_UP_WINDOW_TICKS`).
+func _allowed_this_tick(state: Dictionary) -> int:
+	var depth := (state["queue"] as Array).size()
+	state["queue_min"] = mini(int(state.get("queue_min", depth)), depth)
+	state["queue_window"] = int(state.get("queue_window", 0)) + 1
+	if int(state["queue_window"]) >= NetSync.CATCH_UP_WINDOW_TICKS:
+		state["catch_up"] = int(state["queue_min"]) > NetSync.TARGET_QUEUE_COMMANDS
+		state["queue_min"] = depth
+		state["queue_window"] = 0
+	if depth > NetSync.OVERLOAD_QUEUE_COMMANDS:
+		return NetSync.MAX_SIMULATED_PER_TICK
+	return 2 if bool(state.get("catch_up", false)) else 1
 
 func _reject(reject: Callable, peer_id: int, command: Dictionary, reason: String) -> void:
 	_count(reason)

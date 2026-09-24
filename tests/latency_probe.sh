@@ -34,7 +34,7 @@ if [[ "$PROFILE" != "none" ]]; then NET_ARGS=(--test-net-profile="$PROFILE" --te
 SERVER_PID=$!; PIDS+=("$SERVER_PID")
 wait_marker 'SERVER_READY' "$OUT/server.log" "$SERVER_PID" 20
 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT_BIN" --path "$ROOT" --rendering-driver opengl3 --resolution "$RESOLUTION" -- \
-  --mode=client --client-id=observer --url="ws://127.0.0.1:$PORT" --latency-probe=observer --latency-probe-seed="$SEED" \
+  --mode=client --client-id=observer --url="ws://127.0.0.1:$PORT" --latency-probe=observer --latency-probe-seed="$SEED" --latency-probe-dump="$OUT/remote.csv" \
   "${NET_ARGS[@]}" >"$OUT/observer.log" 2>&1 &
 OBSERVER_PID=$!; PIDS+=("$OBSERVER_PID")
 wait_marker 'JOIN_ACCEPTED' "$OUT/observer.log" "$OBSERVER_PID" 60

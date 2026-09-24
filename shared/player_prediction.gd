@@ -93,20 +93,22 @@ func build_command(move: Vector2) -> Dictionary:
 	var has_action := not queued_action.is_empty()
 	var want_yaw := split_yaw if has_action else raw_yaw
 	var want_pitch := split_pitch if has_action else raw_pitch
-	var look := MovementRules.look_intent(state, want_yaw, want_pitch) if has_state else Vector2.ZERO
+	var look: Array = MovementRules.look_intent(state, want_yaw, want_pitch) if has_state else [0.0, 0.0]
+	var look_yaw: float = look[0]
+	var look_pitch: float = look[1]
 	if has_action:
 		split_yaw = 0.0
 		split_pitch = 0.0
 	else:
 		raw_yaw = 0.0
 		raw_pitch = 0.0
-	var command := {"seq": next_seq, "epoch": epoch, "move": move, "yaw_delta": look.x,
-		"pitch_delta": look.y, "action": queued_action, "built_usec": Time.get_ticks_usec()}
+	var command := {"seq": next_seq, "epoch": epoch, "move": move, "yaw_delta": look_yaw,
+		"pitch_delta": look_pitch, "action": queued_action, "built_usec": Time.get_ticks_usec()}
 	next_seq += 1
 	queued_action = {}
 	if has_state:
 		previous_position = state["position"]
-		var reason := MovementRules.simulate_command(state, move, look.x, look.y)
+		var reason := MovementRules.simulate_command(state, move, look_yaw, look_pitch)
 		if not reason.is_empty():
 			local_rejections += 1
 		command["predicted_position"] = state["position"]
@@ -214,9 +216,9 @@ func presented(fraction: float, delta: float) -> Dictionary:
 	if position_offset != Vector3.ZERO and ArenaRules.overlaps_blocker(position, NetSync.CAMERA_CLEARANCE):
 		position_offset = Vector3.ZERO
 		position = base
-	var preview := MovementRules.look_intent(state, split_yaw + raw_yaw, split_pitch + raw_pitch)
-	var yaw := wrapf(float(state["yaw"]) + preview.x + look_offset.x, -PI, PI)
-	var pitch := MovementRules.clamp_pitch(float(state["pitch"]) + preview.y + look_offset.y)
+	var preview: Array = MovementRules.look_intent(state, split_yaw + raw_yaw, split_pitch + raw_pitch)
+	var yaw := wrapf(float(state["yaw"]) + float(preview[0]) + look_offset.x, -PI, PI)
+	var pitch := MovementRules.clamp_pitch(float(state["pitch"]) + float(preview[1]) + look_offset.y)
 	var look_latency_usec := 0
 	if look_pending_since_usec > 0:
 		look_latency_usec = Time.get_ticks_usec() - look_pending_since_usec

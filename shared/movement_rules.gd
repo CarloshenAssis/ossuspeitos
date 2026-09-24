@@ -87,15 +87,17 @@ static func apply_look(state: Dictionary, yaw_delta: float, pitch_delta: float) 
 
 ## Maior mira que o próximo comando pode levar a partir de um pedido bruto do
 ## mouse: mesmos limites de `command_rejection`, e o pitch nunca pede além do
-## limite oficial (o excesso não é transmitido nem acumulado).
-static func look_intent(state: Dictionary, raw_yaw: float, raw_pitch: float) -> Vector2:
+## limite oficial (o excesso não é transmitido nem acumulado). Devolve
+## [yaw, pitch] em precisão dupla: um `Vector2` (32 bits) arredondaria o delta
+## para cima do balde e o servidor recusaria o comando.
+static func look_intent(state: Dictionary, raw_yaw: float, raw_pitch: float) -> Array:
 	var yaw_room := minf(MAX_YAW_DELTA, _refilled(state, "yaw_tokens", MAX_YAW_DELTA, MAX_YAW_RATE))
 	var pitch_room := minf(MAX_PITCH_DELTA, _refilled(state, "pitch_tokens", MAX_PITCH_DELTA, MAX_PITCH_RATE))
 	var yaw := clampf(raw_yaw if is_finite(raw_yaw) else 0.0, -yaw_room, yaw_room)
 	var pitch := clampf(raw_pitch if is_finite(raw_pitch) else 0.0, -pitch_room, pitch_room)
 	var current_pitch := float(state.get("pitch", 0.0))
 	pitch = clamp_pitch(current_pitch + pitch) - current_pitch
-	return Vector2(yaw, pitch)
+	return [yaw, pitch]
 
 ## Segunda metade: um tick fixo de movimento com a entrada do comando, no yaw
 ## já atualizado. Sem relógio de parede: o servidor e o replay do cliente

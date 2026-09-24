@@ -16,6 +16,13 @@ const MAX_COMMANDS_PER_PACKET := 8
 const MAX_QUEUE_COMMANDS := 32
 const TARGET_QUEUE_COMMANDS := 3
 const MAX_SIMULATED_PER_TICK := 4
+## Consumo uniforme: um comando por tick. A fila funciona como reserva contra
+## rajadas (remetente com quadros longos, jitter): quando esvazia, o jogador
+## para um tick e a reserva cresce sozinha. Só se a fila ficar ACIMA do alvo
+## durante toda uma janela (deriva de relógio, atraso acumulado) o servidor
+## alcança com 2 por tick; com a fila perto do limite, com o máximo.
+const CATCH_UP_WINDOW_TICKS := 30
+const OVERLOAD_QUEUE_COMMANDS := 24
 const MAX_BUDGET_TICKS := 12
 const MAX_SEQUENCE_ADVANCE := 64
 ## Balde de pacotes (relógio do servidor): barra só inundação.
