@@ -140,7 +140,7 @@ movimento e mira continuam em `MovementRules`.
 | Envio de comandos | a cada 2 ticks (30 pacotes/s) e na hora quando há ação | igual ao `MAX_COMMAND_RATE` atual; ação não espera |
 | Comandos por pacote | ≤ 8 | recuperação após um quadro longo (até 8 passos de física) |
 | Fila no servidor | ≤ 32 comandos (~0,53 s) | cobre jitter e rajadas; o excesso é recusado explicitamente |
-| Consumo por tick | 1; até 4 quando a fila passa de 3 | movimento oficial uniforme para quem observa; alcança rajadas |
+| Consumo por tick | 1; até 4 quando a fila passa de 3 (**revisto após medir**: 1 por tick; 2 só com a fila acima de 3 durante uma janela de 30 ticks; 4 acima de 24; ver seção 4) | movimento oficial uniforme para quem observa; alcança rajadas |
 | Orçamento de tempo | +1 tick por tick, teto de 12 | mais pacotes não dão mais tempo de simulação |
 | Taxa de pacotes | balde de 60/s com rajada de 16 | só barra inundação; jitter legítimo passa |
 | Salto de sequência | ≤ 64 (valor atual) | lacuna vira perda declarada |
@@ -205,3 +205,214 @@ movimento e mira continuam em `MovementRules`.
   sob perda.
 - Só é carregado por `--test-net-profile` num binário de desenvolvimento não
   exportado; `tests/` fica fora da exportação Windows.
+
+## 4. Implementação (protocolo 9)
+
+Arquivos:
+- `shared/net_sync.gd`: parâmetros e formato do pacote.
+- `shared/movement_rules.gd`: `command_rejection`, `apply_look`, `look_intent`,
+  `step_movement` e `simulate_command`, iguais no servidor e no replay.
+- `server/authoritative_world.gd`: fila, orçamento, épocas e ACK.
+- `shared/player_prediction.gd`: previsão, replay e correção amortecida.
+- `client/remote_interpolator.gd`: buffer, relógio, quinas e stall.
+- `client/arena_view.gd`: único escritor dos transforms.
+- `client/net_stats.gd`: instrumentação.
+- `shared/network_app.gd`: fio, portão de regras e ações causais.
+
+### Comandos e servidor
+
+- **Envio:** o cliente forma um comando por tick de física (60 Hz), guarda-o
+  para replay e envia em lote a cada 2 ticks, ou na hora quando há ação.
+- **Consumo:** o servidor consome **um comando por tick**. A fila serve de
+  reserva contra rajadas; só quando fica acima de 3 durante uma janela de 30
+  ticks é que alcança com 2 por tick (4 acima de 24).
+- **Ajuste da primeira versão:** ela alcançava com 2–4 comandos por tick logo
+  após cada rajada. Com remetentes a 22 fps, o movimento oficial andava aos
+  saltos (2, 4 ou 5 ticks por snapshot). Numa simulação da fila, a política de
+  janela levou o CV do deslocamento por snapshot de até 0,30 para ≤ 0,05, com
+  fila média de 1 a 3 comandos.
+- **Orçamento:** cresce 1 tick por tick, com teto de 12. Assim, mandar o dobro
+  de comandos por segundo nunca dá mais tempo de simulação: no teste, foram 300
+  ticks simulados em 300 ticks reais, e o excesso virou `queue_full`
+  explícito.
+- **Ordem dentro do tick:**
+  1. portão de regra (rodada, participação, vida);
+  2. época;
+  3. validação;
+  4. mira;
+  5. **ação**;
+  6. movimento.
+- **Tiro:** usa olho e mira oficiais daquele ponto; o cliente não manda origem
+  nem direção.
+- **Tempo oficial:** cadência e recarga seguem o relógio do servidor no
+  momento da execução.
+
+### Cliente
+
+- **Mira:**
+  - o mouse vai direto para `PlayerPrediction` e aparece no **mesmo quadro**
+    (prévia limitada pelos mesmos baldes de mira);
+  - o comando do tick seguinte o consome uma vez;
+  - o excesso além do limite é descartado, não vira giro atrasado.
+- **Clique:** fecha a mira do comando da ação; o mouse que chega depois vai
+  para o comando seguinte.
+- **Snapshot:**
+  1. filtra sessão e tick;
+  2. remove os comandos com sequência ≤ ACK;
+  3. restaura o oficial daquele ponto (com os baldes);
+  4. reaplica os pendentes;
+  5. suaviza só a diferença de apresentação.
+- **Remotos e espectador:** usam o mesmo `RemoteInterpolator`. A época pública
+  muda na entrada da rodada, na eliminação e em reposicionamento. Nesses casos,
+  ou num salto impossível entre amostras, o buffer é limpo e a animação é
+  reiniciada, sem passada.
+- **Efeitos:** o disparo antecipa som e recuo quando o inventário oficial
+  permite. O tiro público do próprio jogador confirma sem repetir o efeito, e a
+  recusa descarta pelo id. Tracer, impacto, hit marker, dano e munição
+  continuam só oficiais.
+
+### Defeitos corrigidos no caminho
+
+- **Ids de ação:** o cliente nunca zerava a sequência de ação. Depois de 63
+  ações de um tipo, as rodadas seguintes recusavam tudo (`sequence_jump`).
+  Agora o id recomeça a cada rodada.
+- **`look_intent` com `Vector2`:** 32 bits arredondavam o delta para cima do
+  balde, o comando era recusado dos dois lados e a mira travava com o balde
+  vazio. Agora usa precisão dupla.
+
+## 5. Ciclo de vida
+
+| Transição | Servidor | Cliente |
+| --- | --- | --- |
+| Conectar | — | Cena nova: previsão, fila de envio, buffers e relógio vazios |
+| Handshake e primeiro snapshot | Mundo com época 1 | Sessão fixada; previsão adota o oficial; relógio remoto começa |
+| Entrada em ACTIVE | Época nova para os participantes; fila antiga recusada com resultado | Espera o primeiro ACK depois do aviso; limpa o mouse; ids de ação recomeçam; disparos antecipados limpos |
+| Eliminação | Época nova; velocidade zero | Para de comandar; câmera vai para o alvo autorizado (interpolado); corpo remoto com descontinuidade |
+| Observar / trocar alvo | — | Câmera muda de fonte no mesmo quadro, sem varrer paredes |
+| Fim da rodada | Comandos recusados pelo portão (`round_not_active`) | Não comanda |
+| Reset (WAITING/COUNTDOWN) | Combate limpo | Estado de combate e disparos antecipados limpos |
+| Shutdown | Sem snapshots; `submit_commands` ignorado | Nenhum RPC após `shutdown_prepare` (a fila de envio é descartada) |
+| Sair / reconectar | Remove o jogador e a fila | Recarrega a cena; snapshot de outra sessão é descartado |
+| Peer removido | `remove_player` | Avatar, animador e buffer removidos |
+
+## 6. Resultados medidos (mesmo método da seção 2)
+
+Mesma sonda e mesmo ambiente (llvmpipe, ~24 fps). Antes: `815cc0a` (código de
+`7c98bd9` com a infraestrutura de teste). Depois: fase 4. Seeds 1 e 2.
+
+| Perfil | Consumo do mouse → quadro que o mostra (antes → depois) | Quadros até aparecer (antes → depois) | Tecla → quadro, p50 | CV da velocidade remota em trecho estável |
+| --- | --- | --- | --- | --- |
+| local | p50 109–121 → 45–47 ms | 2–4 → **1** | 172 → 86–94 ms | 0,16–0,18 → 0,08–0,11 |
+| RTT-alvo 80 ms | p50 220–231 → 43–44 ms | 5–7 → **1** | 283–291 → 87 ms | 0,25–0,26 → 0,07–0,08 |
+| RTT-alvo 150 ms + jitter | p50 317–324 → 46 ms | 6–8 → **1** | 346–350 → 83–93 ms | 0,20–0,23 → 0,09–0,12 |
+
+Leitura:
+- **Mouse:** a medida vai do consumo do evento pelo jogo ao fim do desenho;
+  sob llvmpipe, 1 quadro dura ~45 ms. Com GPU real, é um quadro de 7–16 ms.
+- **Tecla → quadro:** inclui a aceleração oficial (o primeiro tick anda 5 mm).
+- **CV remoto:** usa só quadros com velocidade oficial constante e o delta de
+  processamento; o CV total, com as mudanças de direção do "mover", continua
+  ~0,3 nos dois casos.
+- **Interpolador em processo:** CV 0,039 com jitter de chegada de 30 ms
+  (`NETCODE_REMOTE_SMOOTHNESS`).
+
+### Camada A: `tests/netcode_test.gd` (143 verificações)
+
+- **Determinismo:**
+  - erro da previsão no ACK de 0,000000 m em 106 e 101 ACKs (perfis local e
+    150 ms);
+  - cada comando resolvido é exatamente um tick.
+- **Contrato do fio:** ACK parcial; recusa aposentada pelo ACK cumulativo;
+  duplicata idempotente; lacuna declarada perdida; ACK antigo ignorado.
+- **Abuso:** 12 formatos hostis, lote grande, salto de sequência, NaN/INF,
+  inundação de pacotes e rajada legítima de jitter (nenhuma recusa).
+- **Mira:** pitch preso no limite sem guardar excesso; yaw cruzando ±π pelo
+  menor arco.
+- **Replay:** sem efeitos colaterais.
+- **Tiro:**
+  - girar e atirar no mesmo tick acerta o alvo da mira nova, e o da mira antiga
+    não é atingido;
+  - atirar e depois girar no mesmo tick usa a mira do clique;
+  - comando recusado, época antiga e jogador morto nunca disparam, e o
+    resultado é explícito;
+  - id repetido gera um tiro, um dano e uma bala.
+- **Interpolação:**
+  - quinas reais (porta Salão/cozinha e canto do Escritório) com zero invasão
+    do corpo apresentado;
+  - stall: extrapola ≤ 100 ms e depois segura, e retoma em seguida;
+  - relógio monotônico, sem ressincronização por jitter;
+  - buffer limitado;
+  - filtro de sessão e de tick.
+- **Correção:** offset some em ≤ 0,25 s, correção grande salta, offset nunca
+  põe a câmera na parede, e o histórico é limitado com recuperação.
+- **Convergência depois que o input para** (com uma correção do servidor no
+  meio): 0,100 / 0,133 / 0,200 s nos perfis local / 80 / 150 ms. O prazo é
+  1,0 s.
+- **Câmera:** mostra o mouse no quadro seguinte sem tick nem snapshot; um
+  snapshot antigo não a puxa de volta; o espectador segue a apresentação
+  interpolada.
+
+### Camada B: `tests/sync_network_test.sh` (servidor + 4 clientes reais)
+
+- **Composição:** ator, observador, alvo e um cliente parado, mais um cliente
+  com a versão 8, recusado com `protocol_version` sem entrar na sala.
+- **Perfis executados:** local (seed 1), RTT 80 (seed 1), RTT 150 com jitter
+  (seed 3) e RTT 150 com jitter e interrupção de 400 ms (seed 5).
+- **Resultados, em todos os perfis:**
+  - erro de previsão e da visão do observador de 0,000000 m e 0 rad depois da
+    rota porta → corredor → Cozinha, com 19 ticks raspando parede;
+  - zero posições oficiais dentro de volumes;
+  - zero correções grandes ou recuperações;
+  - dois tiros causais corretos, entregues exatamente duas vezes ao observador
+    e ao alvo;
+  - pitch: alto erra (fim y = 4,5, no teto), baixo bate no piso (y = 0), nivelado
+    acerta;
+  - duplicata recusada como `replay` (1 tiro, dano 34, 1 bala);
+  - privacidade: zero chaves fora da allowlist e ACK só do próprio jogador.
+- **Atraso efetivo (150 ms):** p50 de 76–83 ms por sentido; o máximo durante a
+  interrupção foi 379 ms.
+- **Pendentes:** no máximo 34 comandos (545 ms) na interrupção.
+
+### Camada C: `tests/sync_visual_session.sh` (xvfb, sem CI)
+
+- **Composição:** três clientes gráficos (ator e observador saem deles) e um
+  headless, no perfil de 150 ms com jitter.
+- **Quadros e telemetria por cena:**
+  - caminhada, strafe, parada, giro e pitch, pelo observador e em primeira
+    pessoa;
+  - espectador seguindo o ator;
+  - retorno à própria visão na rodada 2.
+- **Vídeos:** gerados com o ffmpeg do Playwright, na taxa média real de cerca
+  de 10 fps (três clientes llvmpipe gravando PNG).
+- Como evidência antes/depois sob atraso fica a sonda (seção 6). Imagens
+  estáticas não provam suavidade temporal.
+
+## 7. Instrumentação
+
+- `--net-stats=<ms>` imprime periodicamente uma linha por cliente.
+- **Envio e pendentes:** enviados; ACK; pendentes (quantidade e idade máxima).
+- **Snapshots:** intervalo, antigos e de outra sessão.
+- **Erro e correções:** erro da previsão no ACK (p50/p95/máximo); correções
+  pequenas e grandes; recuperações; épocas; recusas por motivo.
+- **Latências:** mouse → quadro; ação → resultado oficial.
+- **Interpolação:** ocupação, atraso, extrapolação e quinas.
+- Nada por quadro; sem papéis.
+
+## 8. Limitações conhecidas
+
+- **Sem compensação de latência:** o alvo é avaliado na simulação oficial no
+  instante da execução. A resposta visual não elimina a latência do resultado:
+  dano e hit marker chegam depois de RTT mais fila.
+- **Giro limitado pela regra existente:** 3 rad/s sustentados, com rajada de
+  0,7 rad. A câmera mostra o limite sem dessincronizar. Giros rápidos (180° em
+  < 0,8 s) ficam contidos. Mudar esse valor é decisão de jogo, fora desta fase.
+- **Atraso de teste:** é de aplicação, sobre TCP em loopback, sem perda nem
+  reordenação. Não prova rede real.
+- **Futura migração para ENet/UDP:** o RPC de comandos já é
+  `unreliable_ordered`, mas faltaria reenvio redundante dos não confirmados.
+- **Reserva do servidor:** acrescenta 1–3 ticks para remetentes com quadros
+  longos. É latência do oficial, não da câmera local.
+- **Colisão entre jogadores:** não existe, então a previsão não tem obstáculos
+  dinâmicos.
+- **Ambiente das medidas:** todas vieram de renderização por software, o que
+  não representa GPU real.

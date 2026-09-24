@@ -228,3 +228,57 @@ jobs:
           name: godot-network-test-logs
           path: ${{ runner.temp }}/godot-network-logs
           if-no-files-found: warn
+
+  # Fase 4: previsão, reconciliação, ordem causal do tiro e interpolação
+  # (protocolo 9). Job próprio, em paralelo, para o job acima continuar
+  # dentro do seu prazo. O atraso é de aplicação, só de teste
+  # (tests/net_delay_peer.gd), com seeds fixas.
+  netcode-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Create log directory
+        run: mkdir -p "$RUNNER_TEMP/godot-netcode-logs"
+
+      - name: Validate project
+        run: |
+          set -o pipefail
+          godot --headless --path . --editor --quit 2>&1 \
+            | tee "$RUNNER_TEMP/godot-netcode-logs/parser.log"
+
+      - name: Validate prediction, reconciliation and interpolation (layer A)
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/netcode_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-netcode-logs/netcode.log"
+          grep -q 'NETCODE_TEST_OK' "$RUNNER_TEMP/godot-netcode-logs/netcode.log"
+
+      - name: Run real-process sync test under delay profiles (layer B)
+        run: |
+          set -o pipefail
+          for config in "local 1 false" "rtt80 1 false" "rtt150j 3 false" "rtt150j 5 true"; do
+            set -- $config
+            TEST_LOG_DIR="$RUNNER_TEMP/godot-netcode-logs/sync-$1-$2-$3" PROFILE="$1" SEED="$2" STALL="$3" \
+              GODOT_BIN="$(command -v godot)" ./tests/sync_network_test.sh 2>&1 \
+              | tee "$RUNNER_TEMP/godot-netcode-logs/sync-$1-$2-$3.log"
+            grep -q "SYNC_NETWORK_TEST_OK profile=$1 seed=$2 stall=$3" "$RUNNER_TEMP/godot-netcode-logs/sync-$1-$2-$3.log"
+          done
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-netcode-test-logs
+          path: ${{ runner.temp }}/godot-netcode-logs
+          if-no-files-found: warn
