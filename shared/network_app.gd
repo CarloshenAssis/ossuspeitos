@@ -363,6 +363,8 @@ func _process(_delta: float) -> void:
 			_return_to_menu("Tempo esgotado ao conectar em %s." % str(arguments.get("url", "")), "timeout")
 			return
 		fail("CLIENT_TIMEOUT id=%s" % client_label)
+	if probe_joined_msec > 0:
+		_check_probe_traffic()
 	if net_stats_interval_msec > 0 and joined and Time.get_ticks_msec() - net_stats_last_msec >= net_stats_interval_msec:
 		net_stats_last_msec = Time.get_ticks_msec()
 		print("NET_STATS id=%s %s" % [client_label, net_stats.summary(prediction, arena_view.interpolator if arena_view != null else null)])
@@ -616,7 +618,10 @@ func join_accepted(peer_id: int) -> void:
 		arena_view.local_peer_id = peer_id
 	print("JOIN_ACCEPTED id=%s peer_id=%d" % [client_label, peer_id])
 	if NetworkConfig.bool_argument(arguments, "probe"):
-		_finish_probe("joined", "peer_id=%d" % peer_id)
+		# Entrou: agora espera tráfego de jogo real (snapshots e estado público
+		# da rodada) antes de sair.
+		probe_joined_msec = Time.get_ticks_msec()
+		probe_peer_id = peer_id
 		return
 	var leave_after := NetworkConfig.integer_argument(arguments, "menu-leave-after-msec", 0)
 	if interactive_session and leave_after > 0:
@@ -653,6 +658,24 @@ func join_rejected(reason: String) -> void:
 ## Sonda de prontidão (fase 8): um cliente Godot real conecta, faz o
 ## handshake do protocolo e sai. Não joga e não fica na sala.
 var probe_finished := false
+var probe_joined_msec := 0
+var probe_peer_id := 0
+var probe_snapshots := 0
+const PROBE_GAME_TRAFFIC_MSEC := 10000
+const PROBE_MIN_SNAPSHOTS := 3
+
+func _check_probe_traffic() -> void:
+	if probe_finished or probe_joined_msec == 0:
+		return
+	if probe_snapshots >= PROBE_MIN_SNAPSHOTS and not local_round_public.is_empty():
+		_finish_probe("joined", "peer_id=%d snapshots=%d round_state=%s" % [probe_peer_id, probe_snapshots,
+			RoundState.to_label(int(local_round_public.get("state", RoundState.WAITING)))])
+	elif Time.get_ticks_msec() - probe_joined_msec > PROBE_GAME_TRAFFIC_MSEC:
+		probe_finished = true
+		print("PROBE_FAILED url=%s reason=no_game_traffic snapshots=%d round_state_received=%s" % [
+			str(arguments.get("url", "")), probe_snapshots, str(not local_round_public.is_empty())])
+		get_tree().quit(1)
+
 func _finish_probe(result: String, detail: String) -> void:
 	if probe_finished:
 		return
@@ -962,6 +985,9 @@ func world_snapshot(payload: Dictionary) -> void:
 	var tick := int(payload["tick"])
 	last_snapshot_tick = tick
 	net_stats.snapshot_received()
+	if probe_joined_msec > 0:
+		probe_snapshots += 1
+		_check_probe_traffic()
 	var states: Array = []
 	for raw_state in payload["players"]:
 		if typeof(raw_state) == TYPE_DICTIONARY and typeof((raw_state as Dictionary).get("peer_id")) == TYPE_INT \

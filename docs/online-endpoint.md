@@ -1,9 +1,14 @@
-# Servidor online (futuro Railway) — onde fica o endereço
+# Servidor online (Railway) — onde fica o endereço
 
-Estado atual: **nenhum servidor online implantado**. Sem URL configurada, o
-botão JOGAR ONLINE mostra "Servidor online ainda não configurado" e não
-tenta conectar. O modo online não deve ser anunciado como funcional antes de
-um servidor Railway real ser implantado e testado.
+Padrão do projeto: `wss://ossuspeitos-production.up.railway.app` (Railway,
+protocolo 10).
+
+- Validado em 24/09/2026 por um cliente Godot real a partir do GitHub
+  Actions (workflow `Online server probe`): TLS, WebSocket, handshake do
+  protocolo 10, entrada na sala, snapshots e estado público da rodada.
+- Ainda falta uma partida completa com jogadores humanos pela internet.
+- O botão JOGAR ONLINE conecta nesse endereço.
+- CRIAR PARTIDA LOCAL e ENTRAR EM PARTIDA LAN não mudam.
 
 ## Onde o jogo lê a URL
 
@@ -13,7 +18,7 @@ primeira fonte não vazia vence:
 1. argumento `--online-url=wss://...` (desenvolvimento e testes);
 2. variável de ambiente `ARMED_MYSTERY_ONLINE_URL` (desktop; não existe na Web);
 3. configuração do projeto `armed_mystery/network/online_url`:
-   - vazia em `project.godot`;
+   - em `project.godot`: `wss://ossuspeitos-production.up.railway.app`;
    - numa build exportada, pode ser definida sem recompilar com um arquivo
      `override.cfg` ao lado do executável:
 
@@ -24,6 +29,10 @@ primeira fonte não vazia vence:
 
 Para publicar a URL do Railway numa build oficial, prefira a opção 3
 (`project.godot` ou `override.cfg`). Nenhuma tela conhece a URL.
+
+Desligar o online numa execução (testes, evento só na LAN): o valor `off`,
+por argumento (`--online-url=off`) ou pela variável de ambiente. Ele vence o
+padrão do projeto e mostra "Modo online desligado nesta execução".
 
 ## Formatos aceitos
 
@@ -57,3 +66,9 @@ não tem contas, autenticação, matchmaking nem pagamento nesta fase.
   ```
   godot --headless --path . -- --mode=client --probe=true --url=wss://DOMINIO
   ```
+
+  Critério de sucesso: `PROBE_OK result=joined ... snapshots=N round_state=...`
+  (entrou e recebeu tráfego de jogo) ou `result=refused detail=room_unavailable`
+  (sala cheia, mas o servidor fala o protocolo). O workflow `Online server
+  probe` faz isso sob demanda (Actions → Run workflow) a partir de uma rede
+  aberta.

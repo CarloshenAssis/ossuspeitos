@@ -19,4 +19,4 @@ renderer/rendering_method.mobile="gl_compatibility"
 
 [armed_mystery]
 
-network/online_url=""
+network/online_url="wss://ossuspeitos-production.up.railway.app"

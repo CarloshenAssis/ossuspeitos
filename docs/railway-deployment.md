@@ -1,9 +1,14 @@
 # Servidor dedicado no Railway (fase 8)
 
-Estado: container construído e testado localmente e no CI. **Nenhum deploy
-foi feito ou verificado por esta fase.** O jogo só pode ser anunciado como
-online depois de um cliente Godot conectar e jogar por `wss://` no domínio
-público (passo 6 abaixo).
+Estado em 24/09/2026:
+
+- Serviço ativo em `wss://ossuspeitos-production.up.railway.app`, com porta
+  interna 8080, segundo o operador.
+- Um cliente Godot real, rodando no GitHub Actions, conectou pelo domínio
+  público: TLS, WebSocket, protocolo 10, entrada na sala, snapshots e estado
+  da rodada.
+- **Ainda falta** uma partida completa com jogadores humanos pela internet
+  (passo 6 abaixo) antes de anunciar o jogo como online.
 
 ## Arquitetura
 

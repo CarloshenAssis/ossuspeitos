@@ -23,8 +23,14 @@ ABRIR
 MENU
 - Digite seu nome (até 20 caracteres: letras, números, espaço, - e _).
   O último nome válido fica salvo neste PC; endereço e porta não são salvos.
-- JOGAR ONLINE: ainda sem servidor online nesta build ("Servidor online
-  ainda não configurado"). Use a partida local ou LAN.
+- JOGAR ONLINE: entra no servidor online de teste
+  (wss://ossuspeitos-production.up.railway.app, protocolo 10), uma sala
+  de até 8 jogadores. É preciso internet. A sala é pública para quem tiver
+  a build: nomes repetidos são recusados. Para usar outro servidor sem
+  recompilar, crie override.cfg ao lado do .exe com:
+      [armed_mystery]
+      network/online_url="wss://OUTRO-SERVIDOR"
+  Para desligar o online: ArmedMystery.exe -- --online-url=off
 - CRIAR PARTIDA LOCAL · ENTRAR EM PARTIDA LAN · COMO JOGAR (controles e
   regras) · CONFIGURAÇÕES (volume, sensibilidade do mouse, tela cheia,
   tamanho da janela, reduzir movimento; salvas neste PC) · SAIR.

@@ -54,4 +54,4 @@ jobs:
           getent hosts "${url#wss://}" || true
           timeout 60 godot --headless --path . -- --mode=client --probe=true \
             --client-id="sonda-ci-${GITHUB_RUN_ID: -6}" --url="$url" 2>&1 | tee probe.log
-          grep -qE 'PROBE_OK .* result=(joined|refused) .* protocol=10' probe.log
+          grep -qE 'PROBE_OK .* result=(joined detail=peer_id=[0-9]+ snapshots=[0-9]+ round_state=[A-Z]+|refused detail=(room_unavailable|name_taken)) protocol=10' probe.log
