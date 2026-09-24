@@ -21,7 +21,7 @@ var session_attacks_done := false
 
 func run_preauth_attacks() -> void:
 	# RPC sensível antes de existir sessão para o remetente.
-	_send("submit_input_before_join", func(): submit_input.rpc_id(1, 1, Vector2.ZERO, 0.0))
+	_send("submit_input_before_join", func(): submit_input.rpc_id(1, 1, Vector2.ZERO, 0.0, 0.0))
 	_send("ack_before_join", func(): round_role_acknowledged.rpc_id(1, 1))
 	_send("shutdown_ready_before_join", func(): shutdown_ready.rpc_id(1, 1, 1))
 	_send("test_completed_before_join", func(): client_test_completed.rpc_id(1))
@@ -41,8 +41,8 @@ func run_preauth_attacks() -> void:
 	_send("join_extreme_protocol", func(): request_join.rpc_id(1, 9223372036854775807, label))
 
 	# Entrada de movimento malformada antes de existir sessão.
-	_send("input_non_finite", func(): submit_input.rpc_id(1, 2, Vector2(NAN, INF), NAN))
-	_send("input_wrong_types", func(): submit_input.rpc_id(1, "seq", {"x": 1}, [1, 2, 3]))
+	_send("input_non_finite", func(): submit_input.rpc_id(1, 2, Vector2(NAN, INF), NAN, INF))
+	_send("input_wrong_types", func(): submit_input.rpc_id(1, "seq", {"x": 1}, [1, 2, 3], "up"))
 
 	# Tentativa de se passar pelo servidor numa RPC de autoridade.
 	_send("forge_public_state", func(): round_public_state.rpc_id(1, {"state": RoundState.ACTIVE, "winning_team": Role.TEAM_ASSASSIN}))
@@ -214,7 +214,7 @@ func spectator_test_followed() -> void:
 	pass
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
-func submit_input(_sequence, _move, _yaw_delta) -> void:
+func submit_input(_sequence, _move, _yaw_delta, _pitch_delta) -> void:
 	pass
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")

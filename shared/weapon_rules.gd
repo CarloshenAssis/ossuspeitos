@@ -10,6 +10,9 @@ const MAX_SPREAD_RADIANS := PI
 const DIRECTION_TOLERANCE := 0.01
 const ORIGIN_TOLERANCE_METERS := 0.35
 const MAX_AIM_YAW_RADIANS := deg_to_rad(70.0)
+## Tolerância entre o pitch que a câmera do cliente usou e o pitch oficial
+## (latência de um snapshot). A componente vertical do disparo é sempre a oficial.
+const MAX_AIM_PITCH_RADIANS := deg_to_rad(25.0)
 
 static func validate_definition(definition: Variant) -> String:
 	if not definition is WeaponDefinition:
@@ -90,6 +93,28 @@ static func validate_direction_for_yaw(direction: Variant, official_yaw: Variant
 	if horizontal.normalized().dot(official_forward) < cos(MAX_AIM_YAW_RADIANS):
 		return "direction_yaw_divergence"
 	return ""
+
+## Direção declarada coerente com a mira oficial: horizontal perto do yaw
+## (como antes) e vertical perto do pitch oficial. Nunca serve de ponto de
+## impacto; só confirma que o cliente mirou onde o servidor diz que ele olha.
+static func validate_direction_for_aim(direction: Variant, official_yaw: Variant, official_pitch: Variant) -> String:
+	var reason := validate_direction_for_yaw(direction, official_yaw)
+	if not reason.is_empty():
+		return reason
+	if not is_finite_number(official_pitch):
+		return "invalid_pitch"
+	var claimed_pitch := asin(clampf((direction as Vector3).normalized().y, -1.0, 1.0))
+	if absf(claimed_pitch - MovementRules.clamp_pitch(official_pitch)) > MAX_AIM_PITCH_RADIANS:
+		return "direction_pitch_divergence"
+	return ""
+
+## Direção efetiva do disparo: rumo horizontal validado do cliente com a
+## inclinação do pitch oficial. Com pitch 0 é exatamente o tiro horizontal de
+## antes.
+static func official_shot_direction(claimed: Vector3, official_pitch: float) -> Vector3:
+	var horizontal := Vector3(claimed.x, 0.0, claimed.z).normalized()
+	var pitch := MovementRules.clamp_pitch(official_pitch)
+	return (horizontal * cos(pitch) + Vector3.UP * sin(pitch)).normalized()
 
 static func is_finite_vector3(value: Vector3) -> bool:
 	return is_finite(value.x) and is_finite(value.y) and is_finite(value.z)

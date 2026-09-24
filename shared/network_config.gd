@@ -13,7 +13,9 @@ const MAX_PLAYERS := RoundRules.MAX_PLAYERS
 ## per-peer token, so only a confirmation of a received preparation counts.
 ## 7: round_roster entries carry the public cosmetic `appearance` id
 ## (allowlisted by CharacterAppearance); clients drop unknown roster keys.
-const PROTOCOL_VERSION := 7
+## 8: submit_input carries pitch_delta and world snapshots carry the official
+## pitch (vertical aim), which the server also uses for every shot.
+const PROTOCOL_VERSION := 8
 const CONNECT_TIMEOUT_SECONDS := 10.0
 
 static func user_arguments() -> Dictionary:

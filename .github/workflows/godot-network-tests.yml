@@ -135,6 +135,13 @@ jobs:
             | tee "$RUNNER_TEMP/godot-network-logs/character-appearance.log"
           grep -q 'CHARACTER_APPEARANCE_TEST_OK' "$RUNNER_TEMP/godot-network-logs/character-appearance.log"
 
+      - name: Validate vertical aim (pitch)
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/vertical_aim_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/vertical-aim.log"
+          grep -q 'VERTICAL_AIM_TEST_OK' "$RUNNER_TEMP/godot-network-logs/vertical-aim.log"
+
       - name: Run spectator and final reveal network test
         run: |
           set -o pipefail

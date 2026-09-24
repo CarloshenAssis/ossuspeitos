@@ -6,6 +6,11 @@ const ACCELERATION := 18.0
 const INPUT_TIMEOUT_MSEC := 300
 const MAX_YAW_DELTA := 0.35
 const MAX_YAW_RATE := 3.0
+## Mira vertical (pitch, radianos; positivo olha para cima). O limite evita
+## olhar para os próprios pés ou para o zênite, onde a direção horizontal some.
+const MAX_PITCH := deg_to_rad(75.0)
+const MAX_PITCH_DELTA := 0.35
+const MAX_PITCH_RATE := 3.0
 const MAX_COMMAND_RATE := 30.0
 const COMMAND_BURST := 4.0
 const MAX_SEQUENCE_ADVANCE := 64
@@ -36,14 +41,30 @@ const SPAWN_POINTS: Array[Vector3] = [
 static func spawn_yaw(spawn: Vector3) -> float:
 	return atan2(spawn.x, spawn.z)
 
-static func validate_input(move: Vector2, yaw_delta: float) -> String:
-	if not is_finite(move.x) or not is_finite(move.y) or not is_finite(yaw_delta):
+static func validate_input(move: Vector2, yaw_delta: float, pitch_delta: float = 0.0) -> String:
+	if not is_finite(move.x) or not is_finite(move.y) or not is_finite(yaw_delta) or not is_finite(pitch_delta):
 		return "non_finite"
 	if move.length_squared() > 1.0 + MOVEMENT_EPSILON:
 		return "move_magnitude"
 	if absf(yaw_delta) > MAX_YAW_DELTA:
 		return "yaw_delta"
+	if absf(pitch_delta) > MAX_PITCH_DELTA:
+		return "pitch_delta"
 	return ""
+
+## Pitch oficial sempre finito e dentro do limite.
+static func clamp_pitch(pitch: Variant) -> float:
+	if typeof(pitch) != TYPE_FLOAT and typeof(pitch) != TYPE_INT:
+		return 0.0
+	if not is_finite(float(pitch)):
+		return 0.0
+	return clampf(float(pitch), -MAX_PITCH, MAX_PITCH)
+
+## Direção da mira para um yaw e um pitch: a mesma base da câmera FPS
+## (yaw em Y no corpo, pitch em X na câmera, frente -Z).
+static func aim_direction(yaw: float, pitch: float) -> Vector3:
+	var clamped := clamp_pitch(pitch)
+	return Vector3(0.0, sin(clamped), -cos(clamped)).rotated(Vector3.UP, yaw).normalized()
 
 static func integrate(state: Dictionary, delta: float, now_msec: int) -> void:
 	var move: Vector2 = state["input"]
@@ -107,5 +128,6 @@ static func snapshot_state(peer_id: int, state: Dictionary) -> Dictionary:
 		"position": state["position"],
 		"velocity": state["velocity"],
 		"yaw": state["yaw"],
+		"pitch": clamp_pitch(state.get("pitch", 0.0)),
 		"spawn_index": state["spawn_index"],
 	}

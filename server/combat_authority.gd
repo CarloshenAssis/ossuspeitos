@@ -103,7 +103,8 @@ func request_fire(peer_id: int, sequence: Variant, claimed_origin: Variant, clai
 	var state: Dictionary = world.states[peer_id]
 	var eye := (state["position"] as Vector3) + Vector3.UP * ArenaRules.EYE_HEIGHT
 	var intent := {"sequence": sequence, "origin": claimed_origin, "direction": claimed_direction}
-	var context := {"alive": true, "round_active": true, "eye_position": eye, "yaw": state["yaw"]}
+	var context := {"alive": true, "round_active": true, "eye_position": eye, "yaw": state["yaw"],
+		"pitch": MovementRules.clamp_pitch(state.get("pitch", 0.0))}
 	var shot := combat_rules.request_shot(peer_id, intent, context, now_msec)
 	if not bool(shot.get("accepted", false)):
 		return shot
@@ -148,6 +149,11 @@ func _apply_damage(target: int, shooter: int, damage: int, now_msec: int) -> voi
 func _raycast(shooter: int, origin: Vector3, direction: Vector3, max_distance: float) -> Dictionary:
 	var closest := max_distance
 	var result := {"distance": -1.0, "peer_id": 0}
+	# Tiro para baixo para no piso oficial (y = 0).
+	var floor_distance := ArenaRules.ray_floor(origin, direction, max_distance)
+	if floor_distance >= 0.0:
+		closest = floor_distance
+		result = {"distance": floor_distance, "peer_id": 0}
 	for blocker in ArenaRules.BLOCKERS:
 		var distance := ArenaRules.ray_aabb(origin, direction, max_distance, blocker["center"], blocker["size"])
 		if distance >= 0.0 and distance <= closest:

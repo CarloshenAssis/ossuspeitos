@@ -20,6 +20,7 @@ var snapshot_accumulator := 0.0
 var input_accumulator := 0.0
 var input_sequence := 0
 var pending_yaw_delta := 0.0
+var pending_pitch_delta := 0.0
 var client_spawn_known := false
 var client_spawn_position := Vector3.ZERO
 var client_movement_observed := false
@@ -228,8 +229,9 @@ func _process(_delta: float) -> void:
 		input_accumulator += _delta
 		if input_accumulator >= 0.05:
 			input_accumulator = 0.0
-			_send_input(Input.get_vector("move_left", "move_right", "move_forward", "move_backward"), pending_yaw_delta)
+			_send_input(Input.get_vector("move_left", "move_right", "move_forward", "move_backward"), pending_yaw_delta, pending_pitch_delta)
 			pending_yaw_delta = 0.0
+			pending_pitch_delta = 0.0
 
 func _physics_process(delta: float) -> void:
 	if mode != "server" or shutting_down or authoritative_world == null:
@@ -255,6 +257,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if mode == "client" and event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		pending_yaw_delta = clampf(pending_yaw_delta - event.relative.x * 0.0025, -MovementRules.MAX_YAW_DELTA, MovementRules.MAX_YAW_DELTA)
+		# Mouse para cima = olhar para cima (pitch positivo). O servidor acumula e
+		# limita; o cliente só pede a variação.
+		pending_pitch_delta = clampf(pending_pitch_delta - event.relative.y * 0.0025, -MovementRules.MAX_PITCH_DELTA, MovementRules.MAX_PITCH_DELTA)
 	if mode != "client" or not joined or shutdown_prepare_received or arena_view == null:
 		return
 	if not _client_can_gameplay():
@@ -418,16 +423,39 @@ func _try_start_test_movement() -> void:
 		if client_label == "client-1":
 			_send_input(Vector2(99.0, 0.0), 0.0)
 		else:
-			_send_input(test_direction, 0.0)
+			_send_input(test_direction, 0.0, test_pitch_delta())
 
-func _send_input(move: Vector2, yaw_delta: float) -> void:
+var _last_pitch_log := ""
+## Teste de movimento: pitch oficial dos outros jogadores como chegou aqui.
+func _log_observed_pitches(states: Array) -> void:
+	var parts: Array = []
+	for raw_state in states:
+		if typeof(raw_state) != TYPE_DICTIONARY:
+			continue
+		var state: Dictionary = raw_state
+		if int(state.get("peer_id", 0)) == multiplayer.get_unique_id():
+			continue
+		parts.append("%d:%.3f" % [int(state.get("peer_id", 0)), MovementRules.clamp_pitch(state.get("pitch", 0.0))])
+	parts.sort()
+	var line := ",".join(parts)
+	if line != _last_pitch_log:
+		_last_pitch_log = line
+		print("CLIENT_OBSERVED_PITCHES id=%s map=%s" % [client_label, line])
+
+## Pitch que cada cliente do teste de movimento pede (distinto por cliente),
+## para provar que o servidor aplica e todos os outros clientes o recebem.
+func test_pitch_delta() -> float:
+	var client_number := int(client_label.trim_prefix("client-"))
+	return [0.3, -0.2, -0.3, 0.2][(client_number - 1) % 4]
+
+func _send_input(move: Vector2, yaw_delta: float, pitch_delta: float = 0.0) -> void:
 	if shutdown_prepare_received or not client_connected:
 		return
 	input_sequence += 1
-	submit_input.rpc_id(1, input_sequence, move, yaw_delta)
+	submit_input.rpc_id(1, input_sequence, move, yaw_delta, pitch_delta)
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
-func submit_input(sequence: int, move: Vector2, yaw_delta: float) -> void:
+func submit_input(sequence: int, move: Vector2, yaw_delta: float, pitch_delta: float) -> void:
 	if not multiplayer.is_server() or shutting_down:
 		return
 	var sender := multiplayer.get_remote_sender_id()
@@ -440,7 +468,7 @@ func submit_input(sequence: int, move: Vector2, yaw_delta: float) -> void:
 			spectator_test_movement_blocked = true
 			_maybe_finish_spectator_probe()
 		return
-	var reason := authoritative_world.accept_input(sender, sequence, move, yaw_delta, Time.get_ticks_msec())
+	var reason := authoritative_world.accept_input(sender, sequence, move, yaw_delta, Time.get_ticks_msec(), pitch_delta)
 	if not reason.is_empty():
 		print("INPUT_REJECTED peer_id=%d reason=%s" % [sender, reason])
 		input_rejected.rpc_id(sender, reason, sequence)
@@ -456,7 +484,7 @@ func submit_input(sequence: int, move: Vector2, yaw_delta: float) -> void:
 func input_rejected(reason: String, _sequence: int) -> void:
 	if expected_clients > 0 and client_label == "client-1" and reason == "move_magnitude" and not client_movement_observed:
 		print("CLIENT_IMPOSSIBLE_INPUT_REJECTED id=%s" % client_label)
-		_send_input(test_direction, 0.0)
+		_send_input(test_direction, 0.0, test_pitch_delta())
 
 @rpc("authority", "call_remote", "unreliable_ordered")
 func world_snapshot(states: Array) -> void:
@@ -465,6 +493,8 @@ func world_snapshot(states: Array) -> void:
 	if arena_view != null:
 		arena_view.apply_snapshot(states)
 		_update_pickup_prompt()
+	if expected_clients > 0:
+		_log_observed_pitches(states)
 	if spectator_reveal_test_mode and local_eliminated and not spectator_test_follow_confirmed:
 		for raw_spectator_state in states:
 			if int((raw_spectator_state as Dictionary).get("peer_id", 0)) == _spectator_target():
@@ -523,7 +553,7 @@ func _report_movement_test() -> void:
 		var velocity: Vector3 = state["velocity"]
 		var speed := velocity.length()
 		observed_max_speed = maxf(observed_max_speed, speed)
-		print("PLAYER_STATE peer_id=%d position=%.3f,%.3f,%.3f speed=%.3f" % [peer_id, position.x, position.y, position.z, speed])
+		print("PLAYER_STATE peer_id=%d position=%.3f,%.3f,%.3f speed=%.3f pitch=%.3f" % [peer_id, position.x, position.y, position.z, speed, float(state.get("pitch", 0.0))])
 	print("SERVER_MOVEMENT_TEST_OK players=%d max_speed=%.3f rejected_impossible=%d" % [completed_peers.size(), observed_max_speed, impossible_input_rejected_peers.size()])
 
 func _begin_server_shutdown(peer_ids: Array) -> void:
@@ -1147,7 +1177,7 @@ func _on_combat_player_eliminated(peer_id: int, _instigator_peer_id: int) -> voi
 
 func _safe_combat_reason(raw_reason: Variant) -> String:
 	var reason := str(raw_reason)
-	var allowed := ["round_not_active", "unknown_peer", "player_dead", "invalid_sequence", "replay", "sequence_jump", "rate_limited", "invalid_pickup", "item_not_found", "item_unavailable", "out_of_range", "inventory_full", "incompatible_item", "no_equipped_weapon", "reserve_full", "empty_magazine", "reloading", "fire_rate", "invalid_origin", "non_finite", "implausible_origin", "invalid_direction", "direction_not_normalized", "direction_vertical", "direction_yaw_divergence", "magazine_full", "reserve_empty", "already_reloading"]
+	var allowed := ["round_not_active", "unknown_peer", "player_dead", "invalid_sequence", "replay", "sequence_jump", "rate_limited", "invalid_pickup", "item_not_found", "item_unavailable", "out_of_range", "inventory_full", "incompatible_item", "no_equipped_weapon", "reserve_full", "empty_magazine", "reloading", "fire_rate", "invalid_origin", "non_finite", "implausible_origin", "invalid_direction", "direction_not_normalized", "direction_vertical", "direction_yaw_divergence", "direction_pitch_divergence", "invalid_pitch", "magazine_full", "reserve_empty", "already_reloading"]
 	return reason if reason in allowed else "rejected"
 
 # --- Teste local no PC --------------------------------------------------------

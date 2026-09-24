@@ -140,10 +140,17 @@ static func ray_player(origin: Vector3, direction: Vector3, max_distance: float,
 	return ray_aabb(origin, direction, max_distance, position,
 		Vector3(PLAYER_HIT_RADIUS * 2.0, PLAYER_HIT_HEIGHT, PLAYER_HIT_RADIUS * 2.0))
 
-## Distância até o primeiro bloco atingido, ou -1. Mesmo laço que o hitscan
-## oficial de `CombatAuthority` percorre antes de testar jogadores.
+## Distância até o piso (y = 0) para um raio que desce, ou -1.
+static func ray_floor(origin: Vector3, direction: Vector3, max_distance: float) -> float:
+	if direction.y >= -0.000001 or origin.y < 0.0:
+		return -1.0
+	var distance := origin.y / -direction.y
+	return distance if distance <= max_distance else -1.0
+
+## Distância até o primeiro bloco atingido (ou o piso), ou -1. Mesmo laço que o
+## hitscan oficial de `CombatAuthority` percorre antes de testar jogadores.
 static func first_blocker_distance(origin: Vector3, direction: Vector3, max_distance: float) -> float:
-	var closest := -1.0
+	var closest := ray_floor(origin, direction, max_distance)
 	for blocker in BLOCKERS:
 		var distance := ray_aabb(origin, direction, max_distance, blocker["center"], blocker["size"])
 		if distance >= 0.0 and (closest < 0.0 or distance < closest):

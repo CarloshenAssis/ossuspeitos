@@ -101,7 +101,7 @@ func _test_client_roster_allowlist() -> void:
 	_expect(int(bogus_peer["peer_id"]) == 0, "non-integer peer id is not trusted")
 
 func _test_protocol_version() -> void:
-	_expect(NetworkConfig.PROTOCOL_VERSION == 7, "roster appearance bumps the protocol to 7")
+	_expect(NetworkConfig.PROTOCOL_VERSION >= 7, "roster appearance needs protocol 7 or later")
 
 func _appearance_map(lobby: LobbyRegistry) -> Dictionary:
 	var result := {}
