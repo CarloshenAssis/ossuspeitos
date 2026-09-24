@@ -145,8 +145,10 @@ func _test_layout_keeps_the_center_free() -> void:
 	var short := _hud._weapon_panel.size
 	_expect(short.x < tall.x and is_equal_approx(_hud._weapon_panel.get_global_rect().end.x, viewport_rect.end.x - HudStyle.MARGIN), "weapon panel shrinks back and stays on the right margin (%s -> %s)" % [str(tall), str(short)])
 	_arena.apply_snapshot([{"peer_id": OWN, "position": Vector3(25, 1, 2.5), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
+	_arena._process(0.0)
 	var long_chip := _arena.region_chip.size.x
 	_arena.apply_snapshot([{"peer_id": OWN, "position": Vector3(25, 1, 11.5), "yaw": 0.0, "velocity": Vector3.ZERO, "spawn_index": 0}])
+	_arena._process(0.0)
 	_expect(_arena.region_chip.size.x < long_chip, "region chip shrinks for a shorter zone name (%s -> %s)" % [long_chip, _arena.region_chip.size.x])
 	_hud.apply_roster(_roster_with_dead([OWN]))
 	_hud.apply_spectator_state(true, [7, 8], 7)
