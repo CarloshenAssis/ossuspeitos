@@ -155,19 +155,38 @@ const SPAWNS := [
 	{"id": "spawn_banheiro", "space": "banheiro", "position": Vector2(43.5, 12.3), "face": Vector2(44.5, 13.75)},
 ]
 
-## Pontos candidatos de pickups. Os índices seguem o contrato atual de
-## `CombatAuthority`: 0..3 armas comuns, 4..7 caixas de munição. Nenhuma arma
-## fica num cômodo com spawn de uma sala de quatro jogadores.
+## Pickups oficiais da rodada (fase 6): 8 pistolas comuns e 12 caixas de
+## munição, todas disponíveis no início de cada rodada. Índices: 0..7 armas
+## (`weapon_0..7`), 8..19 munição (`ammo_0..11`). Uma arma em cada área pedida
+## (Escritório, Biblioteca, Galeria, Salão, Cozinha, Jantar, ala do Quarto do
+## Fundo e ala do Quarto de Hóspedes); munição nas duas alas e no núcleo.
+## Critérios conferidos em `arena_layout_test`: arma a ≥ 4 m de todo spawn,
+## munição a ≥ 3 m, quaisquer dois pickups a ≥ 4,5 m (nenhum ponto alcança dois
+## ao mesmo tempo), a ≥ 1,8 m do centro de toda porta e com a cápsula livre.
 const PICKUPS := [
-	{"id": "weapon_0", "type": "weapon", "space": "biblioteca", "position": Vector2(1.8, 12.0)},
-	{"id": "weapon_1", "type": "weapon", "space": "cozinha", "position": Vector2(26.5, 12.8)},
-	{"id": "weapon_2", "type": "weapon", "space": "salao", "position": Vector2(15.5, 12.0)},
-	{"id": "weapon_3", "type": "weapon", "space": "ala_leste", "position": Vector2(36.8, 18.5)},
-	{"id": "ammo_0", "type": "ammo", "space": "escritorio", "position": Vector2(4.8, 4.0)},
-	{"id": "ammo_1", "type": "ammo", "space": "galeria", "position": Vector2(22.2, 3.8)},
-	{"id": "ammo_2", "type": "ammo", "space": "jantar", "position": Vector2(10.0, 20.2)},
-	{"id": "ammo_3", "type": "ammo", "space": "quarto_fundo", "position": Vector2(34.4, 27.2)},
+	{"id": "weapon_0", "type": "weapon", "space": "escritorio", "position": Vector2(4.9, 1.1)},
+	{"id": "weapon_1", "type": "weapon", "space": "biblioteca", "position": Vector2(2.0, 9.8)},
+	{"id": "weapon_2", "type": "weapon", "space": "galeria", "position": Vector2(23.5, 2.6)},
+	{"id": "weapon_3", "type": "weapon", "space": "salao", "position": Vector2(15.5, 12.0)},
+	{"id": "weapon_4", "type": "weapon", "space": "cozinha", "position": Vector2(27.0, 10.2)},
+	{"id": "weapon_5", "type": "weapon", "space": "jantar", "position": Vector2(10.2, 20.3)},
+	{"id": "weapon_6", "type": "weapon", "space": "quarto_fundo", "position": Vector2(34.2, 27.6)},
+	{"id": "weapon_7", "type": "weapon", "space": "quarto_hospedes", "position": Vector2(42.4, 23.1)},
+	{"id": "ammo_0", "type": "ammo", "space": "corredor_norte", "position": Vector2(13.5, 2.5)},
+	{"id": "ammo_1", "type": "ammo", "space": "corredor_norte", "position": Vector2(18.5, 1.6)},
+	{"id": "ammo_2", "type": "ammo", "space": "salao", "position": Vector2(9.1, 9.1)},
+	{"id": "ammo_3", "type": "ammo", "space": "salao", "position": Vector2(9.5, 14.7)},
+	{"id": "ammo_4", "type": "ammo", "space": "galeria", "position": Vector2(29.4, 0.1)},
+	{"id": "ammo_5", "type": "ammo", "space": "jantar", "position": Vector2(16.4, 23.6)},
+	{"id": "ammo_6", "type": "ammo", "space": "corredor_oeste_sul", "position": Vector2(3.0, 20.0)},
+	{"id": "ammo_7", "type": "ammo", "space": "ala_leste", "position": Vector2(36.0, 18.5)},
+	{"id": "ammo_8", "type": "ammo", "space": "ala_leste", "position": Vector2(29.0, 18.5)},
+	{"id": "ammo_9", "type": "ammo", "space": "corredor_cozinha_sul", "position": Vector2(24.0, 23.4)},
+	{"id": "ammo_10", "type": "ammo", "space": "quarto_fundo", "position": Vector2(34.9, 23.1)},
+	{"id": "ammo_11", "type": "ammo", "space": "ramal_banheiro", "position": Vector2(44.0, 15.5)},
 ]
+const WEAPON_PICKUPS := 8
+const AMMO_PICKUPS := 12
 
 # --- Consultas -----------------------------------------------------------------
 
@@ -212,6 +231,17 @@ static func spawn_yaw_at(index: int) -> float:
 	var from: Vector2 = entry["position"]
 	var to: Vector2 = entry["face"]
 	return atan2(-(to.x - from.x), -(to.y - from.y))
+
+## Posição oficial de um pickup pelo id (vazio: `Vector3.INF`).
+static func pickup_position(pickup_id: String) -> Vector3:
+	for entry in PICKUPS:
+		if str(entry["id"]) == pickup_id:
+			var point: Vector2 = entry["position"]
+			return Vector3(point.x, PICKUP_HEIGHT, point.y)
+	return Vector3.INF
+
+static func pickups_of_type(kind: String) -> Array:
+	return PICKUPS.filter(func(entry): return str(entry["type"]) == kind)
 
 static func pickup_positions() -> Array:
 	var result: Array = []

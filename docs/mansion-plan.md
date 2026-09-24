@@ -12,10 +12,11 @@ tarefa; não versionada). As perspectivas anexadas servem só de atmosfera.
 | 2 — identidade visual | `claude/charming-darwin-kz3xvn`, reiniciada de `3b20af3` | integrada | [#17](https://github.com/CarloshenAssis/ossuspeitos/pull/17) | `a23825b` → merge `60e478f` |
 | 3 — repouso e caminhada | `claude/charming-darwin-kz3xvn`, reiniciada de `60e478f` | integrada | [#18](https://github.com/CarloshenAssis/ossuspeitos/pull/18) | `17d2706` → merge `7c98bd9` |
 | 4 — resposta local e apresentação | `claude/charming-darwin-kz3xvn`, reiniciada de `7c98bd9` | integrada (ver `docs/netcode.md`) | [#19](https://github.com/CarloshenAssis/ossuspeitos/pull/19) | `79ba755` → merge `f8cd36c` |
-| 5 — campanha integrada e build | `claude/charming-darwin-kz3xvn`, reiniciada de `f8cd36c` | em PR (ver `docs/test-matrix.md`) | — | — |
+| 5 — campanha integrada e build | `claude/charming-darwin-kz3xvn`, reiniciada de `f8cd36c` | integrada (ver `docs/test-matrix.md`) | [#20](https://github.com/CarloshenAssis/ossuspeitos/pull/20) | `f10ef87` → merge `f76d4cb` |
+| 6 — reset completo, pickups e corpos | `claude/charming-darwin-kz3xvn`, reiniciada de `f76d4cb` | em PR | — | — |
 
 Pendências:
-- fase 5: PR, CI do HEAD, build de teste do workflow Windows e merge.
+- fase 6: PR, CI do HEAD e merge.
 
 Retomada: `git fetch origin && git checkout claude/charming-darwin-kz3xvn`.
 Testes: ver `.github/workflows/godot-network-tests.yml`.

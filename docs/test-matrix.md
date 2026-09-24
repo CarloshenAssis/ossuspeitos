@@ -58,3 +58,23 @@ Ator e observador gráficos (xvfb, OpenGL) e 6 automatizados. Cenas: navegação
 observador), acerto, obstrução, eliminação, espectador seguindo o ator,
 reveal e nova rodada. Saída: quadros JPG, CSV por quadro, prancha PNG e WebM
 por cena.
+
+## Fase 6 — reset, pickups e corpos
+
+| ID | Requisito | Onde | Resultado esperado | Fonte de verdade |
+| --- | --- | --- | --- | --- |
+| R1 | Sobrevivente e eliminado voltam ao spawn | `round_reset_bodies_test`, campanha (rodadas 2 e 3) | Posição = spawn oficial, yaw do spawn, pitch 0, parado, 8 spawns distintos | servidor + cliente (previsão) |
+| R2 | Comandos antigos | `round_reset_bodies_test` | Recusados com `stale_epoch`, sem mover | servidor |
+| R3 | Teleporte no cliente | `round_reset_bodies_test` | Previsão sem pendentes nem offset; remoto nunca entre a posição velha e o spawn | cliente |
+| P1 | 8 pistolas e 12 munições | `arena_layout_test`, `combat_authority_test`, campanha | Contagem exata; posições oficiais válidas e alcançáveis | servidor |
+| P2 | Distribuição | `arena_layout_test` | 8 áreas de arma; munição em ≥ 9 áreas; oeste, núcleo e leste; distâncias de spawns, portas e entre pickups | mapa |
+| P3 | Coleta única e restauração | `round_reset_bodies_test`, campanha | 20 disponíveis a cada rodada; segundo pedido `item_unavailable`; sem crescimento em 3 rodadas | servidor + cliente |
+| P4 | Oito jogadores, oito armas | `arena_layout_test` | Cada um coleta uma pistola diferente e não alcança outra | servidor |
+| B1 | Corpo só por eliminação oficial | `round_reset_bodies_test`, adverso `observed_leaves` | Sair vivo não gera corpo | servidor |
+| B2 | Duplicata e callback antigo | `round_reset_bodies_test`, campanha | Um corpo por jogador por rodada; corpo de rodada anterior ignorado | servidor + cliente |
+| B3 | DTO público | `round_reset_bodies_test`, campanha | Allowlist exata, sem papel, inventário ou munição | cliente |
+| B4 | Mesmos corpos em todos os clientes | campanha | 2 corpos em pontos diferentes (Salão e Ala leste) na rodada 1; igualdade em todas as rodadas | servidor + 8 clientes |
+| B5 | Sem colisão nem raycast | `round_reset_bodies_test` | Tiro passa pelo corpo e acerta o vivo atrás; ponto continua livre | servidor |
+| B6 | Corpo após desconexão do eliminado | adverso `observed_leaves` | Corpo permanece para todos | servidor + clientes |
+| B7 | Remoção no reset | `round_reset_bodies_test`, campanha | 0 corpos no início das rodadas 2 e 3 | servidor + cliente |
+| B8 | Apresentação | `round_reset_bodies_test`, sessão gráfica | Deitado no piso (altura < 0,75 m), aparência preservada, parado; correção junto à parede ≤ 0,6 m | cliente |

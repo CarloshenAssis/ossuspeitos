@@ -38,11 +38,14 @@ func begin_round(round_id: int, participant_ids: Array) -> void:
 		_sequences[id] = {"pickup": -1, "fire": -1, "reload": -1}
 		_last_action_msec[id] = {"pickup": -1, "fire": -1, "reload": -1}
 		private_state_changed.emit(id, private_state(id))
-	for index in 4:
-		inventory.add_ground_weapon("weapon_%d" % index, COMMON_WEAPON_ID,
-			ArenaRules.PICKUP_POSITIONS[index], 6, 0, round_id)
-	for index in 4:
-		inventory.add_ground_ammo("ammo_%d" % index, ArenaRules.PICKUP_POSITIONS[index + 4], AMMO_BOX_AMOUNT, round_id)
+	# Todos os pickups oficiais do mapa, exatamente uma vez por rodada (a
+	# sessão de inventário acabou de ser limpa: nada se duplica).
+	for index in MansionMap.PICKUPS.size():
+		var entry: Dictionary = MansionMap.PICKUPS[index]
+		if str(entry["type"]) == "weapon":
+			inventory.add_ground_weapon(str(entry["id"]), COMMON_WEAPON_ID, ArenaRules.PICKUP_POSITIONS[index], 6, 0, round_id)
+		else:
+			inventory.add_ground_ammo(str(entry["id"]), ArenaRules.PICKUP_POSITIONS[index], AMMO_BOX_AMOUNT, round_id)
 	pickups_changed.emit(public_pickups())
 
 func clear_round() -> void:

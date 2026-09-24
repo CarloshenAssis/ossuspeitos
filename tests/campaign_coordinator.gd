@@ -29,7 +29,10 @@ const LANE_TO := Vector3(9.0, 1.0, 15.5)
 const WALL_FROM := Vector3(10.0, 1.0, 20.3)
 const WALL_TO := Vector3(10.0, 1.0, 15.5)
 const STEP_TIMEOUT_MSEC := 30000
-const FIRE_GAP_TICKS := 30
+## Um tiro a cada 60 ticks de comando: mesmo com a recuperação de fila do
+## servidor (2 comandos por tick) o intervalo real fica ≥ 500 ms, acima da
+## cadência oficial de 400 ms.
+const FIRE_GAP_TICKS := 60
 const RELOAD_TICKS := 90
 
 var steps: Array = []
@@ -130,7 +133,8 @@ func _plan_round() -> void:
 		expected_alive[int(peer_id)] = true
 	print("CAMPAIGN_ROUND_BEGIN round=%d round_id=%d participants=%d" % [round_number, app.round_authority.round_id, peers.size()])
 	_add("reset_invariants", {"check": _check_round_start})
-	_add("client_state_clean", {"run": func(): _request_all_state("round_start"), "done": func(): return reports.size() == peers.size(), "check": _check_clients_clean})
+	# Espera o ACK da época nova chegar (a previsão local já no spawn).
+	_add("client_state_clean", {"run": func(): _request_all_state("round_start"), "delay": 900, "done": func(): return reports.size() == peers.size(), "check": _check_clients_clean})
 	if round_number > 1:
 		_add("stale_callbacks", {"run": _inject_stale_callbacks, "delay": 300, "done": func(): return reports.size() == peers.size(), "check": _check_stale_rejected})
 	_add("resources", {"run": func(): _request_all_state("resources"), "done": func(): return reports.size() == peers.size(), "check": _record_resources})
@@ -200,6 +204,13 @@ func _plan_round_one() -> void:
 	_add("spectator_first", {"run": func(): _request_state(spectator_a, "spectator"), "done": func(): return reports.has(spectator_a), "check": func(): return _check_spectator(spectator_a)})
 	# O espectador segue o ator (câmera em primeira pessoa dele) numa volta
 	# pela porta leste do Salão, com espaço livre à frente.
+	# Fase 6: o corpo do observador deitado no ponto da morte, visto pelo ator
+	# e pelo próprio observador como espectador (seguindo o ator).
+	_visual("body_view", 4.0, func():
+		var viewpoint := Vector3(12.5, 1.0, 16.0)
+		app.authoritative_world.teleport(shooter_peer, viewpoint, _yaw_to(viewpoint, LANE_TO + Vector3(0.0, 0.0, -0.6)), -0.45)
+		_rec(shooter_peer, "body_actor", 4.0)
+		_rec(spectator_a, "spectator_body", 4.0, shooter_peer))
 	_visual("spectator_view", 6.0, func():
 		app.authoritative_world.teleport(shooter_peer, Vector3(10.4, 1.0, 13.3), -PI * 0.5, 0.0)
 		_rec(spectator_a, "spectator", 6.0, shooter_peer)
@@ -215,7 +226,9 @@ func _plan_round_one() -> void:
 		sync_campaign_dead_probe.rpc_id(spectator_a)
 	, "done": func(): return _results_for(spectator_a).size() >= 3, "check": func(): return _check_dead_blocked(spectator_a)})
 	_add("reload", _reload_step(shooter_peer))
-	_add("eliminate_second", _fire_step(shooter_peer, spectator_b, 3, 0, true))
+	_add("eliminate_second", _fire_step(shooter_peer, spectator_b, 3, 0, true, "ala_leste"))
+	_add("bodies_agree", {"run": func(): _request_all_state("bodies"), "delay": 600, "done": func(): return reports.size() == peers.size(),
+		"check": func(): return _check_bodies(2, true)})
 	_add("spectator_updated", {"run": func():
 		reports.clear()
 		_request_state(spectator_a, "spectator")
@@ -264,6 +277,8 @@ func _add_round_end(reason: String, team: int) -> void:
 		_visual("reveal", 2.5, func():
 			_rec(visual_actor, "reveal_actor", 2.5)
 			_rec(visual_observer, "reveal_observer", 2.5))
+	_add("bodies_at_end", {"run": func(): _request_all_state("bodies_end"), "delay": 600, "done": func(): return reports.size() == peers.size(),
+		"check": func(): return _check_bodies(-1, false)})
 	_add("reveal_delivered", {"run": func(): _request_all_state("reveal"), "delay": 800, "done": func(): return reports.size() == peers.size(), "check": _check_reveal})
 	if round_number < 3:
 		_add("next_round", {"done": func():
@@ -332,11 +347,12 @@ func _next_id(peer_id: int, kind: String) -> int:
 func _results_for(peer_id: int) -> Array:
 	return campaign_results.filter(func(r): return int(r["peer"]) == peer_id)
 
-func _pickup_step(peer_id: int, pickup_index: int, pickup_id: String) -> Dictionary:
+## `_pickup_index` é legado (fase 5); a posição vem do id oficial.
+func _pickup_step(peer_id: int, _pickup_index: int, pickup_id: String) -> Dictionary:
 	var id_holder := [0]
 	return {"run": func():
 		_scatter([peer_id])
-		app.authoritative_world.teleport(peer_id, ArenaRules.PICKUP_POSITIONS[pickup_index] + Vector3.UP * 0.75)
+		app.authoritative_world.teleport(peer_id, MansionMap.pickup_position(pickup_id) + Vector3.UP * 0.75)
 		campaign_results.clear()
 		id_holder[0] = _next_id(peer_id, "pickup")
 		get_tree().create_timer(1.0).timeout.connect(func():
@@ -351,12 +367,20 @@ func _pickup_step(peer_id: int, pickup_index: int, pickup_id: String) -> Diction
 
 ## Atirador na faixa do Salão olhando para oeste; alvo a 3 m. Dispara `count`
 ## tiros reais e espera a vida oficial chegar a `expected_health`.
-func _fire_step(shooter: int, target_peer: int, count: int, expected_health: int, expect_hits: bool) -> Dictionary:
+## Faixas de tiro: Salão (oeste) e Ala leste (leste), para eliminações em
+## pontos diferentes da mansão.
+const LANES := {
+	"salao": {"from": Vector3(12.0, 1.0, 15.5), "to": Vector3(9.0, 1.0, 15.5), "yaw": PI * 0.5},
+	"ala_leste": {"from": Vector3(30.0, 1.0, 18.5), "to": Vector3(33.0, 1.0, 18.5), "yaw": -PI * 0.5},
+}
+
+func _fire_step(shooter: int, target_peer: int, count: int, expected_health: int, expect_hits: bool, lane: String = "salao") -> Dictionary:
 	var before := {}
+	var lane_data: Dictionary = LANES[lane]
 	return {"run": func():
 		_scatter([shooter, target_peer])
-		app.authoritative_world.teleport(shooter, LANE_FROM, PI * 0.5, 0.0)
-		app.authoritative_world.teleport(target_peer, LANE_TO)
+		app.authoritative_world.teleport(shooter, lane_data["from"], float(lane_data["yaw"]), 0.0)
+		app.authoritative_world.teleport(target_peer, lane_data["to"])
 		before["magazine"] = int(app.combat_authority.inventory.get_inventory(shooter).get("magazine", 0))
 		before["health"] = int(app.combat_authority.health.get(target_peer, 0))
 		campaign_results.clear()
@@ -468,8 +492,19 @@ func _check_round_start() -> String:
 		if round_number > 1 and int(app.authoritative_world.states[id]["epoch"]) <= int(previous_epochs.get(id, 0)):
 			return "peer %d epoch not advanced" % id
 	if not app.round_authority.get_final_reveal().is_empty(): return "reveal not cleared"
+	# Fase 6: todos (sobreviventes e eliminados) no spawn oficial, parados.
+	var spawn_keys := {}
+	for peer_id in peers:
+		var state: Dictionary = app.authoritative_world.states[int(peer_id)]
+		var spawn := MovementRules.SPAWN_POINTS[int(state["spawn_index"])]
+		if not (state["position"] as Vector3).is_equal_approx(spawn): return "peer %d not on its spawn (%s)" % [int(peer_id), str(state["position"])]
+		if round_number > 1 and not (state["velocity"] as Vector3).is_zero_approx(): return "peer %d kept velocity" % int(peer_id)
+		spawn_keys[int(state["spawn_index"])] = true
+	if spawn_keys.size() != peers.size(): return "participants share spawns"
+	if app.body_registry.size() != 0: return "bodies of the previous round survived (%d)" % app.body_registry.size()
 	var pickups: Array = app.combat_authority.public_pickups()
-	if pickups.size() != 8: return "pickups %d" % pickups.size()
+	if pickups.size() != 20 or app.combat_authority.inventory.ground_items.size() != 20: return "pickups %d" % pickups.size()
+	if pickups.filter(func(e): return str(e["type"]) == "weapon").size() != 8: return "weapons not 8"
 	for entry in pickups:
 		if not bool(entry["available"]): return "pickup %s unavailable" % entry["pickup_id"]
 	return ""
@@ -493,6 +528,11 @@ func _check_clients_clean() -> String:
 			return "client %d does not hold its own role" % int(peer_id)
 		if int(r["role_round"]) != int(round_ids[-1]): return "client %d role round %d" % [int(peer_id), int(r["role_round"])]
 		if int(r["snapshot_violations"]) != 0: return "client %d saw private snapshot fields" % int(peer_id)
+		if not (r["bodies"] as Array).is_empty(): return "client %d still shows %d bodies" % [int(peer_id), (r["bodies"] as Array).size()]
+		if int(r["pickups_total"]) != 20 or int(r["pickups_available"]) != 20: return "client %d sees pickups %d/%d" % [int(peer_id), int(r["pickups_available"]), int(r["pickups_total"])]
+		var spawn := MovementRules.SPAWN_POINTS[int(app.authoritative_world.states[int(peer_id)]["spawn_index"])]
+		if not (r["local_position"] as Vector3).is_equal_approx(spawn): return "client %d predicts %s, spawn %s" % [int(peer_id), str(r["local_position"]), str(spawn)]
+	print("CAMPAIGN_ROUND_RESET_OK round=%d clients=%d spawns=%d pickups=20 bodies=0" % [round_number, reports.size(), peers.size()])
 	return ""
 
 ## Callbacks da rodada anterior (controlados pelo harness): comando com época
@@ -510,6 +550,8 @@ func _inject_stale_callbacks() -> void:
 func round_private_spectator_targets_stale(peer_id: int, old_round: int) -> void:
 	app.round_private_spectator_targets.rpc_id(peer_id, {"round_id": old_round, "targets": peers.duplicate()})
 	app.round_final_reveal.rpc_id(peer_id, {"round_id": old_round, "winner": "ASSASSIN", "reason": "stale", "players": []})
+	# Corpo da rodada anterior chegando atrasado: não pode reaparecer.
+	app.round_body_added.rpc_id(peer_id, BodyRules.make(900 + peer_id % 50, old_round, int(peers[0]), Vector3(13.5, 1.0, 14.0), 0.0, "ember"))
 
 func _check_stale_rejected() -> String:
 	if not campaign_shots.is_empty(): return "a stale packet produced a shot"
@@ -521,7 +563,39 @@ func _check_stale_rejected() -> String:
 		var r: Dictionary = reports[peer_id]
 		if not (r["spectator_targets"] as Array).is_empty() or bool(r["has_reveal"]) or bool(r["eliminated"]):
 			return "client %d accepted a stale callback" % int(peer_id)
+		if not (r["bodies"] as Array).is_empty(): return "client %d accepted a stale body" % int(peer_id)
 	print("CAMPAIGN_STALE_CALLBACKS_REJECTED round=%d clients=%d" % [round_number, reports.size()])
+	return ""
+
+var server_bodies: Array = []
+
+func observe_server_body(dto: Dictionary) -> void:
+	if app.mode == "server":
+		server_bodies.append(dto.duplicate())
+
+## Todos os clientes mostram exatamente os corpos oficiais da rodada (mesmos
+## ids, jogadores e posições da eliminação); `expected` < 0 aceita o total
+## do servidor. `distinct` exige pontos diferentes da mansão.
+func _check_bodies(expected: int, distinct: bool) -> String:
+	var official: Array = app.body_registry.public_list()
+	if expected >= 0 and official.size() != expected: return "server has %d bodies, expected %d" % [official.size(), expected]
+	for dto in official:
+		if int(dto["round_id"]) != int(round_ids[-1]): return "body from another round"
+		if bool(expected_alive.get(int(dto["peer_id"]), true)): return "body of a living player"
+		var death: Array = server_bodies.filter(func(b): return int(b["body_id"]) == int(dto["body_id"]))
+		if death.is_empty() or not (death[0]["position"] as Vector3).is_equal_approx(dto["position"]): return "body not at the death spot"
+	if distinct and official.size() >= 2 and (official[0]["position"] as Vector3).distance_to(official[1]["position"]) < 10.0:
+		return "bodies not in different parts of the mansion"
+	var signature := JSON.stringify(official.map(func(b): return [b["body_id"], b["peer_id"], "%.3f,%.3f" % [(b["position"] as Vector3).x, (b["position"] as Vector3).z]]))
+	for peer_id in peers:
+		var seen: Array = (reports[peer_id]["bodies"] as Array).duplicate()
+		seen.sort_custom(func(a, b): return int(a["body_id"]) < int(b["body_id"]))
+		var client_signature := JSON.stringify(seen.map(func(b): return [b["body_id"], b["peer_id"], "%.3f,%.3f" % [(b["position"] as Vector3).x, (b["position"] as Vector3).z]]))
+		if client_signature != signature: return "client %d bodies %s vs %s" % [int(peer_id), client_signature, signature]
+		for body in seen:
+			for key in (body as Dictionary).keys():
+				if str(key) not in BodyRules.PUBLIC_KEYS: return "client %d body carries %s" % [int(peer_id), key]
+	print("CAMPAIGN_BODIES_OK round=%d bodies=%d clients=%d" % [round_number, official.size(), peers.size()])
 	return ""
 
 func _record_resources() -> String:
@@ -532,7 +606,7 @@ func _record_resources() -> String:
 		"server_nodes": Performance.get_monitor(Performance.OBJECT_NODE_COUNT), "server_static_mem": OS.get_static_memory_usage(),
 		"world_states": world.states.size(), "queued": queued, "health": app.combat_authority.health.size(),
 		"inventories": app.combat_authority.inventory.inventories.size(), "ground": app.combat_authority.inventory.ground_items.size(),
-		"lobby": app.lobby.size(), "command_logs": app.command_logs.size()}
+		"lobby": app.lobby.size(), "command_logs": app.command_logs.size(), "bodies": app.body_registry.size()}
 	var clients := {}
 	for peer_id in reports:
 		clients[int(peer_id)] = reports[peer_id]["resources"]
@@ -540,7 +614,7 @@ func _record_resources() -> String:
 	resources.append(entry)
 	print("CAMPAIGN_RESOURCES round=%d server_objects=%d server_nodes=%d queued=%d world=%d lobby=%d" % [round_number,
 		int(entry["server_objects"]), int(entry["server_nodes"]), queued, world.states.size(), app.lobby.size()])
-	if world.states.size() != 8 or app.combat_authority.health.size() != 8 or app.combat_authority.inventory.ground_items.size() != 8:
+	if world.states.size() != 8 or app.combat_authority.health.size() != 8 or app.combat_authority.inventory.ground_items.size() != 20 or app.body_registry.size() != 0:
 		return "per-round collections not reset to 8"
 	return ""
 
@@ -610,8 +684,14 @@ var reveal_receipts := 0
 var reveal_state_at_receipt := -1
 var last_spectator_targets: Array = []
 
+var pickups_total := 0
+var pickups_available := 0
+
 func observe_client_event(kind: String, payload: Variant = null) -> void:
 	super.observe_client_event(kind, payload)
+	if kind == "pickups":
+		pickups_total = (payload as Array).size()
+		pickups_available = (payload as Array).filter(func(e): return bool((e as Dictionary).get("available", false))).size()
 	if kind == "spectator":
 		last_spectator_targets = (payload as Array).duplicate()
 
@@ -644,7 +724,9 @@ func sync_campaign_state(kind: String, _round_number: int) -> void:
 		"spectator_targets": app.local_spectator_targets.duplicate(), "has_reveal": not reveal.is_empty(), "reveal": reveal,
 		"reveal_count": reveal_receipts, "reveal_state": reveal_state_at_receipt, "role": app.local_role, "role_round": app.local_round_id,
 		"predicted_shots": app.arena_view.predicted_shots.size() if app.arena_view != null else 0,
-		"snapshot_violations": snapshot_violations, "resources": _client_resources()})
+		"snapshot_violations": snapshot_violations, "resources": _client_resources(),
+		"bodies": app.local_bodies.values().duplicate(true), "pickups_total": pickups_total, "pickups_available": pickups_available,
+		"local_position": app.prediction.state.get("position", Vector3.INF) if app.prediction.has_state else Vector3.INF})
 
 func stage_for_report() -> String:
 	return "CAMPAIGN"
