@@ -397,9 +397,8 @@ func _on_connected_to_server() -> void:
 	print("CLIENT_CONNECTED id=%s peer_id=%d" % [client_label, multiplayer.get_unique_id()])
 	# Teste de incompatibilidade: um binário de desenvolvimento pode se
 	# anunciar com outra versão; a build exportada sempre usa a própria.
-	var version := NetworkConfig.PROTOCOL_VERSION
-	if arguments.has("test-protocol-version") and OS.is_debug_build() and not OS.has_feature("template"):
-		version = NetworkConfig.integer_argument(arguments, "test-protocol-version", version)
+	var version := NetworkConfig.effective_protocol_version(arguments)
+	print("CLIENT_PROTOCOL id=%s version=%d" % [client_label, version])
 	request_join.rpc_id(1, version, client_label)
 
 func _on_connection_failed() -> void:
@@ -435,7 +434,10 @@ func request_join(protocol_version: int, requested_label: String) -> void:
 		return
 	# A identidade de rede vem sempre do remetente da RPC, nunca de um argumento.
 	var sender := multiplayer.get_remote_sender_id()
-	if protocol_version != NetworkConfig.PROTOCOL_VERSION:
+	# Versão diferente: recusa antes de qualquer registro (lobby, mundo,
+	# rodada); nada de rodada ou corpo é enviado a quem não entrou.
+	if protocol_version != NetworkConfig.effective_protocol_version(arguments):
+		print("JOIN_PROTOCOL_MISMATCH peer_id=%d client=%d server=%d" % [sender, protocol_version, NetworkConfig.effective_protocol_version(arguments)])
 		_refuse_join(sender, "protocol_version")
 		return
 	var reason := lobby.validate_join(sender, requested_label)
@@ -488,11 +490,13 @@ func join_rejected(reason: String) -> void:
 	if interactive_session:
 		print("JOIN_REJECTED id=%s reason=%s" % [client_label, reason])
 		var messages := {
-			"protocol_version": "Versão diferente do jogo: use o mesmo build do anfitrião.",
+			"protocol_version": "Versão incompatível do jogo (este build usa o protocolo %d). Use o mesmo build do anfitrião." % NetworkConfig.effective_protocol_version(arguments),
 			"room_unavailable": "Sala cheia, em andamento com 8 jogadores ou nome já usado. Tente outro nome.",
 			"invalid_client": "Nome recusado pelo servidor.",
 		}
-		_return_to_menu(str(messages.get(reason, "Entrada recusada pelo servidor.")), "join_rejected")
+		var message := str(messages.get(reason, "Entrada recusada pelo servidor."))
+		print("JOIN_REJECTED_MESSAGE id=%s text=%s" % [client_label, message])
+		_return_to_menu(message, "join_rejected")
 		return
 	fail("JOIN_REJECTED id=%s reason=%s" % [client_label, reason])
 
@@ -990,7 +994,8 @@ func _on_round_roles_ready(round_id: int, participant_ids: Array) -> void:
 	# ao spawn oficial, parados, com época nova. Corpos da rodada anterior saem
 	# antes de os vivos aparecerem.
 	body_registry.clear()
-	round_bodies_state.rpc({"round_id": round_id, "bodies": []})
+	for raw_peer_id in lobby.peer_ids():
+		round_bodies_state.rpc_id(int(raw_peer_id), {"round_id": round_id, "bodies": []})
 	for raw_peer_id in participant_ids:
 		authoritative_world.reset_to_spawn(int(raw_peer_id))
 	# Somente a contagem agregada vai para o log: nunca a associação peer/papel.
@@ -1506,11 +1511,20 @@ func _register_body(peer_id: int) -> void:
 	print("ROUND_BODY_ADDED round_id=%d body_id=%d bodies=%d" % [int(dto["round_id"]), int(dto["body_id"]), body_registry.size()])
 	if combat_network_test != null and combat_network_test.has_method("observe_server_body"):
 		combat_network_test.call("observe_server_body", dto)
-	round_body_added.rpc(dto)
+	# Só quem está na sala: um peer recusado (ou ainda sem entrada aceita)
+	# nunca recebe corpo.
+	var recipients := 0
+	for raw_peer_id in lobby.peer_ids():
+		round_body_added.rpc_id(int(raw_peer_id), dto)
+		recipients += 1
+	print("ROUND_BODY_SENT body_id=%d recipients=%d" % [int(dto["body_id"]), recipients])
 
 @rpc("authority", "call_remote", "reliable")
 func round_body_added(payload: Dictionary) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
+		return
+	if not joined:
+		print("CLIENT_BODY_IGNORED id=%s reason=not_joined" % client_label)
 		return
 	var dto := BodyRules.sanitize(payload)
 	# Callback de outra rodada (ou lixo) não cria corpo.
@@ -1523,6 +1537,9 @@ func round_body_added(payload: Dictionary) -> void:
 @rpc("authority", "call_remote", "reliable")
 func round_bodies_state(payload: Dictionary) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
+		return
+	if not joined:
+		print("CLIENT_BODY_IGNORED id=%s reason=not_joined" % client_label)
 		return
 	if payload.size() != 2 or typeof(payload.get("round_id")) != TYPE_INT or typeof(payload.get("bodies")) != TYPE_ARRAY:
 		return

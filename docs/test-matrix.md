@@ -78,3 +78,12 @@ por cena.
 | B6 | Corpo após desconexão do eliminado | adverso `observed_leaves` | Corpo permanece para todos | servidor + clientes |
 | B7 | Remoção no reset | `round_reset_bodies_test`, campanha | 0 corpos no início das rodadas 2 e 3 | servidor + cliente |
 | B8 | Apresentação | `round_reset_bodies_test`, sessão gráfica | Deitado no piso (altura < 0,75 m), aparência preservada, parado; correção junto à parede ≤ 0,6 m | cliente |
+
+## Protocolo 10
+
+| ID | Requisito | Onde | Resultado esperado | Fonte de verdade |
+| --- | --- | --- | --- | --- |
+| V1 | Servidor 10 recusa cliente 9 | adverso `protocol_mismatch` | `protocol_version`, mensagem com "protocolo 9", volta ao menu, nada de roster ou rodada | servidor + cliente |
+| V2 | Servidor 9 recusa cliente 10 | adverso `protocol_mismatch` | `protocol_version`, mensagem com "protocolo 10" | servidor + cliente |
+| V3 | Sem entrada parcial nem corpo após a recusa | adverso `protocol_bodies` | Lobby, mundo, rodada e combate sem o peer; corpos enviados só aos 4 da sala; cliente recusado sem corpo | servidor + clientes |
+| V4 | 10 com 10 conecta | todas as suítes de rede | Entrada aceita e partida completa | servidor |

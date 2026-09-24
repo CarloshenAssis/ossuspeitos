@@ -818,6 +818,19 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
 - Os comandos, o snapshot e o ACK não mudaram.
 - Os corpos usam duas RPCs novas e confiáveis (`round_body_added` e
   `round_bodies_state`).
-- A versão continua 9, por pedido explícito. Consequência: builds da fase 5 e
-  da fase 6 não devem ser misturadas na mesma sala (a verificação de versão
-  não distingue as duas).
+- O merge da fase 6 manteve a versão 9; a correção seguinte a subiu para 10
+  (ver abaixo).
+
+## Protocolo 10 (correção pós-fase 6)
+
+- As RPCs de corpo mudaram a superfície de rede, então `PROTOCOL_VERSION`
+  passou de 9 para 10: uma build 9 e uma 10 se recusam nos dois sentidos, com
+  a mensagem "Versão incompatível do jogo (este build usa o protocolo N)".
+- A recusa acontece antes de qualquer registro (lobby, mundo, rodada, combate).
+- Corpos só vão, por `rpc_id`, para peers que estão na sala. O cliente ignora
+  corpo enquanto não tiver entrada aceita.
+- O servidor também pode simular outra versão com `--test-protocol-version`,
+  só em binário de desenvolvimento não exportado.
+- Testes: adversos `protocol_mismatch` (menu 9 contra servidor 10 e menu 10
+  contra servidor 9) e `protocol_bodies` (cliente 9 tentando entrar numa
+  rodada com corpos: recusado, sem entrada parcial, nenhum corpo recebido).

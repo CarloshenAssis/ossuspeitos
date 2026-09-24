@@ -21,8 +21,21 @@ const MAX_PLAYERS := RoundRules.MAX_PLAYERS
 ## `submit_input` are gone; fire carries no client origin or direction.
 ## `world_snapshot` is per recipient: {tick, session, players (+ public epoch),
 ## ack (own last resolved sequence, epoch, aim buckets)}.
-const PROTOCOL_VERSION := 9
+## 10: corpos de jogadores eliminados (fase 6): `round_body_added` e
+## `round_bodies_state` com DTO público (`BodyRules.PUBLIC_KEYS`). Comandos,
+## snapshot e ACK iguais aos da versão 9, mas a superfície de RPC mudou: uma
+## build 9 e uma 10 não podem jogar juntas.
+const PROTOCOL_VERSION := 10
 const CONNECT_TIMEOUT_SECONDS := 10.0
+
+## Versão anunciada/aceita por este processo. Só um binário de
+## desenvolvimento (não exportado) pode simular outra com
+## `--test-protocol-version`, para os testes de incompatibilidade; a build
+## exportada sempre usa `PROTOCOL_VERSION`.
+static func effective_protocol_version(arguments: Dictionary) -> int:
+	if arguments.has("test-protocol-version") and OS.is_debug_build() and not OS.has_feature("template"):
+		return integer_argument(arguments, "test-protocol-version", PROTOCOL_VERSION)
+	return PROTOCOL_VERSION
 
 static func user_arguments() -> Dictionary:
 	var values := {}
