@@ -504,3 +504,34 @@ licença.
 - A importação headless do editor imprime `Parameter "t" is null` uma vez por
   GLB novo, inclusive para um GLB mínimo gerado pelo próprio Godot. É ruído do
   editor sem tela, e a importação termina com código 0.
+
+## Mira vertical (pitch) oficial
+
+**Fluxo**
+- O cliente acumula o movimento vertical do mouse em `pitch_delta` (limitado a
+  `MAX_PITCH_DELTA` por envio) e o envia em `submit_input` junto com o yaw.
+- O servidor rejeita valores não finitos, deltas grandes demais e excesso de
+  taxa (balde próprio, `MAX_PITCH_RATE`). O pitch oficial fica em ±75°
+  (`MovementRules.MAX_PITCH`) e vai no snapshot.
+- A câmera usa só o pitch oficial, como já fazia com o yaw. Não há predição
+  local. O espectador aplica o pitch do alvo.
+
+**Protocolo 8**
+- `submit_input` ganhou `pitch_delta`, e o snapshot ganhou `pitch`.
+
+**Disparo**
+- O servidor valida o rumo horizontal declarado contra o yaw oficial, como
+  antes. A inclinação declarada pode divergir no máximo 25° do pitch oficial,
+  para tolerar latência.
+- O raio usa sempre o pitch oficial (`WeaponRules.official_shot_direction`).
+  O ponto de impacto declarado continua proibido.
+- O raycast oficial passou a considerar o piso (`ArenaRules.ray_floor`). Não
+  há teto, então um tiro para cima sem obstáculo termina no alcance máximo.
+
+**Cabeça visível**
+- Os GLBs não têm ossos nem animação. Cabeça, nariz, olhos e cabelo são
+  malhas irmãs com transformação identidade.
+- Ao montar o avatar, essas malhas passam a um pivô `HeadPivot` na base da
+  cabeça (1,57 m), compensadas para ficar no mesmo lugar em repouso.
+- Os demais clientes giram só esse pivô em X pelo pitch oficial, limitado a
+  ±40°. Pescoço, tronco, raiz do avatar e colisão não inclinam.

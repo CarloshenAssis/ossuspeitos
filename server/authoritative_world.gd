@@ -15,12 +15,14 @@ func add_player(peer_id: int) -> Dictionary:
 		"spawn_position": spawn,
 		"velocity": Vector3.ZERO,
 		"yaw": MovementRules.spawn_yaw(spawn),
+		"pitch": 0.0,
 		"input": Vector2.ZERO,
 		"last_sequence": -1,
 		"last_input_msec": 0,
 		"last_command_msec": 0,
 		"command_tokens": MovementRules.COMMAND_BURST,
 		"yaw_tokens": MovementRules.MAX_YAW_DELTA * 2.0,
+		"pitch_tokens": MovementRules.MAX_PITCH_DELTA * 2.0,
 		"spawn_index": spawn_index,
 		"movement_logged": false,
 	}
@@ -37,7 +39,7 @@ func clear() -> void:
 	states.clear()
 	occupied_spawns.clear()
 
-func accept_input(peer_id: int, sequence: int, move: Vector2, yaw_delta: float, now_msec: int) -> String:
+func accept_input(peer_id: int, sequence: int, move: Vector2, yaw_delta: float, now_msec: int, pitch_delta: float = 0.0) -> String:
 	if not states.has(peer_id):
 		return "unknown_peer"
 	var state: Dictionary = states[peer_id]
@@ -50,20 +52,27 @@ func accept_input(peer_id: int, sequence: int, move: Vector2, yaw_delta: float, 
 	state["last_command_msec"] = now_msec
 	state["command_tokens"] = minf(MovementRules.COMMAND_BURST, float(state["command_tokens"]) + elapsed_seconds * MovementRules.MAX_COMMAND_RATE)
 	state["yaw_tokens"] = minf(MovementRules.MAX_YAW_DELTA * 2.0, float(state["yaw_tokens"]) + elapsed_seconds * MovementRules.MAX_YAW_RATE)
+	state["pitch_tokens"] = minf(MovementRules.MAX_PITCH_DELTA * 2.0, float(state.get("pitch_tokens", 0.0)) + elapsed_seconds * MovementRules.MAX_PITCH_RATE)
 	if float(state["command_tokens"]) < 1.0:
 		return "input_rate"
 	state["command_tokens"] = float(state["command_tokens"]) - 1.0
-	var reason := MovementRules.validate_input(move, yaw_delta)
+	var reason := MovementRules.validate_input(move, yaw_delta, pitch_delta)
 	if not reason.is_empty():
 		state["last_sequence"] = sequence
 		return reason
 	if absf(yaw_delta) > float(state["yaw_tokens"]):
 		state["last_sequence"] = sequence
 		return "yaw_rate"
+	if absf(pitch_delta) > float(state["pitch_tokens"]):
+		state["last_sequence"] = sequence
+		return "pitch_rate"
 	state["yaw_tokens"] = float(state["yaw_tokens"]) - absf(yaw_delta)
+	state["pitch_tokens"] = float(state["pitch_tokens"]) - absf(pitch_delta)
 	state["last_sequence"] = sequence
 	state["input"] = move
 	state["yaw"] = wrapf(float(state["yaw"]) + yaw_delta, -PI, PI)
+	# Pitch oficial: acumulado e preso ao limite; o cliente só pede variação.
+	state["pitch"] = MovementRules.clamp_pitch(float(state.get("pitch", 0.0)) + pitch_delta)
 	state["last_input_msec"] = now_msec
 	return ""
 

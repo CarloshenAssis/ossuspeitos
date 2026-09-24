@@ -186,6 +186,22 @@ assert_equal "four-movement-authorizations" "$(grep -c 'MOVEMENT_AUTHORIZED peer
 assert_equal "four-unique-moving-peers" "$(sed -n 's/.*MOVEMENT_AUTHORIZED peer_id=\([0-9][0-9]*\).*/\1/p' "$TMP_DIR/server.log" | sort -u | wc -l)" "4"
 assert_grep "impossible-input-rejected" 'INPUT_REJECTED peer_id=.* reason=move_magnitude' "$TMP_DIR/server.log"
 assert_grep "movement-test-ok" 'SERVER_MOVEMENT_TEST_OK players=4 .* rejected_impossible=1' "$TMP_DIR/server.log"
+
+# Mira vertical (protocolo 8): cada cliente pediu um pitch diferente junto com o
+# movimento; o servidor aplicou o pitch oficial e todo cliente recebeu, nos
+# snapshots, o pitch final de cada um dos outros três.
+SERVER_PITCHES="$(sed -n 's/.*PLAYER_STATE peer_id=\([0-9][0-9]*\) .* pitch=\(-*[0-9.][0-9.]*\).*/\1:\2/p' "$TMP_DIR/server.log" | sort)"
+assert_equal "four-official-pitches" "$(wc -l <<<"$SERVER_PITCHES" | tr -d ' ')" "4"
+assert_equal "official-pitches-applied" "$(cut -d: -f2 <<<"$SERVER_PITCHES" | sort | tr '\n' ' ')" "-0.200 -0.300 0.200 0.300 "
+for id in 1 2 3 4; do
+  OWN_PEER="$(sed -n "s/.*CLIENT_JOINED id=client-$id peer_id=\([0-9][0-9]*\).*/\1/p" "$TMP_DIR/server.log")"
+  EXPECTED_OTHERS="$(grep -v "^$OWN_PEER:" <<<"$SERVER_PITCHES" | sort | paste -sd, -)"
+  SEEN=0
+  while IFS= read -r map_line; do
+    [[ "$(tr ',' '\n' <<<"$map_line" | sort | paste -sd, -)" == "$EXPECTED_OTHERS" ]] && SEEN=1
+  done < <(sed -n "s/.*CLIENT_OBSERVED_PITCHES id=client-$id map=//p" "$TMP_DIR/client-$id.log")
+  assert_equal "client-$id-sees-official-pitch-of-others" "$SEEN" "1"
+done
 if awk '
   /SERVER_MOVEMENT_TEST_OK/ {
     for (field = 1; field <= NF; field++) {

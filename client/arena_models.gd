@@ -36,6 +36,16 @@ const CHARACTER_MODEL := "CharacterModel"
 ## Só o nó visual é ajustado: desce até o piso e gira meia volta. Escala real.
 const CHARACTER_OFFSET := Vector3(0.0, -MovementRules.PLAYER_HEIGHT, 0.0)
 const CHARACTER_YAW := PI
+## Os GLBs não têm ossos: cabeça, nariz, olhos e cabelo são malhas irmãs com
+## transformação identidade (vértices já no lugar). Para a cabeça acompanhar a
+## mira, essas malhas passam a um pivô na base da cabeça (1,57 m no modelo),
+## compensadas para não sair do lugar em repouso. Só o pivô gira; pescoço,
+## tronco e colisão ficam parados.
+const HEAD_PIVOT := "HeadPivot"
+const HEAD_PIVOT_HEIGHT := 1.57
+const HEAD_PARTS := ["Head", "Nose", "Eye", "Hair"]
+## Inclinação natural da cabeça: a mira pode ir além (MAX_PITCH), a cabeça não.
+const HEAD_PITCH_LIMIT := deg_to_rad(40.0)
 
 ## Raiz do avatar (recebe posição e yaw oficiais) com o GLB da aparência
 ## pública. `appearance_id` fora da allowlist cai no padrão.
@@ -50,8 +60,35 @@ static func build_character(appearance_id: Variant) -> Node3D:
 	model.position = CHARACTER_OFFSET
 	model.rotation.y = CHARACTER_YAW
 	_apply_authored_colors(model)
+	_build_head_pivot(model)
 	root.add_child(model)
 	return root
+
+static func _build_head_pivot(model: Node3D) -> void:
+	var parts: Array = []
+	for node in model.find_children("*", "MeshInstance3D", true, false):
+		for prefix in HEAD_PARTS:
+			if str(node.name).begins_with(prefix):
+				parts.append(node)
+				break
+	if parts.is_empty():
+		return
+	var parent := (parts[0] as Node).get_parent() as Node3D
+	var pivot := Node3D.new()
+	pivot.name = HEAD_PIVOT
+	pivot.position = Vector3(0.0, HEAD_PIVOT_HEIGHT, 0.0)
+	parent.add_child(pivot)
+	for part in parts:
+		var mesh_node := part as MeshInstance3D
+		var local := mesh_node.transform
+		mesh_node.get_parent().remove_child(mesh_node)
+		pivot.add_child(mesh_node)
+		mesh_node.transform = Transform3D(local.basis, local.origin - pivot.position)
+
+## Rotação da cabeça (no pivô) para um pitch oficial. O modelo olha para +Z
+## no próprio espaço; girar em X com ângulo negativo levanta o rosto.
+static func head_rotation_for_pitch(pitch: float) -> float:
+	return -clampf(MovementRules.clamp_pitch(pitch), -HEAD_PITCH_LIMIT, HEAD_PITCH_LIMIT)
 
 ## O gerador do pacote gravou a paleta sRGB (ex.: tênis #131518 = 0,075)
 ## direto em `baseColorFactor`, que o glTF trata como linear; importado ao pé

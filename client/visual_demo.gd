@@ -8,6 +8,7 @@ var test_mode := false
 var arena_view: ArenaView
 var local_position := MovementRules.SPAWN_POINTS[0]
 var local_yaw := MovementRules.spawn_yaw(MovementRules.SPAWN_POINTS[0])
+var local_pitch := 0.0
 var elapsed := 0.0
 var test_frames := 0
 
@@ -49,6 +50,7 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		local_yaw = wrapf(local_yaw - event.relative.x * 0.0025, -PI, PI)
+		local_pitch = MovementRules.clamp_pitch(local_pitch - event.relative.y * 0.0025)
 
 func _demo_snapshot() -> Array:
 	return _demo_snapshot_at(elapsed)
@@ -59,6 +61,7 @@ func _demo_snapshot_at(time: float) -> Array:
 		"position": local_position,
 		"velocity": Vector3.ZERO,
 		"yaw": local_yaw,
+		"pitch": local_pitch,
 		"spawn_index": 0,
 	}]
 	for index in SIMULATED_PLAYER_COUNT:

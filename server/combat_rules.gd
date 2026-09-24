@@ -27,7 +27,9 @@ func request_shot(peer_id: int, intent: Variant, context: Variant, now_msec: int
 		"accepted": true,
 		"sequence": sequence,
 		"origin": context["eye_position"],
-		"direction": _apply_server_spread(claimed_direction.normalized(), float(definition.spread_radians)),
+		# Rumo horizontal validado com o pitch oficial; a componente vertical
+		# declarada pelo cliente nunca é usada.
+		"direction": _apply_server_spread(WeaponRules.official_shot_direction(claimed_direction, float(context.get("pitch", 0.0))), float(definition.spread_radians)),
 		"max_distance": float(definition.range_meters),
 		"damage": float(definition.damage),
 		"weapon_id": definition.id,
@@ -86,7 +88,7 @@ func _validate_request(peer_id: int, intent: Variant, context: Variant, now_msec
 	var origin_error := WeaponRules.validate_origin(intent["origin"], context["eye_position"])
 	if not origin_error.is_empty():
 		return origin_error
-	return WeaponRules.validate_direction_for_yaw(intent["direction"], context["yaw"])
+	return WeaponRules.validate_direction_for_aim(intent["direction"], context["yaw"], context.get("pitch", 0.0))
 
 func _apply_server_spread(direction: Vector3, spread_radians: float) -> Vector3:
 	if spread_radians <= 0.0:

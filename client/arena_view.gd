@@ -174,6 +174,9 @@ func apply_snapshot(states: Array) -> void:
 func _place_rig(state: Dictionary) -> void:
 	player_rig.position = state["position"]
 	player_rig.rotation.y = float(state["yaw"])
+	# Pitch oficial na câmera (próprio jogador, ou o alvo observado): a mira,
+	# o retículo no centro e a pistola na mão sobem e descem juntos.
+	camera.rotation.x = MovementRules.clamp_pitch(state.get("pitch", 0.0))
 	_update_zone_label(player_rig.position)
 
 func _process(delta: float) -> void:
@@ -185,6 +188,10 @@ func _process(delta: float) -> void:
 		var state: Dictionary = targets[peer_id]
 		avatar.position = avatar.position.lerp(state["position"], weight)
 		avatar.rotation.y = lerp_angle(avatar.rotation.y, float(state["yaw"]), weight)
+		# Só a cabeça acompanha o pitch oficial; o corpo continua de pé.
+		var head := avatar.find_child(ArenaModels.HEAD_PIVOT, true, false) as Node3D
+		if head != null:
+			head.rotation.x = lerpf(head.rotation.x, ArenaModels.head_rotation_for_pitch(state.get("pitch", 0.0)), weight)
 		# Em primeira pessoa como espectador, a câmera fica dentro do alvo:
 		# chapéu, braços e visor dele ficariam colados à lente.
 		var show_model: bool = peer_id != spectator_target_peer_id
