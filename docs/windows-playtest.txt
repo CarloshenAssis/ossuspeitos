@@ -12,7 +12,7 @@ ARQUIVOS
 
 VERSÃO
 Todos os jogadores precisam da MESMA build (mesmo "protocolo" em VERSAO.txt).
-Com builds diferentes a entrada é recusada com "Versão diferente do jogo".
+Com builds diferentes a entrada é recusada com "Versão incompatível do jogo".
 
 ABRIR
 1. Extraia o ZIP inteiro numa pasta (não rode de dentro do ZIP).
@@ -20,18 +20,32 @@ ABRIR
    O Windows pode mostrar "O Windows protegeu o computador" porque o
    executável não é assinado: clique em "Mais informações" > "Executar assim mesmo".
 
+MENU
+- Digite seu nome (até 20 caracteres: letras, números, espaço, - e _).
+  O último nome válido fica salvo neste PC; endereço e porta não são salvos.
+- JOGAR ONLINE: ainda sem servidor online nesta build ("Servidor online
+  ainda não configurado"). Use a partida local ou LAN.
+- CRIAR PARTIDA LOCAL · ENTRAR EM PARTIDA LAN · COMO JOGAR (controles e
+  regras) · CONFIGURAÇÕES (volume, sensibilidade do mouse, tela cheia,
+  tamanho da janela, reduzir movimento; salvas neste PC) · SAIR.
+- Enter confirma, Esc volta ou cancela, Tab muda de campo.
+- Enquanto conecta, CANCELAR interrompe; em caso de erro, TENTAR NOVAMENTE
+  repete a última tentativa.
+
 PARTIDA COM 4 JOGADORES NO MESMO PC
 A rodada só começa com pelo menos 4 jogadores.
 1. Abra o ArmedMystery.exe 4 vezes (4 janelas).
-2. Na 1ª janela: "Criar partida local" (porta 9080). Ela vira o anfitrião.
-3. Nas outras 3: "Entrar em partida" com endereço 127.0.0.1 e porta 9080.
-   Cada janela já vem com um nome diferente (jogador-NNNN).
+2. Na 1ª janela: "CRIAR PARTIDA LOCAL" (porta 9080). Ela vira o anfitrião.
+3. Nas outras 3: "ENTRAR EM PARTIDA LAN" com endereço 127.0.0.1 e porta 9080.
+   Use um nome diferente em cada janela: o nome salvo é o mesmo para todas
+   as janelas deste PC, e a sala recusa nome repetido ("Já existe alguém com
+   esse nome nesta sala").
 
 PARTIDA NA REDE LOCAL (LAN)
 1. No PC anfitrião, marque "Permitir jogadores da rede local (LAN)" antes
-   de "Criar partida local". O endereço da sala aparece no canto da tela.
+   de "CRIAR PARTIDA". O endereço da sala aparece no canto da tela.
 2. Se o Firewall do Windows perguntar, permita em "Redes privadas".
-3. Nos outros PCs: "Entrar em partida" com o IP mostrado (ex.: 192.168.0.10).
+3. Nos outros PCs: "ENTRAR EM PARTIDA LAN" com o IP mostrado (ex.: 192.168.0.10).
 Sem essa opção, a sala só aceita conexões deste mesmo PC.
 
 A RODADA
@@ -67,8 +81,9 @@ PROBLEMAS COMUNS
   outra porta (a mesma porta em quem cria e em quem entra).
 - "Não foi possível conectar": confira IP e porta, se a sala foi criada e,
   na LAN, se o anfitrião marcou a opção LAN e liberou o firewall.
-- "Sala cheia, em andamento com 8 jogadores ou nome já usado": use outro
-  nome ou espere alguém sair.
+- "A sala está cheia (8 jogadores)": espere alguém sair ou crie outra sala.
+- "Já existe alguém com esse nome nesta sala": escolha outro nome.
+- "Tempo esgotado": o endereço respondeu mas a sala não; confira a porta.
 - Log do servidor da sala: %APPDATA%\Godot\app_userdata\Armed Mystery\hosted-server.log
 - Log de um jogador: abra ArmedMystery.console.exe em vez do .exe; o log
   aparece na janela de console. Ao relatar um problema, mande esse log, o

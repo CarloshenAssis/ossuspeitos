@@ -14,10 +14,12 @@ tarefa; não versionada). As perspectivas anexadas servem só de atmosfera.
 | 4 — resposta local e apresentação | `claude/charming-darwin-kz3xvn`, reiniciada de `7c98bd9` | integrada (ver `docs/netcode.md`) | [#19](https://github.com/CarloshenAssis/ossuspeitos/pull/19) | `79ba755` → merge `f8cd36c` |
 | 5 — campanha integrada e build | `claude/charming-darwin-kz3xvn`, reiniciada de `f8cd36c` | integrada (ver `docs/test-matrix.md`) | [#20](https://github.com/CarloshenAssis/ossuspeitos/pull/20) | `f10ef87` → merge `f76d4cb` |
 | 6 — reset completo, pickups e corpos | `claude/charming-darwin-kz3xvn`, reiniciada de `f76d4cb` | integrada | [#21](https://github.com/CarloshenAssis/ossuspeitos/pull/21) | `351a291` → merge `f82ad7c` |
-| 6.1 — protocolo 10 | `claude/charming-darwin-kz3xvn`, reiniciada de `f82ad7c` | em PR | — | — |
+| 6.1 — protocolo 10 | `claude/charming-darwin-kz3xvn`, reiniciada de `f82ad7c` | integrada; build Windows protocolo 10 gerada na main | [#22](https://github.com/CarloshenAssis/ossuspeitos/pull/22) | `8153e64` → merge `18da540` |
+| 7 — menu principal e fluxo de conexão | `claude/charming-darwin-kz3xvn`, reiniciada de `18da540` | em PR | — | — |
 
 Pendências:
-- protocolo 10: PR, CI do HEAD, merge e build Windows identificada como protocolo 10.
+- fase 7: PR, CI do HEAD e merge.
+- modo online: sem servidor Railway implantado (ver `docs/online-endpoint.md`).
 
 Retomada: `git fetch origin && git checkout claude/charming-darwin-kz3xvn`.
 Testes: ver `.github/workflows/godot-network-tests.yml`.

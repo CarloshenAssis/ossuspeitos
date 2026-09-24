@@ -54,8 +54,11 @@ func validate_join(peer_id: int, raw_label: String) -> String:
 	if _entries.has(peer_id):
 		return "invalid_client"
 	var clean := RoundRules.sanitize_label(raw_label)
-	if is_full() or _labels.has(clean):
+	if is_full():
 		return "room_unavailable"
+	# Fase 7: nome repetido tem motivo próprio (o menu pede outro nome).
+	if _labels.has(clean):
+		return "name_taken"
 	return ""
 
 ## Registra a sessão. Devolve "" em caso de sucesso ou o motivo da recusa.

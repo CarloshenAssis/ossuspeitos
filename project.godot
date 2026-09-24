@@ -16,3 +16,7 @@ limits/debugger/max_queued_messages=2048
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 
+
+[armed_mystery]
+
+network/online_url=""

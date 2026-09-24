@@ -342,3 +342,49 @@ jobs:
           name: godot-match-test-logs
           path: ${{ runner.temp }}/godot-match-logs
           if-no-files-found: warn
+
+  menu-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Create log directory
+        run: mkdir -p "$RUNNER_TEMP/godot-menu-logs"
+
+      - name: Validate project
+        run: |
+          set -o pipefail
+          godot --headless --path . --editor --quit 2>&1 \
+            | tee "$RUNNER_TEMP/godot-menu-logs/parser.log"
+
+      - name: Validate menu, connection states and settings
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/menu_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-menu-logs/menu.log"
+          grep -q 'MENU_TEST_OK' "$RUNNER_TEMP/godot-menu-logs/menu.log"
+
+      - name: Run menu connection flow with real processes
+        run: |
+          set -o pipefail
+          TEST_LOG_DIR="$RUNNER_TEMP/godot-menu-logs/flow" GAME_BIN="$(command -v godot)" \
+            ./tests/menu_flow_test.sh 2>&1 | tee "$RUNNER_TEMP/godot-menu-logs/flow.log"
+          grep -q 'MENU_FLOW_TEST_OK scenes=9' "$RUNNER_TEMP/godot-menu-logs/flow.log"
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-menu-test-logs
+          path: ${{ runner.temp }}/godot-menu-logs
+          if-no-files-found: warn

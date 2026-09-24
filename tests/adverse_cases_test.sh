@@ -126,7 +126,7 @@ run_session_case() {
     echo "PROCESS_STATUS case=$CASE name=${names[$i]} status=$LAST_STATUS expected=${expected[$i]}"
     assert_equal "process-${names[$i]}-exit" "$LAST_STATUS" "${expected[$i]}"
     if [[ "${expected[$i]}" == 1 ]]; then
-      assert_grep "${names[$i]}-refused-with-reason" "JOIN_REJECTED id=[^ ]+ reason=${REFUSAL_REASON[${names[$i]}]:-room_unavailable}" "$CASE_DIR/${names[$i]}.log"
+      assert_grep "${names[$i]}-refused-with-reason" "JOIN_REJECTED id=[^ ]+ reason=${REFUSAL_REASON[${names[$i]}]:-$([[ "${names[$i]}" == *-duplicate ]] && echo name_taken || echo room_unavailable)}" "$CASE_DIR/${names[$i]}.log"
       assert_no_grep "${names[$i]}-never-joined" 'JOIN_ACCEPTED|CLIENT_BODY_SHOWN|CLIENT_PRIVATE_ROLE_RECEIVED' "$CASE_DIR/${names[$i]}.log"
     elif [[ "${expected[$i]}" == 0 ]]; then
       assert_grep "${names[$i]}-coordinated-shutdown" 'CLIENT_SHUTDOWN_COMPLETE' "$CASE_DIR/${names[$i]}.log"
@@ -150,13 +150,13 @@ run_session_case() {
 # --- 1. Endereço inválido e servidor indisponível (menu) ---------------------------
 case_menu_errors() {
   local port=$1 status
-  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-exit-on-return=true --menu-auto=join \
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-settings-path="$CASE_DIR/settings-$RANDOM.cfg" --menu-exit-on-return=true --menu-auto=join \
     --menu-address=999.1.1.1 --menu-port="$port" >"$CASE_DIR/invalid-address.log" 2>&1 && status=0 || status=$?
   assert_equal invalid-address-exit "$status" 0
   assert_grep invalid-address-message 'MENU_INPUT_INVALID field=address' "$CASE_DIR/invalid-address.log"
   assert_no_grep invalid-address-no-connect 'MENU_CONNECTING|CLIENT_CONNECTING' "$CASE_DIR/invalid-address.log"
   # Sem servidor: volta ao menu com mensagem (recarga real da cena) e não repete.
-  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-auto=join --menu-address=127.0.0.1 \
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-settings-path="$CASE_DIR/settings-$RANDOM.cfg" --menu-auto=join --menu-address=127.0.0.1 \
     --menu-port="$port" --menu-quit-after-reload=true >"$CASE_DIR/no-server.log" 2>&1 && status=0 || status=$?
   assert_equal no-server-exit "$status" 0
   assert_grep no-server-returned 'MENU_RETURNED reason=(connection_failed|timeout)' "$CASE_DIR/no-server.log"
@@ -178,7 +178,7 @@ case_version_and_crash() {
   assert_grep server-refused-version 'JOIN_REFUSED peer_id=[0-9]+ reason=protocol_version count=0' "$CASE_DIR/server.log"
   local joiners=()
   for id in 1 2; do
-    "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-exit-on-return=true --menu-auto=join \
+    "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-settings-path="$CASE_DIR/settings-$RANDOM.cfg" --menu-exit-on-return=true --menu-auto=join \
       --menu-name="jogador$id" --menu-address=127.0.0.1 --menu-port="$port" >"$CASE_DIR/joiner-$id.log" 2>&1 &
     joiners+=("$!"); ALL_PIDS+=("$!")
   done
@@ -202,7 +202,7 @@ case_protocol_mismatch() {
   "$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 --port="$port" >"$CASE_DIR/server-10.log" 2>&1 &
   local server_pid=$!; ALL_PIDS+=("$server_pid")
   wait_marker 'SERVER_READY' "$CASE_DIR/server-10.log" "$server_pid"
-  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-exit-on-return=true --menu-auto=join --menu-name=antigo \
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-settings-path="$CASE_DIR/settings-$RANDOM.cfg" --menu-exit-on-return=true --menu-auto=join --menu-name=antigo \
     --menu-address=127.0.0.1 --menu-port="$port" --test-protocol-version=9 >"$CASE_DIR/client-9.log" 2>&1 && status=0 || status=$?
   assert_equal client-9-exit "$status" 0
   assert_grep client-9-announces-9 'CLIENT_PROTOCOL id=antigo version=9' "$CASE_DIR/client-9.log"
@@ -218,7 +218,7 @@ case_protocol_mismatch() {
   "$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 --port="$((port + 1))" --test-protocol-version=9 >"$CASE_DIR/server-9.log" 2>&1 &
   server_pid=$!; ALL_PIDS+=("$server_pid")
   wait_marker 'SERVER_READY' "$CASE_DIR/server-9.log" "$server_pid"
-  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-exit-on-return=true --menu-auto=join --menu-name=novo \
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-settings-path="$CASE_DIR/settings-$RANDOM.cfg" --menu-exit-on-return=true --menu-auto=join --menu-name=novo \
     --menu-address=127.0.0.1 --menu-port="$((port + 1))" >"$CASE_DIR/client-10.log" 2>&1 && status=0 || status=$?
   assert_equal client-10-exit "$status" 0
   assert_grep client-10-announces-10 'CLIENT_PROTOCOL id=novo version=10' "$CASE_DIR/client-10.log"
@@ -247,7 +247,7 @@ PY
   "$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 --port="$port" >"$CASE_DIR/server.log" 2>&1 && status=0 || status=$?
   assert_equal busy-server-exit "$status" 1
   assert_grep busy-server-clear-error 'SERVER_ERROR unable_to_listen' "$CASE_DIR/server.log"
-  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-exit-on-return=true --menu-auto=host \
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-settings-path="$CASE_DIR/settings-$RANDOM.cfg" --menu-exit-on-return=true --menu-auto=host \
     --menu-port="$port" >"$CASE_DIR/menu-host.log" 2>&1 && status=0 || status=$?
   assert_equal busy-menu-exit "$status" 0
   assert_grep busy-menu-clear-error 'MENU_HOST_ERROR reason=port_in_use' "$CASE_DIR/menu-host.log"
@@ -265,19 +265,20 @@ case_double_click() {
   "$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 --port="$port" >"$CASE_DIR/server.log" 2>&1 &
   local server_pid=$!; ALL_PIDS+=("$server_pid")
   wait_marker 'SERVER_READY' "$CASE_DIR/server.log" "$server_pid"
-  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-exit-on-return=true --menu-auto=join-twice \
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-settings-path="$CASE_DIR/settings-$RANDOM.cfg" --menu-exit-on-return=true --menu-auto=join-twice \
     --menu-address=127.0.0.1 --menu-port="$port" --menu-leave-on=joined >"$CASE_DIR/join-twice.log" 2>&1 && status=0 || status=$?
   assert_equal join-twice-exit "$status" 0
-  assert_grep join-twice-ignored 'MENU_DUPLICATE_IGNORED action=join' "$CASE_DIR/join-twice.log"
+  assert_grep join-twice-ignored 'MENU_PRESS_IGNORED id=join_enter|MENU_DUPLICATE_IGNORED action=join' "$CASE_DIR/join-twice.log"
   assert_equal join-twice-one-connection "$(grep -c 'CLIENT_CONNECTING' "$CASE_DIR/join-twice.log")" 1
   assert_no_grep join-twice-no-signal-errors 'already connected' "$CASE_DIR/join-twice.log"
   for _ in {1..40}; do grep -q 'CLIENT_LEFT' "$CASE_DIR/server.log" && break; sleep 0.05; done
   assert_equal server-saw-one-peer "$(grep -c 'PEER_CONNECTED' "$CASE_DIR/server.log")" 1
   kill "$server_pid"; status_of "$server_pid"
-  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-exit-on-return=true --menu-auto=host-twice \
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-settings-path="$CASE_DIR/settings-$RANDOM.cfg" --menu-exit-on-return=true --menu-auto=host-twice \
     --menu-port="$((port + 1))" --menu-leave-on=joined >"$CASE_DIR/host-twice.log" 2>&1 && status=0 || status=$?
   assert_equal host-twice-exit "$status" 0
   assert_equal host-twice-one-server "$(grep -c 'MENU_HOST_SPAWNED' "$CASE_DIR/host-twice.log")" 1
+  assert_grep host-twice-ignored 'MENU_PRESS_IGNORED id=host_create|MENU_DUPLICATE_IGNORED action=host' "$CASE_DIR/host-twice.log"
   assert_grep host-twice-server-stopped 'MENU_HOSTED_SERVER_STOPPED pid=[0-9]+ reason=left' "$CASE_DIR/host-twice.log"
 }
 

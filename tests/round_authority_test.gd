@@ -295,7 +295,7 @@ func _test_invalid_values_do_not_corrupt_the_round() -> void:
 	_expect(lobby_authority.join(101, "bad label!", BASE_MSEC) == "invalid_client", "a label with symbols is rejected")
 	_expect(lobby_authority.join(101, "client-1", BASE_MSEC).is_empty(), "a valid session is accepted")
 	_expect(lobby_authority.join(101, "client-other", BASE_MSEC) == "invalid_client", "a duplicated peer is rejected")
-	_expect(lobby_authority.join(102, "client-1", BASE_MSEC) == "room_unavailable", "a duplicated label is rejected")
+	_expect(lobby_authority.join(102, "client-1", BASE_MSEC) == "name_taken", "a duplicated label is rejected as name_taken")
 	_expect(lobby_authority.lobby.size() == 1, "the rejected sessions did not enter the lobby")
 	lobby_authority.leave(4242, BASE_MSEC)
 	_expect(lobby_authority.lobby.size() == 1, "leaving an unknown peer changes nothing")

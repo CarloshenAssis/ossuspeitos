@@ -1,159 +1,726 @@
 class_name DesktopMenu
 extends CanvasLayer
 
-## Menu inicial do teste local no PC: criar partida, entrar em partida ou sair.
-## Só coleta e valida o que o jogador digitou; quem cria processos e conecta é
-## `NetworkApp` com `DesktopSession`.
+## Menu principal (fase 7). Apresentação e navegação: painéis (principal,
+## criar partida local, entrar por LAN, jogar online, como jogar,
+## configurações) e o painel de status do fluxo de conexão (`MenuFlow`).
+## Valida o que o jogador digita e emite pedidos; quem cria processos e
+## conecta é a `NetworkApp` (com `DesktopSession`). O menu não decide regra de
+## rodada, não usa o nome como identidade, não instancia a mansão e não envia
+## RPC.
 
-signal host_requested(player_name: String, port: int, lan: bool)
-signal join_requested(player_name: String, address: String, port: int)
+signal host_requested(player_name: String, port: int, lan: bool, attempt: int)
+signal join_requested(player_name: String, address: String, port: int, attempt: int)
+signal online_requested(player_name: String, url: String, attempt: int)
+signal cancel_requested(attempt: int)
 signal quit_requested
 signal input_rejected(field: String)
+signal settings_changed(settings: MenuSettings)
 
-var name_edit: LineEdit
-var host_port_edit: LineEdit
+const PANELS := ["main", "host", "join", "online", "howto", "settings"]
+const CARD_WIDTH := 452.0
+
+## Argumentos do processo (endpoint online, automação). Definir antes de
+## adicionar o menu à árvore.
+var arguments: Dictionary = {}
+var flow := MenuFlow.new()
+var settings: MenuSettings
+var online: Dictionary = {}
+var panel_name := "main"
+var panels: Dictionary = {}
+var buttons: Dictionary = {}
+var fields: Dictionary = {}
+var errors: Dictionary = {}
 var lan_check: CheckBox
-var join_address_edit: LineEdit
-var join_port_edit: LineEdit
-var host_button: Button
-var join_button: Button
-var quit_button: Button
+var status_box: VBoxContainer
 var status_label: Label
+var spinner: MenuSpinner
+var backdrop: MenuBackdrop
+var root: Control
+var card: PanelContainer
+var panel_stack: Control
+var last_request: Dictionary = {}
+var sounds_played: Dictionary = {}
+var _player: AudioStreamPlayer
+var _fade: Tween
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	var background := ColorRect.new()
-	background.color = Color(0.11, 0.12, 0.16)
-	background.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(background)
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
-	var panel := VBoxContainer.new()
-	panel.custom_minimum_size = Vector2(520, 0)
-	panel.add_theme_constant_override("separation", 6)
-	center.add_child(panel)
+	settings = MenuSettings.load_saved()
+	settings.apply_audio()
+	settings.apply_saved_display_once()
+	online = OnlineEndpoint.resolve(arguments)
+	root = Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.theme = MenuTheme.theme()
+	add_child(root)
+	backdrop = MenuBackdrop.new()
+	backdrop.reduce_motion = settings.reduce_motion
+	root.add_child(backdrop)
+	_build_card()
+	if DisplayServer.get_name() != "headless":
+		_player = AudioStreamPlayer.new()
+		add_child(_player)
+	_show_panel("main", false)
+	print("MENU_READY name=%s online=%s source=%s" % [fields["name"].text, "configured" if bool(online["ok"]) else str(online["reason"]), online["source"]])
 
-	panel.add_child(_label("ARMED MYSTERY — TESTE LOCAL", 22))
-	panel.add_child(_label("Abra o jogo 4 vezes neste PC (ou em PCs da mesma rede): um cria a partida, os outros entram.", 13, true))
+# --- Construção ---------------------------------------------------------------------
 
-	var name_row := HBoxContainer.new()
-	name_row.add_child(_label("Seu nome", 14))
-	name_edit = _line(DesktopSession.default_player_name(), "letras, números, - ou _")
-	name_row.add_child(name_edit)
-	panel.add_child(name_row)
+func _build_card() -> void:
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 18)
+	margin.add_theme_constant_override("margin_left", 44)
+	root.add_child(margin)
+	var column := HBoxContainer.new()
+	margin.add_child(column)
+	card = PanelContainer.new()
+	card.add_theme_stylebox_override("panel", MenuTheme.card_style())
+	card.custom_minimum_size.x = CARD_WIDTH
+	card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	column.add_child(card)
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", 6)
+	card.add_child(body)
+	var title := MenuTheme.label("ARMED MYSTERY", MenuTheme.TITLE_SIZE, MenuTheme.CREAM)
+	title.add_theme_font_override("font", MenuTheme.serif())
+	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	title.add_theme_constant_override("shadow_offset_y", 2)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.add_child(title)
+	var subtitle := MenuTheme.label("Alguém nesta mansão não é quem diz ser.", MenuTheme.SUBTITLE_SIZE, MenuTheme.GOLD)
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.add_child(subtitle)
+	body.add_child(HSeparator.new())
+	panel_stack = VBoxContainer.new()
+	body.add_child(panel_stack)
+	panels["main"] = _build_main()
+	panels["host"] = _build_host()
+	panels["join"] = _build_join()
+	panels["online"] = _build_online()
+	panels["howto"] = _build_howto()
+	panels["settings"] = _build_settings()
+	for panel_id in PANELS:
+		panel_stack.add_child(panels[panel_id])
+	status_box = _build_status()
+	body.add_child(status_box)
+	var footer := MenuTheme.label("Protocolo %d · build de teste" % NetworkConfig.PROTOCOL_VERSION, MenuTheme.SMALL_SIZE - 1, Color(MenuTheme.MUTED, 0.7))
+	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.add_child(footer)
 
-	panel.add_child(HSeparator.new())
-	panel.add_child(_label("1. Criar partida local", 16))
-	var host_row := HBoxContainer.new()
-	host_row.add_child(_label("Porta", 14))
-	host_port_edit = _line(str(DesktopSession.DEFAULT_PORT), "porta")
-	host_port_edit.custom_minimum_size.x = 100
-	host_row.add_child(host_port_edit)
+func _panel() -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 7)
+	box.visible = false
+	return box
+
+func _field(id: String, label_text: String, value: String, placeholder: String, parent: Container, max_length: int = 0) -> LineEdit:
+	var row := VBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
+	row.add_child(MenuTheme.label(label_text, MenuTheme.SMALL_SIZE, MenuTheme.PARCHMENT))
+	var edit := LineEdit.new()
+	edit.text = value
+	edit.placeholder_text = placeholder
+	edit.custom_minimum_size.y = 36
+	edit.focus_mode = Control.FOCUS_ALL
+	if max_length > 0:
+		edit.max_length = max_length
+	edit.text_submitted.connect(func(_text): _submit_current())
+	row.add_child(edit)
+	var error := MenuTheme.label("", MenuTheme.SMALL_SIZE, MenuTheme.ERROR, true)
+	error.visible = false
+	row.add_child(error)
+	parent.add_child(row)
+	fields[id] = edit
+	errors[id] = error
+	return edit
+
+func _button(id: String, text: String, parent: Container, primary: bool, action: Callable) -> Button:
+	var node := MenuTheme.button(text, primary)
+	node.pressed.connect(func():
+		print("MENU_BUTTON id=%s panel=%s state=%s" % [id, panel_name, flow.state_name()])
+		action.call())
+	node.focus_entered.connect(func(): _sound("ui_move"))
+	parent.add_child(node)
+	buttons[id] = node
+	return node
+
+func _row() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	return row
+
+func _build_main() -> VBoxContainer:
+	var box := _panel()
+	var saved_name := settings.player_name if not settings.player_name.is_empty() else DesktopSession.default_player_name()
+	_field("name", "Seu nome", saved_name, "Como os outros vão te ver", box, RoundRules.MAX_LABEL_LENGTH)
+	var online_primary := bool(online["ok"])
+	_button("online", "JOGAR ONLINE", box, online_primary, func(): _show_panel("online"))
+	_button("host", "CRIAR PARTIDA LOCAL", box, not online_primary, func(): _open_with_name("host"))
+	_button("join", "ENTRAR EM PARTIDA LAN", box, false, func(): _open_with_name("join"))
+	var row := _row()
+	_button("howto", "COMO JOGAR", row, false, func(): _show_panel("howto"))
+	_button("settings", "CONFIGURAÇÕES", row, false, func(): _show_panel("settings"))
+	for id in ["howto", "settings"]:
+		(buttons[id] as Button).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(row)
+	if MenuSettings.supports_quit():
+		_button("quit", "SAIR", box, false, _quit)
+	return box
+
+func _build_host() -> VBoxContainer:
+	var box := _panel()
+	box.add_child(MenuTheme.heading("Criar partida local"))
+	_field("host_name", "Seu nome", "", "", box, RoundRules.MAX_LABEL_LENGTH)
+	_field("host_port", "Porta", str(DesktopSession.DEFAULT_PORT), "ex.: %d" % DesktopSession.DEFAULT_PORT, box, 5)
 	lan_check = CheckBox.new()
-	lan_check.text = "Permitir jogadores da rede local (LAN)"
-	lan_check.button_pressed = false
-	host_row.add_child(lan_check)
-	panel.add_child(host_row)
-	host_button = Button.new()
-	host_button.text = "Criar partida local"
-	host_button.pressed.connect(_on_host_pressed)
-	panel.add_child(host_button)
+	lan_check.text = "Permitir jogadores da rede local"
+	lan_check.focus_mode = Control.FOCUS_ALL
+	box.add_child(lan_check)
+	var hint := MenuTheme.label("Desmarcado: a partida fica só neste computador.\nMarcado: outros computadores da mesma rede entram pelo seu IP local.", MenuTheme.SMALL_SIZE, MenuTheme.MUTED, true)
+	box.add_child(hint)
+	var row := _row()
+	_button("host_back", "VOLTAR", row, false, func(): _show_panel("main"))
+	_button("host_create", "CRIAR PARTIDA", row, true, _submit_host)
+	_expand(row)
+	box.add_child(row)
+	return box
 
-	panel.add_child(HSeparator.new())
-	panel.add_child(_label("2. Entrar em partida", 16))
-	var join_row := HBoxContainer.new()
-	join_row.add_child(_label("Endereço", 14))
-	join_address_edit = _line(DesktopSession.LOOPBACK_ADDRESS, "ex.: 192.168.0.10")
-	join_address_edit.custom_minimum_size.x = 200
-	join_row.add_child(join_address_edit)
-	join_row.add_child(_label("Porta", 14))
-	join_port_edit = _line(str(DesktopSession.DEFAULT_PORT), "porta")
-	join_port_edit.custom_minimum_size.x = 100
-	join_row.add_child(join_port_edit)
-	panel.add_child(join_row)
-	join_button = Button.new()
-	join_button.text = "Entrar em partida"
-	join_button.pressed.connect(_on_join_pressed)
-	panel.add_child(join_button)
+func _build_join() -> VBoxContainer:
+	var box := _panel()
+	box.add_child(MenuTheme.heading("Entrar em partida LAN"))
+	_field("join_name", "Seu nome", "", "", box, RoundRules.MAX_LABEL_LENGTH)
+	var address_row := _row()
+	var address_col := VBoxContainer.new()
+	address_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	address_row.add_child(address_col)
+	_field("join_address", "Endereço (IP do anfitrião)", DesktopSession.LOOPBACK_ADDRESS, "ex.: 192.168.0.10", address_col, 253)
+	var port_col := VBoxContainer.new()
+	port_col.custom_minimum_size.x = 110
+	address_row.add_child(port_col)
+	_field("join_port", "Porta", str(DesktopSession.DEFAULT_PORT), str(DesktopSession.DEFAULT_PORT), port_col, 5)
+	box.add_child(address_row)
+	box.add_child(MenuTheme.label("No mesmo computador, use 127.0.0.1.", MenuTheme.SMALL_SIZE, MenuTheme.MUTED, true))
+	var row := _row()
+	_button("join_back", "VOLTAR", row, false, func(): _show_panel("main"))
+	_button("join_enter", "ENTRAR", row, true, _submit_join)
+	_expand(row)
+	box.add_child(row)
+	return box
 
-	panel.add_child(HSeparator.new())
-	quit_button = Button.new()
-	quit_button.text = "3. Sair"
-	quit_button.pressed.connect(func(): quit_requested.emit())
-	panel.add_child(quit_button)
+func _build_online() -> VBoxContainer:
+	var box := _panel()
+	box.add_child(MenuTheme.heading("Jogar online"))
+	var text := ""
+	if bool(online["ok"]):
+		text = "Servidor: %s%s" % [online["host"], "" if bool(online["secure"]) else " (sem criptografia)"]
+	else:
+		text = str(online["message"])
+	var info := MenuTheme.label(text, MenuTheme.BODY_SIZE, MenuTheme.PARCHMENT if bool(online["ok"]) else MenuTheme.ERROR, true)
+	info.name = "OnlineInfo"
+	box.add_child(info)
+	var row := _row()
+	_button("online_back", "VOLTAR", row, not bool(online["ok"]), func(): _show_panel("main"))
+	if bool(online["ok"]):
+		_button("online_connect", "CONECTAR", row, true, _submit_online)
+	_expand(row)
+	box.add_child(row)
+	return box
 
-	status_label = _label("", 14, true)
-	status_label.custom_minimum_size = Vector2(520, 40)
-	panel.add_child(status_label)
-	print("MENU_READY name=%s" % name_edit.text)
+func _build_howto() -> VBoxContainer:
+	var box := _panel()
+	box.add_child(MenuTheme.heading("Como jogar"))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 222)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.focus_mode = Control.FOCUS_ALL
+	box.add_child(scroll)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 4)
+	scroll.add_child(content)
+	for line in [
+		"Cada jogador recebe um papel secreto: assassino, detetive ou vítima. Só você vê o seu durante a rodada.",
+		"Pistolas e munição ficam espalhadas pela mansão: é preciso pegar.",
+		"Quem é eliminado fica caído no chão até a rodada seguinte e passa a observar os sobreviventes.",
+		"No fim da rodada, todos os papéis são revelados.",
+	]:
+		content.add_child(MenuTheme.label("• " + line, MenuTheme.SMALL_SIZE + 1, MenuTheme.PARCHMENT, true))
+	var current_group := ""
+	var grid: GridContainer
+	for row in GameControls.help_rows():
+		if str(row["group"]) != current_group:
+			current_group = str(row["group"])
+			var group_label := MenuTheme.label(current_group.to_upper(), MenuTheme.SMALL_SIZE, MenuTheme.GOLD)
+			content.add_child(group_label)
+			grid = GridContainer.new()
+			grid.columns = 2
+			grid.add_theme_constant_override("h_separation", 12)
+			content.add_child(grid)
+		var key := MenuTheme.label(str(row["input"]), MenuTheme.SMALL_SIZE, MenuTheme.CREAM)
+		key.custom_minimum_size.x = 150
+		key.name = "Key_%s" % (str(row["action"]) if not str(row["action"]).is_empty() else str(grid.get_child_count()))
+		key.set_meta("action", str(row["action"]))
+		grid.add_child(key)
+		var text := MenuTheme.label(str(row["text"]), MenuTheme.SMALL_SIZE, MenuTheme.MUTED, true)
+		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(text)
+	_button("howto_back", "VOLTAR", box, true, func(): _show_panel("main"))
+	return box
 
-func set_status(text: String, is_error: bool = false) -> void:
-	if status_label == null:
+func _build_settings() -> VBoxContainer:
+	var box := _panel()
+	box.add_child(MenuTheme.heading("Configurações"))
+	var volume := _slider(box, "settings_volume", "Volume geral", MenuSettings.VOLUME_MIN, MenuSettings.VOLUME_MAX, 0.05, settings.volume,
+		func(v): return "%d%%" % int(round(v * 100.0)))
+	volume.value_changed.connect(func(v):
+		settings.volume = v
+		settings.apply_audio()
+		_save_settings())
+	var sensitivity := _slider(box, "settings_sensitivity", "Sensibilidade do mouse", MenuSettings.SENSITIVITY_MIN, MenuSettings.SENSITIVITY_MAX, 0.05, settings.sensitivity,
+		func(v): return "%.2f×" % v)
+	sensitivity.value_changed.connect(func(v):
+		settings.sensitivity = MenuSettings.clamp_sensitivity(v)
+		_save_settings())
+	if MenuSettings.supports_display_settings():
+		var fullscreen := CheckBox.new()
+		fullscreen.text = "Tela cheia"
+		fullscreen.button_pressed = settings.fullscreen
+		fullscreen.focus_mode = Control.FOCUS_ALL
+		box.add_child(fullscreen)
+		buttons["settings_fullscreen"] = fullscreen
+		var resolution := OptionButton.new()
+		resolution.focus_mode = Control.FOCUS_ALL
+		for size in MenuSettings.RESOLUTIONS:
+			resolution.add_item("%d × %d" % [size.x, size.y])
+		resolution.select(MenuSettings.RESOLUTIONS.find(settings.resolution))
+		resolution.disabled = settings.fullscreen
+		var resolution_row := _row()
+		resolution_row.add_child(MenuTheme.label("Janela", MenuTheme.SMALL_SIZE, MenuTheme.PARCHMENT))
+		resolution.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		resolution_row.add_child(resolution)
+		box.add_child(resolution_row)
+		buttons["settings_resolution"] = resolution
+		fullscreen.toggled.connect(func(on):
+			settings.fullscreen = on
+			resolution.disabled = on
+			settings.apply_display()
+			_save_settings())
+		resolution.item_selected.connect(func(index):
+			settings.resolution = MenuSettings.RESOLUTIONS[index]
+			settings.apply_display()
+			_save_settings())
+	var motion := CheckBox.new()
+	motion.text = "Reduzir movimento da interface"
+	motion.button_pressed = settings.reduce_motion
+	motion.focus_mode = Control.FOCUS_ALL
+	motion.toggled.connect(func(on):
+		settings.reduce_motion = on
+		backdrop.reduce_motion = on
+		_save_settings())
+	box.add_child(motion)
+	buttons["settings_motion"] = motion
+	_button("settings_back", "VOLTAR", box, true, func(): _show_panel("main"))
+	return box
+
+func _slider(parent: Container, id: String, text: String, minimum: float, maximum: float, step: float, value: float, format: Callable) -> HSlider:
+	var header := _row()
+	var name_label := MenuTheme.label(text, MenuTheme.SMALL_SIZE, MenuTheme.PARCHMENT)
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(name_label)
+	var value_label := MenuTheme.label(str(format.call(value)), MenuTheme.SMALL_SIZE, MenuTheme.CREAM)
+	header.add_child(value_label)
+	parent.add_child(header)
+	var slider := HSlider.new()
+	slider.min_value = minimum
+	slider.max_value = maximum
+	slider.step = step
+	slider.value = value
+	slider.focus_mode = Control.FOCUS_ALL
+	slider.custom_minimum_size.y = 24
+	slider.value_changed.connect(func(v): value_label.text = str(format.call(v)))
+	parent.add_child(slider)
+	buttons[id] = slider
+	return slider
+
+func _build_status() -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	box.visible = false
+	var row := _row()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	spinner = MenuSpinner.new()
+	row.add_child(spinner)
+	status_label = MenuTheme.label("", MenuTheme.BODY_SIZE + 1, MenuTheme.CREAM, true)
+	status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status_label.custom_minimum_size.x = 320
+	row.add_child(status_label)
+	box.add_child(row)
+	var actions := _row()
+	_button("cancel", "CANCELAR", actions, false, _cancel)
+	_button("status_back", "VOLTAR", actions, false, _dismiss_status)
+	_button("retry", "TENTAR NOVAMENTE", actions, true, _retry)
+	_expand(actions)
+	box.add_child(actions)
+	return box
+
+func _expand(row: HBoxContainer) -> void:
+	for child in row.get_children():
+		if child is Control:
+			(child as Control).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+# --- Navegação --------------------------------------------------------------------
+
+func _open_with_name(panel_id: String) -> void:
+	var name_text: String = fields["name"].text
+	fields[panel_id + "_name"].text = name_text
+	_show_panel(panel_id)
+
+func _show_panel(panel_id: String, animate: bool = true) -> void:
+	if flow.busy():
 		return
-	status_label.text = text
-	status_label.modulate = Color(1.0, 0.55, 0.5) if is_error else Color(0.8, 0.95, 1.0)
+	_clear_errors()
+	panel_name = panel_id
+	for id in PANELS:
+		(panels[id] as Control).visible = id == panel_id
+	_refresh_status()
+	print("MENU_PANEL name=%s" % panel_id)
+	if animate:
+		_sound("ui_move")
+		if not settings.reduce_motion:
+			if _fade != null and _fade.is_valid():
+				_fade.kill()
+			panel_stack.modulate.a = 0.0
+			_fade = create_tween()
+			_fade.tween_property(panel_stack, "modulate:a", 1.0, 0.14)
+	call_deferred("_focus_first")
 
-func set_busy(busy: bool) -> void:
-	for button in [host_button, join_button]:
-		if button != null:
-			button.disabled = busy
+func _focus_first() -> void:
+	var target: Control = _first_focus_target()
+	if target != null and target.is_visible_in_tree():
+		target.grab_focus()
 
-## Usado pelos testes automatizados e pela linha de comando para preencher os
-## campos exatamente como um jogador faria.
+func _first_focus_target() -> Control:
+	if status_box.visible:
+		for id in ["cancel", "retry", "status_back"]:
+			if (buttons[id] as Button).visible and not (buttons[id] as Button).disabled:
+				return buttons[id]
+		return null
+	match panel_name:
+		"main": return fields["name"]
+		"host": return buttons["host_create"]
+		"join": return fields["join_address"]
+		"online": return buttons["online_connect"] if buttons.has("online_connect") else buttons["online_back"]
+		"howto": return buttons["howto_back"]
+		"settings": return buttons["settings_volume"]
+	return null
+
+## Enter: ação principal do painel (ou avançar do campo de nome).
+func _submit_current() -> void:
+	if flow.busy():
+		return
+	match panel_name:
+		"main":
+			if bool(online["ok"]): _show_panel("online")
+			else: _open_with_name("host")
+		"host": _submit_host()
+		"join": _submit_join()
+		"online":
+			if bool(online["ok"]): _submit_online()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
+		_escape()
+
+## Esc: cancela a conexão, fecha o aviso de falha ou volta ao painel principal.
+func _escape() -> void:
+	print("MENU_ESCAPE panel=%s state=%s" % [panel_name, flow.state_name()])
+	if bool(flow.spec()["cancel"]):
+		_cancel()
+	elif status_box.visible and not flow.busy():
+		_dismiss_status()
+	elif panel_name != "main" and not flow.busy():
+		_show_panel("main")
+
+# --- Pedidos ---------------------------------------------------------------------
+
+func _validated_name(field_id: String) -> String:
+	var clean := (fields[field_id] as LineEdit).text.strip_edges()
+	var problem := RoundRules.label_problem(clean)
+	if not problem.is_empty():
+		_reject(field_id, "name", name_message(problem))
+		return ""
+	(fields[field_id] as LineEdit).text = clean
+	fields["name"].text = clean
+	settings.player_name = clean
+	_save_settings()
+	return clean
+
+static func name_message(problem: String) -> String:
+	match problem:
+		"empty": return "Digite seu nome para entrar na mansão."
+		"too_long": return "Nome muito longo: use até %d caracteres." % RoundRules.MAX_LABEL_LENGTH
+		"spaces": return "Evite espaços seguidos no nome."
+	return "Use só letras, números, espaço, hífen (-) ou sublinhado (_)."
+
+func _validated_port(field_id: String) -> int:
+	var port := DesktopSession.parse_port((fields[field_id] as LineEdit).text)
+	if port < 0:
+		_reject(field_id, "port", "Porta inválida: use um número de %d a %d." % [DesktopSession.MIN_PORT, DesktopSession.MAX_PORT])
+	return port
+
+func _submit_host() -> void:
+	if flow.busy():
+		print("MENU_DUPLICATE_IGNORED action=host source=menu")
+		return
+	var attempt := flow.begin_attempt()
+	_refresh_status()
+	_clear_errors()
+	var player_name := _validated_name("host_name")
+	var port := _validated_port("host_port") if not player_name.is_empty() else -1
+	if player_name.is_empty() or port < 0:
+		flow.go(MenuFlow.State.IDLE)
+		_refresh_status()
+		return
+	last_request = {"kind": "host", "panel": "host", "name": player_name, "port": port, "lan": lan_check.button_pressed}
+	DesktopSession.last_request = last_request.duplicate()
+	_sound("ui_confirm")
+	host_requested.emit(player_name, port, lan_check.button_pressed, attempt)
+
+func _submit_join() -> void:
+	if flow.busy():
+		print("MENU_DUPLICATE_IGNORED action=join source=menu")
+		return
+	var attempt := flow.begin_attempt()
+	_refresh_status()
+	_clear_errors()
+	var player_name := _validated_name("join_name")
+	var address := ""
+	var port := -1
+	if not player_name.is_empty():
+		address = (fields["join_address"] as LineEdit).text.strip_edges()
+		var address_error := DesktopSession.validate_address(address)
+		if not address_error.is_empty():
+			_reject("join_address", "address", address_error)
+			address = ""
+		else:
+			port = _validated_port("join_port")
+	if player_name.is_empty() or address.is_empty() or port < 0:
+		flow.go(MenuFlow.State.IDLE)
+		_refresh_status()
+		return
+	last_request = {"kind": "join", "panel": "join", "name": player_name, "address": address, "port": port}
+	DesktopSession.last_request = last_request.duplicate()
+	_sound("ui_confirm")
+	join_requested.emit(player_name, address, port, attempt)
+
+func _submit_online() -> void:
+	if flow.busy():
+		print("MENU_DUPLICATE_IGNORED action=online source=menu")
+		return
+	if not bool(online["ok"]):
+		return
+	var attempt := flow.begin_attempt()
+	_refresh_status()
+	var player_name := _validated_name("name")
+	if player_name.is_empty():
+		flow.go(MenuFlow.State.IDLE)
+		_show_panel("main", false)
+		_reject("name", "name", name_message(RoundRules.label_problem((fields["name"] as LineEdit).text)))
+		return
+	last_request = {"kind": "online", "panel": "online", "name": player_name}
+	DesktopSession.last_request = last_request.duplicate()
+	_sound("ui_confirm")
+	online_requested.emit(player_name, str(online["url"]), attempt)
+
+func _reject(field_id: String, kind: String, message: String) -> void:
+	print("MENU_INPUT_INVALID field=%s" % kind)
+	var label: Label = errors[field_id]
+	label.text = message
+	label.visible = true
+	_sound("ui_error")
+	(fields[field_id] as LineEdit).grab_focus()
+	input_rejected.emit(kind)
+
+func _clear_errors() -> void:
+	for id in errors:
+		(errors[id] as Label).visible = false
+
+func _cancel() -> void:
+	if not bool(flow.spec()["cancel"]):
+		return
+	var attempt := flow.attempt
+	print("MENU_CANCEL_REQUESTED attempt=%d state=%s" % [attempt, flow.state_name()])
+	cancel_requested.emit(attempt)
+
+func _retry() -> void:
+	if flow.state != MenuFlow.State.FAILED and flow.state != MenuFlow.State.DISCONNECTED:
+		return
+	var request: Dictionary = last_request if not last_request.is_empty() else DesktopSession.last_request
+	if request.is_empty():
+		_dismiss_status()
+		return
+	print("MENU_RETRY kind=%s" % request["kind"])
+	flow.go(MenuFlow.State.IDLE)
+	_restore_request(request)
+	_show_panel(str(request["panel"]), false)
+	match str(request["kind"]):
+		"host": _submit_host()
+		"join": _submit_join()
+		"online": _submit_online()
+
+func _dismiss_status() -> void:
+	if flow.state == MenuFlow.State.FAILED or flow.state == MenuFlow.State.DISCONNECTED:
+		flow.go(MenuFlow.State.IDLE)
+	_refresh_status()
+	_focus_first()
+
+func _quit() -> void:
+	if flow.busy():
+		return
+	flow.go(MenuFlow.State.SHUTTING_DOWN)
+	_refresh_status()
+	quit_requested.emit()
+
+func _save_settings() -> void:
+	settings.save()
+	settings_changed.emit(settings)
+
+# --- Estado vindo da rede ----------------------------------------------------------
+
+## Evento do fluxo de conexão. Ignorado se for de outra tentativa.
+func enter(state: int, text: String = "", attempt: int = 0) -> bool:
+	var previous := flow.state_name()
+	if not flow.go(state, text, attempt):
+		print("MENU_STALE_EVENT_IGNORED state=%s attempt=%d current=%d at=%s" % [MenuFlow.NAMES.get(state, "?"), attempt, flow.attempt, previous])
+		return false
+	print("MENU_STATE %s>%s attempt=%d" % [previous, flow.state_name(), flow.attempt])
+	if state == MenuFlow.State.FAILED:
+		_sound("ui_error")
+	_refresh_status()
+	return true
+
+func fail(message: String, attempt: int = 0) -> bool:
+	return enter(MenuFlow.State.FAILED, message, attempt)
+
+func _refresh_status() -> void:
+	var spec := flow.spec()
+	var overlay := bool(spec["overlay"])
+	status_box.visible = overlay
+	panel_stack.visible = not overlay
+	status_label.text = flow.message
+	var failed := flow.state == MenuFlow.State.FAILED
+	status_label.add_theme_color_override("font_color", MenuTheme.ERROR if failed else MenuTheme.CREAM)
+	spinner.visible = bool(spec["spinner"])
+	spinner.animate = not settings.reduce_motion
+	(buttons["cancel"] as Button).visible = bool(spec["cancel"])
+	var recoverable := flow.state in [MenuFlow.State.FAILED, MenuFlow.State.DISCONNECTED]
+	(buttons["retry"] as Button).visible = recoverable and not (last_request.is_empty() and DesktopSession.last_request.is_empty())
+	(buttons["status_back"] as Button).visible = recoverable
+	var inputs := bool(spec["inputs"])
+	for id in buttons:
+		if buttons[id] is BaseButton and id not in ["cancel", "retry", "status_back"]:
+			(buttons[id] as BaseButton).disabled = not inputs
+	for id in fields:
+		(fields[id] as LineEdit).editable = inputs
+	if overlay:
+		call_deferred("_focus_first")
+
+## Depois de voltar ao menu (recarga da cena): o mesmo painel, com os campos
+## da última tentativa e o resultado dela.
+func restore_after_return(request: Dictionary, kind: String, message: String) -> void:
+	if request.is_empty():
+		if not message.is_empty():
+			flow.go(MenuFlow.State.VALIDATING)
+			enter(MenuFlow.State.FAILED if kind == "failure" else MenuFlow.State.IDLE, message)
+			if kind == "info":
+				_show_info(message)
+		return
+	last_request = request.duplicate()
+	_restore_request(request)
+	_show_panel(str(request["panel"]), false)
+	if kind == "cancelled" or message.is_empty():
+		return
+	flow.begin_attempt()
+	if kind == "info":
+		flow.go(MenuFlow.State.FAILED)
+		_show_info(message)
+	else:
+		enter(MenuFlow.State.FAILED, message)
+
+func _show_info(message: String) -> void:
+	# Aviso neutro (fim coordenado, saída voluntária): sem cor de erro.
+	flow.message = message
+	_refresh_status()
+	status_label.add_theme_color_override("font_color", MenuTheme.PARCHMENT)
+
+func _restore_request(request: Dictionary) -> void:
+	var player_name := str(request.get("name", fields["name"].text))
+	for id in ["name", "host_name", "join_name"]:
+		(fields[id] as LineEdit).text = player_name
+	if request.has("port"):
+		(fields["host_port"] as LineEdit).text = str(request["port"])
+		(fields["join_port"] as LineEdit).text = str(request["port"])
+	if request.has("address"):
+		(fields["join_address"] as LineEdit).text = str(request["address"])
+	if request.has("lan"):
+		lan_check.button_pressed = bool(request["lan"])
+
+# --- Automação (testes e atalhos) -----------------------------------------------------
+
+## Aciona um botão como um clique do jogador: só se estiver visível e ativo.
+func press(id: String) -> bool:
+	var node := buttons.get(id) as BaseButton
+	if node == null or not node.is_visible_in_tree() or node.disabled:
+		print("MENU_PRESS_IGNORED id=%s" % id)
+		return false
+	node.pressed.emit()
+	return true
+
+func set_field(id: String, text: String) -> void:
+	if fields.has(id):
+		(fields[id] as LineEdit).text = text
+
+## Preenche os campos como o jogador faria (mantido para os testes antigos).
 func fill(player_name: String, host_port: String, lan: bool, address: String, join_port: String) -> void:
-	if not player_name.is_empty(): name_edit.text = player_name
-	if not host_port.is_empty(): host_port_edit.text = host_port
+	if not player_name.is_empty():
+		for id in ["name", "host_name", "join_name"]:
+			(fields[id] as LineEdit).text = player_name
+	if not host_port.is_empty(): (fields["host_port"] as LineEdit).text = host_port
 	lan_check.button_pressed = lan
-	if not address.is_empty(): join_address_edit.text = address
-	if not join_port.is_empty(): join_port_edit.text = join_port
+	if not address.is_empty(): (fields["join_address"] as LineEdit).text = address
+	if not join_port.is_empty(): (fields["join_port"] as LineEdit).text = join_port
 
-func _on_host_pressed() -> void:
-	var player_name := name_edit.text.strip_edges()
-	var name_error := DesktopSession.validate_name(player_name)
-	if not name_error.is_empty():
-		_reject("name", name_error)
-		return
-	var port := DesktopSession.parse_port(host_port_edit.text)
-	if port < 0:
-		_reject("port", "Porta inválida: use um número de %d a %d." % [DesktopSession.MIN_PORT, DesktopSession.MAX_PORT])
-		return
-	host_requested.emit(player_name, port, lan_check.button_pressed)
+## Compatível com o menu anterior: status simples fora do fluxo.
+func set_status(text: String, is_error: bool = false) -> void:
+	if is_error:
+		if flow.state == MenuFlow.State.IDLE:
+			flow.begin_attempt()
+		enter(MenuFlow.State.FAILED, text)
+	else:
+		flow.message = text
+		_refresh_status()
 
-func _on_join_pressed() -> void:
-	var player_name := name_edit.text.strip_edges()
-	var name_error := DesktopSession.validate_name(player_name)
-	if not name_error.is_empty():
-		_reject("name", name_error)
-		return
-	var address := join_address_edit.text.strip_edges()
-	var address_error := DesktopSession.validate_address(address)
-	if not address_error.is_empty():
-		_reject("address", address_error)
-		return
-	var port := DesktopSession.parse_port(join_port_edit.text)
-	if port < 0:
-		_reject("port", "Porta inválida: use um número de %d a %d." % [DesktopSession.MIN_PORT, DesktopSession.MAX_PORT])
-		return
-	join_requested.emit(player_name, address, port)
+func key_labels() -> Dictionary:
+	var result := {}
+	for node in (panels["howto"] as Control).find_children("Key_*", "Label", true, false):
+		var action := str(node.get_meta("action", ""))
+		if not action.is_empty():
+			result[action] = (node as Label).text
+	return result
 
-func _reject(field: String, message: String) -> void:
-	print("MENU_INPUT_INVALID field=%s" % field)
-	set_status(message, true)
-	input_rejected.emit(field)
+# --- Som --------------------------------------------------------------------------
 
-func _label(text: String, size: int, wrap: bool = false) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_size_override("font_size", size)
-	if wrap:
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		label.custom_minimum_size.x = 520
-	return label
-
-func _line(text: String, placeholder: String) -> LineEdit:
-	var line := LineEdit.new()
-	line.text = text
-	line.placeholder_text = placeholder
-	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	return line
+## Um som por evento de interface; eventos repetidos no mesmo quadro tocam uma
+## vez só. Nenhum som no headless.
+func _sound(sound_name: String) -> void:
+	var frame := Engine.get_process_frames()
+	if int(sounds_played.get(sound_name, -1)) == frame:
+		return
+	sounds_played[sound_name] = frame
+	if _player == null:
+		return
+	_player.stream = SfxBank.stream(sound_name)
+	_player.play()

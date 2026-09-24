@@ -87,3 +87,25 @@ por cena.
 | V2 | Servidor 9 recusa cliente 10 | adverso `protocol_mismatch` | `protocol_version`, mensagem com "protocolo 10" | servidor + cliente |
 | V3 | Sem entrada parcial nem corpo após a recusa | adverso `protocol_bodies` | Lobby, mundo, rodada e combate sem o peer; corpos enviados só aos 4 da sala; cliente recusado sem corpo | servidor + clientes |
 | V4 | 10 com 10 conecta | todas as suítes de rede | Entrada aceita e partida completa | servidor |
+
+## Fase 7 — menu e fluxo de conexão
+
+| ID | Requisito | Onde | Resultado esperado |
+| --- | --- | --- | --- |
+| M1 | Navegação, foco, Tab, Enter e Esc | `menu_test.gd` | Cada painel abre e volta; foco visível; Enter aciona a ação principal; Esc volta ou cancela |
+| M2 | Nome, porta, endereço e URL | `menu_test.gd`, `desktop_session_test.gd` | Mensagens em português; nada inválido chega à rede |
+| M3 | Online sem URL | `menu_test.gd`, `menu_flow_test.sh` online-unconfigured | Aviso, nenhuma conexão |
+| M4 | Endpoint trocado sem código | `menu_test.gd` (argumento e ProjectSettings), `menu_flow_test.sh` online-configured | Conecta no endereço configurado |
+| M5 | Clique duplo | `menu_test.gd`, adverso `double_click` | Uma conexão e um servidor |
+| M6 | Cancelar | `menu_flow_test.sh` cancel-connecting e cancel-host | Volta sem erro; servidor local encerrado |
+| M7 | Tempo esgotado | `menu_flow_test.sh` timeout | Erro recuperável |
+| M8 | Falha e nova tentativa | `menu_flow_test.sh` retry | TENTAR NOVAMENTE entra na sala |
+| M9 | Evento atrasado | `menu_test.gd` | Ignorado pelo id da tentativa |
+| M10 | Encerramento coordenado | `menu_flow_test.sh` normal-shutdown | Aviso neutro, sem erro |
+| M11 | Voltar ao menu e nova sessão | `menu_flow_test.sh` host-again, `desktop_local_match_test.sh` | Segunda sessão normal; nenhum servidor órfão |
+| M12 | Sala cheia e nome repetido | `menu_flow_test.sh` full-room e name-taken | Mensagens próprias |
+| M13 | Versão incompatível pelo menu | adverso `protocol_mismatch` | Mensagem com o protocolo |
+| M14 | Preferências | `menu_test.gd` | Salvas, limitadas e aplicadas |
+| M15 | Controles iguais ao InputMap | `menu_test.gd` | Tela "Como jogar" = InputMap |
+| M16 | Sem mundo antes de entrar | `menu_test.gd` | Nenhuma arena no menu |
+| M17 | Telas sem corte | `menu_capture.gd` (xvfb, fora do CI) | 8 telas em 960×540, 1280×720, 1920×1080 e 1024×768 |

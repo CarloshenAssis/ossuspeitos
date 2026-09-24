@@ -202,7 +202,7 @@ func _plan_ninth() -> void:
 # --- join_ended ------------------------------------------------------------------
 
 func _plan_join_ended() -> void:
-	_add_client_request("duplicate_label_refused", _label(int(peers[0])), "room_unavailable")
+	_add_client_request("duplicate_label_refused", _label(int(peers[0])), "name_taken")
 	_add("duplicate_did_not_replace", {"check": func():
 		if not app.lobby.has(int(peers[0])) or app.lobby.size() != 4: return "original session replaced"
 		return ""})
