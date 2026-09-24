@@ -767,3 +767,57 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
 **CI**
 - Job `match-tests`: campanha (local e 150 ms com jitter) e os 11 casos
   adversos, em paralelo aos outros jobs.
+
+## Fase 6: reset completo, 8 pistolas e 12 munições, corpos
+
+**Reset da rodada**
+- No início de toda rodada (`roles_ready`), cada participante volta ao spawn
+  oficial que ocupa desde a entrada (`AuthoritativeWorld.reset_to_spawn`):
+  posição e yaw do spawn, pitch zero, parado, baldes de mira cheios e época
+  nova.
+- Os oito participantes ocupam oito spawns distintos (a ocupação é única por
+  construção).
+- A época nova recusa com `stale_epoch` tudo o que estava na fila ou em
+  trânsito.
+- No cliente, a época nova já era descontinuidade: a previsão descarta
+  pendentes e offsets, e o interpolador salta sem atravessar a mansão.
+
+**Pickups**
+- 8 pistolas comuns (Escritório, Biblioteca, Galeria, Salão, Cozinha, Jantar,
+  ala do Quarto do Fundo, ala do Quarto de Hóspedes) e 12 munições em 9 áreas
+  das duas alas e do núcleo. Nenhum tipo novo, sem mudança de dano, pente,
+  reserva ou cadência.
+- Critérios testados:
+  - arma a ≥ 4 m de todo spawn e munição a ≥ 3 m;
+  - quaisquer dois pickups a ≥ 4,5 m (nenhum ponto alcança dois);
+  - ≥ 1,8 m do centro de portas;
+  - cápsula livre e alcançável.
+- `CombatAuthority.begin_round` cria os 20 a partir de `MansionMap.PICKUPS`
+  numa sessão de inventário limpa, então nada se duplica entre rodadas.
+- Paredes, portas e spawns têm a mesma impressão digital de `main`; a dos
+  pickups é nova e está fixada em `mansion_art_test`.
+
+**Corpos**
+- Só a eliminação de combate aceita pelo servidor cria o corpo, no ponto
+  oficial da eliminação.
+- O DTO é público e uma allowlist exata (`BodyRules.PUBLIC_KEYS`): body_id,
+  round_id, peer_id, posição, yaw e aparência. Não leva papel, inventário,
+  munição, vida nem autor.
+- Um corpo por jogador por rodada; eventos repetidos são ignorados no servidor
+  e no cliente.
+- O cliente recusa corpo de outra rodada.
+- Sair vivo não cria corpo; sair depois de morto mantém o corpo.
+- Os corpos são removidos no início da rodada seguinte (servidor e cliente).
+- Apresentação: o mesmo personagem de costas, com pose determinística feita
+  com os pivôs procedurais da fase 3 (sem ragdoll), sem colisão, fora do
+  hitscan e fora de snapshots, interpolação e animação.
+- Junto a parede ou móvel, a apresentação desloca o corpo no máximo 0,6 m ao
+  longo do eixo (ou gira 90°); a posição oficial não muda.
+
+**Protocolo**
+- Os comandos, o snapshot e o ACK não mudaram.
+- Os corpos usam duas RPCs novas e confiáveis (`round_body_added` e
+  `round_bodies_state`).
+- A versão continua 9, por pedido explícito. Consequência: builds da fase 5 e
+  da fase 6 não devem ser misturadas na mesma sala (a verificação de versão
+  não distingue as duas).

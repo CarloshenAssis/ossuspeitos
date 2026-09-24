@@ -342,6 +342,25 @@ func _plan_observed_leaves() -> void:
 		var error := _check_spectator_report(spectator)
 		if error.is_empty(): print("ADVERSE_OBSERVED_LEFT case=observed_leaves targets=%d camera_moved=true" % (r["targets"] as Array).size())
 		return error})
+	# Fase 6: quem saiu vivo não ganha corpo; o eliminado que sai deixa o corpo.
+	_add("no_body_for_alive_leaver", {"check": func():
+		for dto in app.body_registry.public_list():
+			if int(dto["peer_id"]) == int(marks["observed"]): return "a player who left alive got a body"
+		if app.body_registry.size() != 1: return "bodies %d" % app.body_registry.size()
+		return ""})
+	_add("eliminated_leaves", {"run": func(): _request("kill_client", _label(spectator))
+	, "done": func(): return not app.lobby.has(spectator), "timeout": 30000, "check": func():
+		peers.erase(spectator)
+		expected_alive.erase(spectator)
+		var kept: Array = app.body_registry.public_list().filter(func(d): return int(d["peer_id"]) == spectator)
+		if kept.size() != 1: return "the body of the eliminated player vanished on disconnect"
+		return ""})
+	_add("body_kept_for_everyone", {"run": func(): _ask_all("bodies"), "delay": 600, "done": _all_reported, "check": func():
+		for peer_id in peers:
+			var seen: Array = reports[peer_id]["bodies"]
+			if seen.size() != 1 or int(seen[0]["peer_id"]) != spectator: return "client %d bodies %s" % [int(peer_id), str(seen)]
+		print("ADVERSE_BODY_KEPT_AFTER_DISCONNECT case=observed_leaves clients=%d" % peers.size())
+		return ""})
 	_add("assassin_down", _fire_step(shooter, assassin, 3, 0, true))
 	_add_round_end_generic(RoundRules.REASON_ASSASSIN_DOWN, Role.TEAM_INNOCENTS, false)
 	_add_finish()
@@ -613,7 +632,8 @@ func _send_adverse_report(kind: String, extra: Dictionary) -> void:
 		"spectate_target": app._spectator_target(), "role": app.local_role, "role_round": app.local_round_id,
 		"has_reveal": not app.local_final_reveal.is_empty(), "reveal": app.local_final_reveal.duplicate(true),
 		"snapshot_tick": app.last_snapshot_tick, "snapshots": snapshots_seen, "epoch": app.prediction.epoch,
-		"pending": app.prediction.pending.size(), "roster": app.local_roster_peers.size(), "violations": snapshot_violations}
+		"pending": app.prediction.pending.size(), "roster": app.local_roster_peers.size(), "violations": snapshot_violations,
+		"bodies": app.local_bodies.values().duplicate(true)}
 	data.merge(extra, true)
 	sync_report.rpc_id(1, "CAMPAIGN", data)
 

@@ -321,26 +321,56 @@ func _test_spawns_have_no_line_of_sight() -> void:
 				var hit: Dictionary = combat._raycast(shooter_index + 1, shooter_eye, direction, 200.0)
 				_expect(int(hit.get("peer_id", 0)) == 0, "spawn %d cannot shoot spawn %d at round start (h=%.1f)" % [shooter_index, target_index, height])
 
+## Fase 6: 8 pistolas comuns e 12 caixas de munição, posições oficiais.
+const WEAPON_SPAWN_CLEARANCE := 4.0
+const AMMO_SPAWN_CLEARANCE := 3.0
+const PICKUP_PAIR_CLEARANCE := 4.5
+const PICKUP_DOOR_CLEARANCE := 1.8
+
 func _test_pickups() -> void:
-	_expect(ArenaRules.PICKUP_POSITIONS.size() == 8, "four weapons and four ammo boxes")
-	var spaces := {}
+	_expect(ArenaRules.PICKUP_POSITIONS.size() == 20, "eight weapons and twelve ammo boxes")
+	_expect(MansionMap.pickups_of_type("weapon").size() == 8 and MansionMap.pickups_of_type("ammo").size() == 12, "exactly 8 pistols and 12 ammo boxes")
+	var weapon_spaces := {}
+	var ammo_spaces := {}
+	var ids := {}
 	for index in MansionMap.PICKUPS.size():
 		var entry: Dictionary = MansionMap.PICKUPS[index]
-		_expect(str(entry["type"]) == ("weapon" if index < 4 else "ammo"), "pickup %d keeps the weapon/ammo index contract" % index)
-		_expect(str(entry["id"]) == ("weapon_%d" % index if index < 4 else "ammo_%d" % (index - 4)), "pickup %d keeps its official id" % index)
+		var is_weapon := index < 8
+		_expect(str(entry["type"]) == ("weapon" if is_weapon else "ammo"), "pickup %d keeps the weapon/ammo index contract" % index)
+		_expect(str(entry["id"]) == ("weapon_%d" % index if is_weapon else "ammo_%d" % (index - 8)), "pickup %d keeps its official id" % index)
+		_expect(not ids.has(str(entry["id"])), "pickup id %s is unique" % entry["id"])
+		ids[str(entry["id"])] = true
 		var pickup: Vector3 = ArenaRules.PICKUP_POSITIONS[index]
+		_expect(MansionMap.pickup_position(str(entry["id"])).is_equal_approx(pickup), "pickup %s position by id" % entry["id"])
 		_expect(absf(pickup.y - 0.25) < EPSILON, "pickup %d keeps the official height" % index)
 		_expect(str(ArenaRules.zone_at(pickup).get("id", "")) == str(entry["space"]), "pickup %d lies in %s" % [index, entry["space"]])
-		spaces[str(entry["space"])] = true
+		if is_weapon: weapon_spaces[str(entry["space"])] = true
+		else: ammo_spaces[str(entry["space"])] = true
 		# Longe da boca de uma porta: não entope a passagem nem vira gargalo.
 		for door in MansionMap.DOORS:
 			var center := ((door["min"] as Vector2) + (door["max"] as Vector2)) * 0.5
-			_expect(Vector2(pickup.x, pickup.z).distance_to(center) > 1.5, "pickup %d is not in the doorway %s" % [index, door["id"]])
-	_expect(spaces.size() == 8, "the eight pickups are spread over eight different spaces")
-	# Nenhuma arma num cômodo de spawn de uma sala de quatro.
-	for index in 4:
-		for spawn_index in 4:
-			_expect(str(MansionMap.PICKUPS[index]["space"]) != str(MansionMap.SPAWNS[spawn_index]["space"]), "weapon %d is not in the room of spawn %d" % [index, spawn_index])
+			_expect(Vector2(pickup.x, pickup.z).distance_to(center) >= PICKUP_DOOR_CLEARANCE, "pickup %d is not in the doorway %s" % [index, door["id"]])
+		# Nenhum spawn em cima (nem na área imediata) de uma arma ou munição.
+		for spawn_index in MovementRules.SPAWN_POINTS.size():
+			var spawn: Vector3 = MovementRules.SPAWN_POINTS[spawn_index]
+			var clearance := WEAPON_SPAWN_CLEARANCE if is_weapon else AMMO_SPAWN_CLEARANCE
+			_expect(Vector2(pickup.x, pickup.z).distance_to(Vector2(spawn.x, spawn.z)) >= clearance, "pickup %d keeps %.1f m from spawn %d" % [index, clearance, spawn_index])
+		# Nenhum ponto alcança dois pickups (nem duas armas) ao mesmo tempo.
+		for other in range(index + 1, MansionMap.PICKUPS.size()):
+			var distance := Vector2(pickup.x, pickup.z).distance_to(Vector2(ArenaRules.PICKUP_POSITIONS[other].x, ArenaRules.PICKUP_POSITIONS[other].z))
+			_expect(distance >= PICKUP_PAIR_CLEARANCE and distance > InventoryAuthority.PICKUP_RANGE_METERS * 2.0, "pickups %d and %d are %.1f m apart" % [index, other, distance])
+	_expect(weapon_spaces.size() == 8, "the eight weapons are in eight different spaces")
+	for space_id in ["escritorio", "biblioteca", "galeria", "salao", "cozinha", "jantar", "quarto_fundo", "quarto_hospedes"]:
+		_expect(weapon_spaces.has(space_id), "a weapon lies in %s" % space_id)
+	_expect(ammo_spaces.size() >= 9, "ammo spread over nine areas (%d)" % ammo_spaces.size())
+	# Duas alas e núcleo: oeste (x < 9), centro, leste (x > 26).
+	var sides := {"west": [0, 0], "core": [0, 0], "east": [0, 0]}
+	for index in MansionMap.PICKUPS.size():
+		var x: float = ArenaRules.PICKUP_POSITIONS[index].x
+		var side := "west" if x < 9.0 else ("east" if x > 26.0 else "core")
+		(sides[side] as Array)[0 if index < 8 else 1] += 1
+	for side in sides:
+		_expect(int(sides[side][0]) >= 2 and int(sides[side][1]) >= 1, "%s has weapons and ammo (%s)" % [side, str(sides[side])])
 	var fixture := _combat_fixture(1)
 	var world: AuthoritativeWorld = fixture["world"]
 	var combat: CombatAuthority = fixture["combat"]
@@ -352,14 +382,39 @@ func _test_pickups() -> void:
 		_expect(_cell_free(standing), "pickup %d lies on the reachable grid" % index)
 		combat.inventory.clear_player(1)
 		combat.inventory.register_player(1)
-		if index >= 4:
+		if index >= 8:
 			combat.inventory.inventories[1]["weapon_id"] = CombatAuthority.COMMON_WEAPON_ID
 			combat.inventory.inventories[1]["equipped"] = true
 		world.states[1]["position"] = standing
 		sequence += 1
-		var item_id := "weapon_%d" % index if index < 4 else "ammo_%d" % (index - 4)
+		var item_id := str(MansionMap.PICKUPS[index]["id"])
 		var result := combat.request_pickup(1, item_id, sequence, 1000 + sequence * 1000)
 		_expect(bool(result.get("accepted", false)), "pickup %s is collectable in place (%s)" % [item_id, str(result)])
+	_test_eight_players_eight_weapons()
+
+## Cenário determinístico: cada um dos oito jogadores coleta uma arma
+## diferente pela autoridade oficial; ninguém pega duas nem a mesma.
+func _test_eight_players_eight_weapons() -> void:
+	var fixture := _combat_fixture(8)
+	var world: AuthoritativeWorld = fixture["world"]
+	var combat: CombatAuthority = fixture["combat"]
+	var taken := {}
+	for peer_index in 8:
+		var peer_id := peer_index + 1
+		var item_id := "weapon_%d" % peer_index
+		var at := MansionMap.pickup_position(item_id)
+		world.states[peer_id]["position"] = Vector3(at.x, MovementRules.PLAYER_HEIGHT, at.z)
+		var result := combat.request_pickup(peer_id, item_id, 1, 1000)
+		_expect(bool(result.get("accepted", false)), "player %d collects %s" % [peer_id, item_id])
+		taken[str(combat.inventory.get_inventory(peer_id).get("weapon_id", ""))] = int(taken.get(str(combat.inventory.get_inventory(peer_id).get("weapon_id", "")), 0)) + 1
+		# Parado ali, nenhuma outra arma está ao alcance.
+		for other in 8:
+			if other != peer_index:
+				_expect(combat.request_pickup(peer_id, "weapon_%d" % other, 2 + other, 2000 + other * 100)["reason"] != "", "player %d cannot also take weapon_%d" % [peer_id, other])
+	_expect(int(taken.get(CombatAuthority.COMMON_WEAPON_ID, 0)) == 8, "eight players hold eight pistols")
+	for entry in combat.public_pickups():
+		if str(entry["type"]) == "weapon":
+			_expect(not bool(entry["available"]), "%s was collected once" % entry["pickup_id"])
 
 func _test_everything_is_reachable() -> void:
 	var reached := _flood(MovementRules.SPAWN_POINTS[0], [])
@@ -607,7 +662,7 @@ func _test_travel_times() -> void:
 		var nearest_ammo := INF
 		for pickup_index in ArenaRules.PICKUP_POSITIONS.size():
 			var distance := float(distances.get(_index_of(ArenaRules.PICKUP_POSITIONS[pickup_index]), INF))
-			if pickup_index < 4:
+			if pickup_index < 8:
 				nearest_weapon = minf(nearest_weapon, distance)
 			else:
 				nearest_ammo = minf(nearest_ammo, distance)
@@ -693,7 +748,7 @@ func _test_client_meshes_match_official_blockers() -> void:
 		view.apply_pickups(_pickup_entries(round_id))
 		view.apply_pickups([])
 		view.apply_pickups(_pickup_entries(round_id))
-	_expect(view.pickup_nodes.size() == 8, "three round resets keep exactly eight pickup nodes (%d)" % view.pickup_nodes.size())
+	_expect(view.pickup_nodes.size() == 20, "three round resets keep exactly twenty pickup nodes (%d)" % view.pickup_nodes.size())
 	_expect(_count_blocker_nodes(view) == blocker_nodes_before and blocker_nodes_before == view.art.meshes.size(), "round resets never rebuild or duplicate the mansion")
 	view.free()
 

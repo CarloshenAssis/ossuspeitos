@@ -264,6 +264,13 @@ jobs:
             | tee "$RUNNER_TEMP/godot-netcode-logs/netcode.log"
           grep -q 'NETCODE_TEST_OK' "$RUNNER_TEMP/godot-netcode-logs/netcode.log"
 
+      - name: Validate round reset, pickups and bodies (phase 6)
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/round_reset_bodies_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-netcode-logs/round-reset-bodies.log"
+          grep -q 'ROUND_RESET_BODIES_TEST_OK' "$RUNNER_TEMP/godot-netcode-logs/round-reset-bodies.log"
+
       - name: Run real-process sync test under delay profiles (layer B)
         run: |
           set -o pipefail

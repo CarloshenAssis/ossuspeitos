@@ -353,7 +353,7 @@ func _try_run_client_command() -> void:
 		processed_commands[received_command_id] = true
 		combat_test_ack.rpc_id(1, round_id, command, received_command_id, "command_received")
 	if command == "INITIAL":
-		if app.local_combat_state.is_empty() or pickup_entries.size() != 8 or privacy_leaks != 0: return
+		if app.local_combat_state.is_empty() or pickup_entries.size() != MansionMap.PICKUPS.size() or privacy_leaks != 0: return
 		print("COMBAT_PRIVATE_STATE_OK id=%s updates=%d" % [app.client_label, private_updates])
 		processed_commands[received_command_id] = true
 		combat_test_ack.rpc_id(1, round_id, command, received_command_id, "ready")
@@ -420,7 +420,7 @@ func _single_action_accepted() -> bool:
 		and (current_expected_action.is_empty() or str(action_results[0]["action"]) == current_expected_action)
 
 func _prepare_ammo() -> void:
-	_set_position(shooter, ArenaRules.PICKUP_POSITIONS[4] + Vector3.UP * 0.75)
+	_set_position(shooter, MansionMap.pickup_position("ammo_0") + Vector3.UP * 0.75)
 	action_results.clear(); _enter_wait("WAIT_AMMO_READY")
 
 func _prepare_lane() -> void:
@@ -507,10 +507,9 @@ func _check_new_round() -> bool:
 	var ids := {}
 	for entry in pickups:
 		ids[str(entry["pickup_id"])] = true
-		var index := int(str(entry["pickup_id"]).get_slice("_", 1)) + (4 if str(entry["type"]) == "ammo" else 0)
-		if not bool(entry["available"]) or not (entry["position"] as Vector3).is_equal_approx(ArenaRules.PICKUP_POSITIONS[index]): _fail("pickup %s not reset" % entry["pickup_id"]); return false
-	if pickups.size() != 8 or ids.size() != 8: _fail("new round has %d pickups (%d ids)" % [pickups.size(), ids.size()]); return false
-	print("COMBAT_NEW_ROUND_OK round_id=%d participants=%d pickups=8 appearances_kept=true" % [app.round_authority.round_id, peers.size()])
+		if not bool(entry["available"]) or not (entry["position"] as Vector3).is_equal_approx(MansionMap.pickup_position(str(entry["pickup_id"]))): _fail("pickup %s not reset" % entry["pickup_id"]); return false
+	if pickups.size() != 20 or ids.size() != 20: _fail("new round has %d pickups (%d ids)" % [pickups.size(), ids.size()]); return false
+	print("COMBAT_NEW_ROUND_OK round_id=%d participants=%d pickups=20 appearances_kept=true" % [app.round_authority.round_id, peers.size()])
 	return true
 
 func _fire_payload(sequence: int) -> Dictionary:
@@ -677,11 +676,11 @@ func _keys_equal(value: Dictionary, expected: Array) -> bool:
 	return actual == expected
 
 func _valid_pickups(value: Variant) -> bool:
-	if typeof(value) != TYPE_ARRAY or value.size() != 8: return false
+	if typeof(value) != TYPE_ARRAY or value.size() != MansionMap.PICKUPS.size(): return false
 	var weapons := 0; var ammo := 0
 	for raw in value:
 		if typeof(raw) != TYPE_DICTIONARY or not _keys_equal(raw, ["pickup_id", "type", "position", "available", "round_id"]): return false
 		if str(raw["type"]) == "weapon": weapons += 1
 		elif str(raw["type"]) == "ammo": ammo += 1
 		else: return false
-	return weapons == 4 and ammo == 4
+	return weapons == MansionMap.WEAPON_PICKUPS and ammo == MansionMap.AMMO_PICKUPS

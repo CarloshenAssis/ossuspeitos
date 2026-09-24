@@ -112,6 +112,16 @@ for marker in 'CAMPAIGN_NAVIGATION ' 'CAMPAIGN_DEAD_ACTIONS_BLOCKED round=1' 'CA
     "CAMPAIGN_SERVER_OK clients=8 rounds=3 profile=$PROFILE" 'SERVER_SHUTDOWN_COMPLETE closed=8'; do
   assert_grep "server-${marker%% *}" "$marker" "$TMP_DIR/server.log"
 done
+# Fase 6: corpos iguais em todos os clientes (2 em pontos diferentes na
+# rodada 1) e reset completo (spawns, 8+12 pickups, nenhum corpo) no início
+# das rodadas 2 e 3.
+assert_grep round-1-two-bodies 'CAMPAIGN_BODIES_OK round=1 bodies=2 clients=8' "$TMP_DIR/server.log"
+for round in 1 2 3; do
+  assert_grep "round-$round-bodies-at-end" "CAMPAIGN_BODIES_OK round=$round bodies=[0-9]+ clients=8" "$TMP_DIR/server.log"
+  assert_grep "round-$round-reset" "CAMPAIGN_ROUND_RESET_OK round=$round clients=8 spawns=8 pickups=20 bodies=0" "$TMP_DIR/server.log"
+done
+assert_equal body-added-lines "$(grep -c 'ROUND_BODY_ADDED ' "$TMP_DIR/server.log")" "$(grep -c 'ROUND_ALIVE_CHANGED round_id=[0-9]* peer_id=[0-9]* alive=false' "$TMP_DIR/server.log")"
+assert_no_grep no-duplicate-bodies 'CLIENT_BODY_DUPLICATE_IGNORED' "$TMP_DIR"/client-*.log
 assert_equal round-result-lines "$(grep -c 'ROUND_RESULT round_id=' "$TMP_DIR/server.log")" 3
 assert_equal reveal-sent-once-per-round "$(grep -c 'ROUND_REVEAL_SENT round_id=[0-9]* peers=8' "$TMP_DIR/server.log")" 3
 
@@ -139,7 +149,7 @@ data = json.loads(re.search(r"CAMPAIGN_RESOURCES_SUMMARY (\[.*\])", text).group(
 base = data[0]
 problems = []
 for entry in data:
-    if entry["world_states"] != 8 or entry["health"] != 8 or entry["inventories"] != 8 or entry["ground"] != 8 or entry["lobby"] != 8:
+    if entry["world_states"] != 8 or entry["health"] != 8 or entry["inventories"] != 8 or entry["ground"] != 20 or entry.get("bodies", -1) != 0 or entry["lobby"] != 8:
         problems.append("round %d official collections %s" % (entry["round"], entry))
     if entry["queued"] > 8 * 32:
         problems.append("round %d queued %d" % (entry["round"], entry["queued"]))

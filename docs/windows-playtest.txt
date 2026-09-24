@@ -38,7 +38,10 @@ A RODADA
 - De 4 a 8 jogadores. Com 4 conectados começa uma contagem regressiva.
 - Cada um recebe um papel secreto: 1 assassino, 1 detetive, o resto vítimas.
   Só você vê o seu papel.
-- Armas e munição ficam espalhadas pela mansão: pegue com E.
+- 8 pistolas e 12 caixas de munição ficam espalhadas pela mansão: pegue
+  com E. Tudo volta ao lugar no começo de cada rodada.
+- Quem cai fica deitado no chão onde morreu até a rodada seguinte.
+- Toda rodada nova começa com todos de volta aos pontos iniciais.
 - Inocentes vencem quando o assassino cai; o assassino vence quando todos os
   inocentes caem. No fim, os papéis de todos são revelados e, depois de
   alguns segundos, começa a próxima rodada na mesma sala.

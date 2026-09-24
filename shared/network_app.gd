@@ -14,6 +14,9 @@ var shutdown_prepare_received := false
 var shutting_down := false
 var completed_peers: Dictionary = {}
 var authoritative_world: AuthoritativeWorld
+## Corpos oficiais da rodada (servidor) e os aceitos pelo cliente (por id).
+var body_registry := BodyRegistry.new()
+var local_bodies: Dictionary = {}
 var combat_authority: CombatAuthority
 var arena_view: ArenaView
 ## Servidor: tick oficial e identidade desta execução (protocolo 9).
@@ -460,6 +463,8 @@ func request_join(protocol_version: int, requested_label: String) -> void:
 	publish_client_count()
 	_broadcast_snapshot()
 	_publish_round_state(sender)
+	if body_registry.size() > 0:
+		round_bodies_state.rpc_id(sender, {"round_id": round_authority.round_id, "bodies": body_registry.public_list()})
 	_maybe_finish_round_privacy_test()
 
 ## Recusa pública (sem papel nem estado de rodada) e marcador para os testes.
@@ -981,8 +986,13 @@ func _on_round_roles_ready(round_id: int, participant_ids: Array) -> void:
 	combat_authority.begin_round(round_id, participant_ids)
 	# Nova época de controle: comandos da fase anterior (ainda em trânsito)
 	# são recusados sem efeito, com resultado explícito para suas ações.
+	# Fase 6: todos os participantes (vivos ou não na rodada anterior) voltam
+	# ao spawn oficial, parados, com época nova. Corpos da rodada anterior saem
+	# antes de os vivos aparecerem.
+	body_registry.clear()
+	round_bodies_state.rpc({"round_id": round_id, "bodies": []})
 	for raw_peer_id in participant_ids:
-		authoritative_world.bump_epoch(int(raw_peer_id))
+		authoritative_world.reset_to_spawn(int(raw_peer_id))
 	# Somente a contagem agregada vai para o log: nunca a associação peer/papel.
 	var counts := round_authority.role_counts()
 	print("ROUND_ROLE_COUNTS assassin=%d detective=%d victim=%d" % [
@@ -1077,6 +1087,13 @@ func round_public_state(payload: Dictionary) -> void:
 		prediction.clear_look()
 		# Ações sem resultado da rodada anterior não atravessam rodadas.
 		net_stats.clear_actions()
+		# Corpos da rodada anterior saem antes de os vivos reaparecerem.
+		var active_round := int(payload.get("round_id", 0))
+		for body_id in local_bodies.keys():
+			if int(local_bodies[body_id]["round_id"]) != active_round:
+				local_bodies.erase(body_id)
+		if arena_view != null:
+			arena_view.clear_bodies(active_round)
 	if interactive_session and leave_trigger == "active" and state == RoundState.ACTIVE:
 		# Automação de teste: sai pouco depois, como um jogador faria, sem cortar
 		# o servidor no mesmo quadro em que ele avisa os demais.
@@ -1475,6 +1492,68 @@ func _on_combat_player_eliminated(peer_id: int, _instigator_peer_id: int) -> voi
 	if combat_network_test != null: combat_network_test.call("observe_server_elimination", peer_id)
 	if multiplayer.is_server() and not shutting_down:
 		combat_public_elimination.rpc(peer_id)
+		_register_body(peer_id)
+
+## Corpo no ponto oficial da eliminação (fase 6). Só eliminação de combate
+## aceita chega aqui; quem sai vivo não ganha corpo inventado.
+func _register_body(peer_id: int) -> void:
+	if not authoritative_world.states.has(peer_id) or not round_authority.is_participant(peer_id):
+		return
+	var state: Dictionary = authoritative_world.states[peer_id]
+	var dto := body_registry.add(round_authority.round_id, peer_id, state["position"], float(state["yaw"]), str(lobby.appearance_for(peer_id)))
+	if dto.is_empty():
+		return
+	print("ROUND_BODY_ADDED round_id=%d body_id=%d bodies=%d" % [int(dto["round_id"]), int(dto["body_id"]), body_registry.size()])
+	if combat_network_test != null and combat_network_test.has_method("observe_server_body"):
+		combat_network_test.call("observe_server_body", dto)
+	round_body_added.rpc(dto)
+
+@rpc("authority", "call_remote", "reliable")
+func round_body_added(payload: Dictionary) -> void:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
+		return
+	var dto := BodyRules.sanitize(payload)
+	# Callback de outra rodada (ou lixo) não cria corpo.
+	if dto.is_empty() or int(dto["round_id"]) != int(local_round_public.get("round_id", 0)):
+		print("CLIENT_BODY_IGNORED id=%s reason=%s" % [client_label, "invalid" if dto.is_empty() else "stale_round"])
+		return
+	_accept_body(dto)
+
+## Estado completo dos corpos (entrada no meio da rodada) ou limpeza (nova rodada).
+@rpc("authority", "call_remote", "reliable")
+func round_bodies_state(payload: Dictionary) -> void:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
+		return
+	if payload.size() != 2 or typeof(payload.get("round_id")) != TYPE_INT or typeof(payload.get("bodies")) != TYPE_ARRAY:
+		return
+	var list: Array = payload["bodies"]
+	if list.is_empty():
+		_clear_local_bodies()
+		return
+	if int(payload["round_id"]) != int(local_round_public.get("round_id", 0)):
+		print("CLIENT_BODY_IGNORED id=%s reason=stale_round" % client_label)
+		return
+	_clear_local_bodies()
+	for raw in list:
+		var dto := BodyRules.sanitize(raw)
+		if not dto.is_empty() and int(dto["round_id"]) == int(payload["round_id"]):
+			_accept_body(dto)
+
+func _accept_body(dto: Dictionary) -> void:
+	for existing in local_bodies.values():
+		if int(existing["body_id"]) == int(dto["body_id"]) or (int(existing["peer_id"]) == int(dto["peer_id"]) and int(existing["round_id"]) == int(dto["round_id"])):
+			print("CLIENT_BODY_DUPLICATE_IGNORED id=%s" % client_label)
+			return
+	local_bodies[int(dto["body_id"])] = dto
+	if arena_view != null:
+		arena_view.add_body(dto)
+	if combat_network_test != null: combat_network_test.call("observe_client_event", "body", dto)
+	print("CLIENT_BODY_SHOWN id=%s round_id=%d bodies=%d" % [client_label, int(dto["round_id"]), local_bodies.size()])
+
+func _clear_local_bodies() -> void:
+	local_bodies.clear()
+	if arena_view != null:
+		arena_view.clear_bodies()
 
 func _safe_combat_reason(raw_reason: Variant) -> String:
 	var reason := str(raw_reason)

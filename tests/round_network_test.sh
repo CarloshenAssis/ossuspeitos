@@ -141,7 +141,7 @@ RPC_SURFACE="$(awk '
   pending && $0 !~ /^[[:space:]]*(#|$)/ { pending = 0 }
 ' "$ROOT"/shared/*.gd "$ROOT"/client/*.gd "$ROOT"/server/*.gd | sort -u | tr '\n' ' ')"
 echo "RPC_SURFACE $RPC_SURFACE"
-EXPECTED_RPC_SURFACE="client_count_changed client_test_completed combat_action_rejected combat_hit_confirmed combat_private_state combat_public_elimination combat_public_shot input_rejected join_accepted join_rejected pickup_public_state request_join round_final_reveal round_private_role round_private_spectator_targets round_public_state round_role_acknowledged round_roster shutdown_prepare shutdown_ready spectator_reveal_received spectator_test_followed submit_commands world_snapshot "
+EXPECTED_RPC_SURFACE="client_count_changed client_test_completed combat_action_rejected combat_hit_confirmed combat_private_state combat_public_elimination combat_public_shot input_rejected join_accepted join_rejected pickup_public_state request_join round_bodies_state round_body_added round_final_reveal round_private_role round_private_spectator_targets round_public_state round_role_acknowledged round_roster shutdown_prepare shutdown_ready spectator_reveal_received spectator_test_followed submit_commands world_snapshot "
 assert_equal "declared-rpc-surface" "$RPC_SURFACE" "$EXPECTED_RPC_SURFACE"
 # Restringe a revisão estática ao construtor do roster público. O mesmo arquivo
 # também contém o DTO de reveal pós-ENDED, onde `role` é legítimo e obrigatório.

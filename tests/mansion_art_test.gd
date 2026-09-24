@@ -14,7 +14,11 @@ extends SceneTree
 ##   compartilhados e pequenos.
 
 ## SHA-256 do mapa físico aprovado na fase 1 (`_physical_fingerprint`).
-const PHASE_ONE_FINGERPRINT := "fbd4c989a029c73a063c9476dbafbed052c4c6863f3da515ef91707833d71809"
+## Paredes, vergas, tetos, móveis, spawns e portas (sem pickups): o mesmo
+## valor em `main` antes e depois da fase 6.
+const PHASE_ONE_FINGERPRINT := "10ecd14bb78f09944ca37a0eba798b1ba6c542acb97e7bf74462e7774f5c3915"
+## Pickups da fase 6 (8 pistolas e 12 munições).
+const PHASE_SIX_PICKUP_FINGERPRINT := "19bef63df879570d7d74abcf97f2d65b029a9aacaab99f41fa2d8eaa32ccfbb6"
 const TOLERANCE := 0.006
 const TRIM_BAND := 0.12
 const PROP_REACH := 0.2
@@ -59,10 +63,15 @@ static func physical_fingerprint() -> String:
 		parts.append("%s|%s|%s|%s" % [blocker["id"], blocker["kind"], _v(blocker["center"]), _v(blocker["size"])])
 	for spawn in MovementRules.SPAWN_POINTS:
 		parts.append("spawn|%s" % _v(spawn))
-	for pickup in ArenaRules.PICKUP_POSITIONS:
-		parts.append("pickup|%s" % _v(pickup))
 	for door in MansionMap.DOORS:
 		parts.append("door|%s|%s|%s" % [door["id"], door["min"], door["max"]])
+	return "\n".join(parts).sha256_text()
+
+## Pickups oficiais (redistribuídos na fase 6), à parte das paredes.
+static func pickup_fingerprint() -> String:
+	var parts: Array = []
+	for pickup in ArenaRules.PICKUP_POSITIONS:
+		parts.append("pickup|%s" % _v(pickup))
 	return "\n".join(parts).sha256_text()
 
 static func _v(value: Vector3) -> String:
@@ -72,6 +81,7 @@ func _test_physical_map_is_the_phase_one_map() -> void:
 	var fingerprint := physical_fingerprint()
 	print("MANSION_PHYSICAL_FINGERPRINT %s" % fingerprint)
 	_expect(fingerprint == PHASE_ONE_FINGERPRINT, "the physical map is unchanged since phase 1 (%s)" % fingerprint)
+	_expect(pickup_fingerprint() == PHASE_SIX_PICKUP_FINGERPRINT, "the pickups are the phase 6 set (%s)" % pickup_fingerprint())
 
 ## Paredes, vergas e tetos: a própria caixa. Móveis: peças cuja união é
 ## exatamente o volume oficial (ou a caixa maciça).

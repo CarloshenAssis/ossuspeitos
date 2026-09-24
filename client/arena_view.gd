@@ -678,3 +678,111 @@ func _create_pickup(entry: Dictionary) -> Node3D:
 	node.position = entry.get("position", Vector3.ZERO)
 	add_child(node)
 	return node
+
+# --- Corpos (fase 6) ------------------------------------------------------------
+#
+# Corpo de quem foi eliminado: o mesmo personagem (mesma variante) deitado de
+# costas no ponto oficial da eliminação, até o início da rodada seguinte. É só
+# malha, sem colisão, fora do raycast (o hitscan é do servidor e usa volumes
+# oficiais) e fora de `avatars`: snapshots, interpolação e animação nunca o
+# tocam. Cria-se só a partir do DTO oficial (`BodyRules`).
+
+var bodies: Dictionary = {}
+## Correção máxima (m) da apresentação quando o corpo deitado encostaria numa
+## parede ou móvel. A posição oficial não muda; além disso fica como está.
+const BODY_MAX_NUDGE := 0.6
+## Pontos do eixo do corpo deitado (m, no eixo Z local: pés em -1, cabeça em +0,8).
+const BODY_AXIS_SAMPLES := [-0.95, -0.5, 0.0, 0.45, 0.75]
+const BODY_SAMPLE_RADIUS := 0.2
+
+## Posição e yaw de apresentação: piso oficial (y = 0) e, se preciso, o menor
+## deslocamento (até `BODY_MAX_NUDGE`, ao longo do eixo do corpo ou girando
+## 90°) que tira o corpo de dentro da geometria.
+static func body_placement(position: Vector3, yaw: float) -> Dictionary:
+	var floor_position := Vector3(position.x, 0.0, position.z)
+	for turn in [0.0, PI * 0.5, -PI * 0.5]:
+		var candidate_yaw := wrapf(yaw + float(turn), -PI, PI)
+		var axis := Vector3(0.0, 0.0, 1.0).rotated(Vector3.UP, candidate_yaw)
+		var steps := int(round(BODY_MAX_NUDGE / 0.1))
+		for step in steps * 2 + 1:
+			var amount := 0.1 * float((step + 1) / 2) * (1.0 if step % 2 == 1 else -1.0)
+			var candidate := floor_position + axis * amount
+			if _body_fits(candidate, axis):
+				return {"position": candidate, "yaw": candidate_yaw, "nudge": absf(amount), "turned": turn != 0.0}
+	return {"position": floor_position, "yaw": wrapf(yaw, -PI, PI), "nudge": 0.0, "turned": false, "clipped": true}
+
+static func _body_fits(center: Vector3, axis: Vector3) -> bool:
+	for offset in BODY_AXIS_SAMPLES:
+		if ArenaRules.overlaps_blocker(center + axis * float(offset), BODY_SAMPLE_RADIUS):
+			return false
+	return true
+
+## Adiciona o corpo de um DTO oficial já validado. Repetido (mesmo corpo ou
+## mesmo jogador na mesma rodada) não cria outro.
+func add_body(dto: Dictionary) -> bool:
+	var body_id := int(dto.get("body_id", 0))
+	if body_id <= 0 or bodies.has(body_id):
+		return false
+	for node in bodies.values():
+		if int((node as Node3D).get_meta("peer_id")) == int(dto["peer_id"]) and int((node as Node3D).get_meta("round_id")) == int(dto["round_id"]):
+			return false
+	var node := _build_body(dto)
+	bodies[body_id] = node
+	return true
+
+## Remove todos os corpos (ou os que não são da rodada `keep_round`).
+func clear_bodies(keep_round: int = -1) -> void:
+	for body_id in bodies.keys():
+		var node := bodies[body_id] as Node3D
+		if keep_round >= 0 and int(node.get_meta("round_id")) == keep_round:
+			continue
+		node.queue_free()
+		bodies.erase(body_id)
+
+func _build_body(dto: Dictionary) -> Node3D:
+	var placement := body_placement(dto["position"], float(dto["yaw"]))
+	var root := Node3D.new()
+	root.name = "Body_%d" % int(dto["body_id"])
+	root.set_meta("peer_id", int(dto["peer_id"]))
+	root.set_meta("round_id", int(dto["round_id"]))
+	root.set_meta("official_position", dto["position"])
+	root.set_meta("placement", placement)
+	root.position = placement["position"]
+	root.rotation.y = float(placement["yaw"])
+	# De costas: o personagem em pé gira 90° em X (o rosto, à frente em -Z,
+	# fica para cima; a cabeça vai para +Z local).
+	var fall := Node3D.new()
+	fall.name = "Fall"
+	fall.rotation.x = PI * 0.5
+	root.add_child(fall)
+	var character := ArenaModels.build_character(str(dto["appearance"]))
+	fall.add_child(character)
+	add_child(root)
+	_pose_body(character)
+	# Apoia no piso: a parte mais baixa da malha encosta em y = 0.
+	var lowest := INF
+	for mesh in root.find_children("*", "MeshInstance3D", true, false):
+		var box: AABB = (mesh as MeshInstance3D).global_transform * (mesh as MeshInstance3D).get_aabb()
+		lowest = minf(lowest, box.position.y)
+	if is_finite(lowest):
+		fall.position.y = root.global_position.y - lowest + 0.01
+	return root
+
+## Pose determinística e legível de quem caiu: braços abertos, uma perna
+## dobrada e a cabeça de lado. Sem animação e sem seguir pitch ou input.
+static func _pose_body(character: Node3D) -> void:
+	var model := character.get_node_or_null(ArenaModels.CHARACTER_MODEL) as Node3D
+	if model == null:
+		return
+	var rig := CharacterRig.build(model)
+	if rig.is_empty():
+		return
+	var pivots: Dictionary = rig["pivots"]
+	if pivots.has("Shoulder_L"): (pivots["Shoulder_L"] as Node3D).rotation = Vector3(0.0, 0.0, 0.9)
+	if pivots.has("Shoulder_R"): (pivots["Shoulder_R"] as Node3D).rotation = Vector3(0.0, 0.0, -0.9)
+	if pivots.has("Elbow_L"): (pivots["Elbow_L"] as Node3D).rotation = Vector3(-0.4, 0.0, 0.0)
+	if pivots.has("Hip_R"): (pivots["Hip_R"] as Node3D).rotation = Vector3(-0.35, 0.0, 0.0)
+	if pivots.has("Knee_R"): (pivots["Knee_R"] as Node3D).rotation = Vector3(0.7, 0.0, 0.0)
+	var head: Node3D = rig.get("head")
+	if head != null:
+		head.rotation = Vector3(0.0, 0.35, 0.0)

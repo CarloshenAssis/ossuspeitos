@@ -80,7 +80,7 @@ ELIMINATIONS=1; HITS=3
 EXTRA_MARKERS=()
 if [[ "$EXTENDED" == true ]]; then
   ELIMINATIONS=2; HITS=6
-  EXTRA_MARKERS=('COMBAT_SPECTATOR_SERVER_OK victim_eliminated=1' 'COMBAT_SPECTATOR_CLIENT_OK' "COMBAT_NEW_ROUND_OK round_id=2 participants=$CLIENTS pickups=8 appearances_kept=true")
+  EXTRA_MARKERS=('COMBAT_SPECTATOR_SERVER_OK victim_eliminated=1' 'COMBAT_SPECTATOR_CLIENT_OK' "COMBAT_NEW_ROUND_OK round_id=2 participants=$CLIENTS pickups=20 appearances_kept=true")
 fi
 for marker in \
  "COMBAT_ROUND_ACTIVE players=$CLIENTS" "COMBAT_MANSION_SPAWNS_OK players=$CLIENTS appearances=$CLIENTS" \

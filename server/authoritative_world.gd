@@ -77,6 +77,27 @@ func teleport(peer_id: int, position: Vector3, yaw: Variant = null, pitch: Varia
 		state["pitch"] = MovementRules.clamp_pitch(pitch)
 	bump_epoch(peer_id)
 
+## Início de rodada (fase 6): volta ao spawn oficial atribuído ao jogador, com
+## o yaw do spawn, pitch zero, parado e com os baldes de mira cheios. A época
+## nova recusa (com resultado explícito) tudo o que estava na fila ou em
+## trânsito; nenhuma posição da rodada anterior sobrevive.
+func reset_to_spawn(peer_id: int) -> void:
+	if not states.has(peer_id):
+		return
+	var state: Dictionary = states[peer_id]
+	var spawn_index := int(state["spawn_index"])
+	state["position"] = MovementRules.SPAWN_POINTS[spawn_index]
+	state["spawn_position"] = MovementRules.SPAWN_POINTS[spawn_index]
+	state["yaw"] = MansionMap.spawn_yaw_at(spawn_index)
+	state["pitch"] = 0.0
+	state["yaw_tokens"] = MovementRules.MAX_YAW_DELTA * 2.0
+	state["pitch_tokens"] = MovementRules.MAX_PITCH_DELTA * 2.0
+	state["budget"] = float(NetSync.MAX_BUDGET_TICKS)
+	state.erase("catch_up")
+	state.erase("queue_min")
+	state.erase("queue_window")
+	bump_epoch(peer_id)
+
 ## Recebe um pacote já com remetente derivado da conexão. Devolve o motivo de
 ## recusa do pacote inteiro (vazio se aceito) e as ações que já ficaram sem
 ## execução (comando descartado por fila cheia), para resultado explícito.

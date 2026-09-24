@@ -156,6 +156,15 @@ func pickup_public_state(_payload: Array) -> void:
 func round_final_reveal(_payload: Dictionary) -> void:
 	print("ATTACKER_UNEXPECTED_FINAL_REVEAL")
 
+## Corpos (fase 6): públicos, mas o atacante não participa de rodada.
+@rpc("authority", "call_remote", "reliable")
+func round_body_added(_payload: Dictionary) -> void:
+	pass
+
+@rpc("authority", "call_remote", "reliable")
+func round_bodies_state(_payload: Dictionary) -> void:
+	pass
+
 @rpc("any_peer", "call_remote", "reliable")
 func round_private_role(_round_id, _role) -> void:
 	# Um peer que não participa da rodada jamais deveria chegar aqui.

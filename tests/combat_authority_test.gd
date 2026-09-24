@@ -37,7 +37,7 @@ func _arm(peer_id: int, position: Vector3, item := "weapon_0") -> void:
 
 func _test_health_pickups_and_privacy() -> void:
 	_expect(authority.health[1] == 100, "initial health is 100")
-	_expect(authority.public_pickups().size() == 8, "four weapons and four ammo boxes")
+	_expect(authority.public_pickups().size() == 20, "eight weapons and twelve ammo boxes")
 	for pickup in authority.public_pickups():
 		_expect(pickup.keys().size() == 5 and not pickup.has("weapon_id") and not pickup.has("reserve"), "pickup snapshot allowlist")
 	world.states[1]["position"] = Vector3(100, 0, 100)
