@@ -263,6 +263,8 @@ func _start_combat_network_test() -> void:
 	var path := ""
 	if NetworkConfig.bool_argument(arguments, "combat-test"):
 		path = "res://tests/combat_network_coordinator.gd"
+	elif NetworkConfig.bool_argument(arguments, "campaign-test"):
+		path = "res://tests/campaign_coordinator.gd"
 	elif NetworkConfig.bool_argument(arguments, "sync-test"):
 		path = "res://tests/sync_network_coordinator.gd"
 	if path.is_empty():
@@ -272,7 +274,7 @@ func _start_combat_network_test() -> void:
 		fail("COMBAT_TEST_ERROR coordinator_missing")
 		return
 	combat_network_test = script.new()
-	combat_network_test.name = "CombatNetworkCoordinator" if path.contains("combat") else "SyncNetworkCoordinator"
+	combat_network_test.name = "CombatNetworkCoordinator" if path.contains("combat") else ("CampaignCoordinator" if path.contains("campaign") else "SyncNetworkCoordinator")
 	add_child(combat_network_test)
 
 func _process(_delta: float) -> void:
@@ -1064,6 +1066,8 @@ func round_public_state(payload: Dictionary) -> void:
 		# A rodada abriu uma época nova no servidor: espera o próximo ACK.
 		awaiting_epoch_sync = true
 		prediction.clear_look()
+		# Ações sem resultado da rodada anterior não atravessam rodadas.
+		net_stats.clear_actions()
 	if interactive_session and leave_trigger == "active" and state == RoundState.ACTIVE:
 		# Automação de teste: sai pouco depois, como um jogador faria, sem cortar
 		# o servidor no mesmo quadro em que ele avisa os demais.
