@@ -114,6 +114,13 @@ jobs:
             | tee "$RUNNER_TEMP/godot-network-logs/arena-visuals.log"
           grep -q 'ARENA_VISUALS_TEST_OK' "$RUNNER_TEMP/godot-network-logs/arena-visuals.log"
 
+      - name: Validate mansion visual identity
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/mansion_art_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/mansion-art.log"
+          grep -q 'MANSION_ART_TEST_OK' "$RUNNER_TEMP/godot-network-logs/mansion-art.log"
+
       - name: Validate match HUD transitions
         run: |
           set -o pipefail

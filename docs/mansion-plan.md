@@ -8,12 +8,13 @@ tarefa; não versionada). As perspectivas anexadas servem só de atmosfera.
 | Fase | Branch | Estado | PR | SHA |
 | --- | --- | --- | --- | --- |
 | Base | `main` | PRs #14 e #15 integrados | — | `996c536` |
-| 1 — blockout jogável | `claude/charming-darwin-kz3xvn` | PR aberto, acompanhando CI | (ver PR) | (ver PR) |
-| 2 — identidade visual | a mesma branch, reiniciada da `main` após o merge da fase 1 | pendente | — | — |
+| 1 — blockout jogável | `claude/charming-darwin-kz3xvn` | integrada | [#16](https://github.com/CarloshenAssis/ossuspeitos/pull/16) | `37b97fb` → merge `3b20af3` |
+| 2 — identidade visual | `claude/charming-darwin-kz3xvn`, reiniciada de `3b20af3` | em andamento | — | — |
 | 3 — repouso e caminhada | branch própria, após as fases 1 e 2 | pendente (sem merge) | — | — |
 
-Pendências: acompanhar CI, fazer o merge da fase 1 e iniciar a fase 2 a
-partir da `main` atualizada.
+Pendências:
+- publicar o PR da fase 2, acompanhar o CI e fazer o merge;
+- depois, a fase 3 (sem merge).
 
 ## Métricas medidas no código
 

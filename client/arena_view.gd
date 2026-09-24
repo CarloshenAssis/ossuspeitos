@@ -55,10 +55,6 @@ const ZONE_COLORS := {
 	"banheiro": Color(0.66, 0.7, 0.72),
 }
 const CORRIDOR_COLOR := Color(0.56, 0.36, 0.34)
-const WALL_COLOR := Color(0.78, 0.76, 0.72)
-const CEILING_COLOR := Color(0.7, 0.69, 0.66)
-const FURNITURE_COLOR := Color(0.36, 0.27, 0.2)
-const FLOOR_THICKNESS := 0.1
 ## Recursos de inspeção (nomes dos cômodos, marcadores de spawn e teto
 ## recortado). Desligados na apresentação normal; ligar só muda o que se vê,
 ## nunca a simulação.
@@ -216,31 +212,32 @@ func _process(delta: float) -> void:
 			spin.rotation.y = _visual_time * PICKUP_SPIN_SPEED
 			spin.position.y = sin(_visual_time * 2.0) * 0.03
 
+## Mansão montada por `MansionArt` (identidade visual da fase 2) a partir dos
+## mesmos volumes oficiais usados pelo servidor.
+var art: MansionArt
+
 func _build_arena() -> void:
 	var environment := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.05, 0.05, 0.07)
+	env.background_color = Color(0.04, 0.035, 0.03)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.9, 0.86, 0.8)
-	env.ambient_light_energy = 0.55
+	env.ambient_light_color = Color(0.95, 0.84, 0.7)
+	env.ambient_light_energy = 0.42
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 1.05
 	environment.environment = env
 	add_child(environment)
-	# Interior fechado por lajes: a luz vem de pontos sem sombra por ambiente e
-	# de uma direcional fraca sem sombra (não atravessaria o teto com sombra).
+	# Interior fechado por lajes: a luz vem dos pontos quentes de `MansionArt`
+	# (sem sombra) e de uma direcional fraca, também sem sombra.
 	var light := DirectionalLight3D.new()
 	light.rotation_degrees = Vector3(-60.0, -35.0, 0.0)
-	light.light_energy = 0.35
+	light.light_color = Color(1.0, 0.9, 0.78)
+	light.light_energy = 0.25
 	light.shadow_enabled = false
 	add_child(light)
-	for entry in MansionMap.SPACES:
-		_add_floor(entry["min"], entry["max"], zone_color_by_id(str(entry["id"])).darkened(0.35), "Floor_%s" % str(entry["id"]))
-		_add_space_lights(entry)
-	for door in MansionMap.DOORS:
-		_add_floor(door["min"], door["max"], zone_color_by_id(str(door["room"])).darkened(0.35), "Floor_%s" % str(door["id"]))
-	for blocker in ArenaRules.BLOCKERS:
-		_add_blocker(blocker)
+	art = MansionArt.new()
+	art.build(self)
 	for index in MovementRules.SPAWN_POINTS.size():
 		_add_spawn_marker(MovementRules.SPAWN_POINTS[index])
 	for room in MansionMap.rooms():
@@ -262,44 +259,6 @@ func set_show_ceilings(enabled: bool) -> void:
 	for node in get_children():
 		if node.has_meta("arena_blocker_kind") and str(node.get_meta("arena_blocker_kind")) == "ceiling":
 			(node as Node3D).visible = enabled
-
-## Cada volume oficial vira exatamente uma mesh com o mesmo centro e tamanho.
-func _add_blocker(blocker: Dictionary) -> void:
-	var kind := str(blocker["kind"])
-	var color := WALL_COLOR
-	match kind:
-		"ceiling": color = CEILING_COLOR
-		"furniture": color = FURNITURE_COLOR.lerp(zone_color_by_id(str(blocker.get("space", ""))), 0.2)
-	var node := _add_box(blocker["center"], blocker["size"], color)
-	node.name = "Blocker_%s" % str(blocker["id"])
-	node.set_meta("arena_blocker_id", str(blocker["id"]))
-	node.set_meta("arena_blocker_kind", kind)
-
-## Piso visual: placa fina logo abaixo de y = 0 (o piso oficial é o plano y = 0).
-func _add_floor(min_point: Vector2, max_point: Vector2, color: Color, node_name: String) -> void:
-	var center := (min_point + max_point) * 0.5
-	var size := max_point - min_point
-	var node := _add_decor_box(Vector3(center.x, -FLOOR_THICKNESS * 0.5, center.y), Vector3(size.x, FLOOR_THICKNESS, size.y), color)
-	node.name = node_name
-
-## Luzes pontuais sem sombra perto do teto: uma a cada ~6 m de comprimento.
-func _add_space_lights(entry: Dictionary) -> void:
-	var min_point: Vector2 = entry["min"]
-	var max_point: Vector2 = entry["max"]
-	var size := max_point - min_point
-	var count_x := maxi(1, int(round(size.x / 6.0)))
-	var count_z := maxi(1, int(round(size.y / 6.0)))
-	var ceiling := float(entry["ceiling"])
-	for ix in count_x:
-		for iz in count_z:
-			var light := OmniLight3D.new()
-			light.position = Vector3(min_point.x + size.x * (ix + 0.5) / count_x, ceiling - 0.4, min_point.y + size.y * (iz + 0.5) / count_z)
-			light.light_color = Color(1.0, 0.92, 0.8)
-			light.light_energy = 0.9
-			light.omni_range = maxf(size.x / count_x, size.y / count_z) * 0.9 + 2.0
-			light.shadow_enabled = false
-			light.set_meta("arena_light", str(entry["id"]))
-			add_child(light)
 
 func _add_spawn_marker(spawn: Vector3) -> void:
 	var node := MeshInstance3D.new()
@@ -337,32 +296,6 @@ static func zone_color(position: Vector3) -> Color:
 
 static func zone_color_by_id(zone_id: String) -> Color:
 	return ZONE_COLORS.get(zone_id, CORRIDOR_COLOR)
-
-func _add_decor_box(box_position: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
-	var node := _add_box(box_position, size, color)
-	node.set_meta("arena_decor", "floor")
-	return node
-
-## Um material por cor, compartilhado entre todas as caixas do mapa.
-static var _box_materials: Dictionary = {}
-
-static func _shared_material(color: Color) -> StandardMaterial3D:
-	var key := color.to_html()
-	if not _box_materials.has(key):
-		var material := StandardMaterial3D.new()
-		material.albedo_color = color
-		_box_materials[key] = material
-	return _box_materials[key]
-
-func _add_box(box_position: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
-	var mesh_instance := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	mesh.material = _shared_material(color)
-	mesh_instance.mesh = mesh
-	mesh_instance.position = box_position
-	add_child(mesh_instance)
-	return mesh_instance
 
 func _update_zone_label(position: Vector3) -> void:
 	var zone := ArenaRules.zone_at(position)
