@@ -121,6 +121,13 @@ jobs:
             | tee "$RUNNER_TEMP/godot-network-logs/mansion-art.log"
           grep -q 'MANSION_ART_TEST_OK' "$RUNNER_TEMP/godot-network-logs/mansion-art.log"
 
+      - name: Validate character idle and walk animation
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/character_animation_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/character-animation.log"
+          grep -q 'CHARACTER_ANIMATION_TEST_OK' "$RUNNER_TEMP/godot-network-logs/character-animation.log"
+
       - name: Validate match HUD transitions
         run: |
           set -o pipefail

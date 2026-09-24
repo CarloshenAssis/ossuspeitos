@@ -9,12 +9,17 @@ tarefa; não versionada). As perspectivas anexadas servem só de atmosfera.
 | --- | --- | --- | --- | --- |
 | Base | `main` | PRs #14 e #15 integrados | — | `996c536` |
 | 1 — blockout jogável | `claude/charming-darwin-kz3xvn` | integrada | [#16](https://github.com/CarloshenAssis/ossuspeitos/pull/16) | `37b97fb` → merge `3b20af3` |
-| 2 — identidade visual | `claude/charming-darwin-kz3xvn`, reiniciada de `3b20af3` | em andamento | — | — |
-| 3 — repouso e caminhada | branch própria, após as fases 1 e 2 | pendente (sem merge) | — | — |
+| 2 — identidade visual | `claude/charming-darwin-kz3xvn`, reiniciada de `3b20af3` | integrada | [#17](https://github.com/CarloshenAssis/ossuspeitos/pull/17) | `a23825b` → merge `60e478f` |
+| 3 — repouso e caminhada | `claude/charming-darwin-kz3xvn`, reiniciada de `60e478f` | em andamento (merge autorizado depois pelo documento das fases 4 e 5) | — | — |
+| 4 — resposta local e apresentação | após o merge da fase 3 | pendente | — | — |
+| 5 — campanha integrada e build | após o merge da fase 4 | pendente | — | — |
 
 Pendências:
-- publicar o PR da fase 2, acompanhar o CI e fazer o merge;
-- depois, a fase 3 (sem merge).
+- fase 3: evidência gráfica, suítes, PR, CI e merge;
+- depois, as fases 4 e 5.
+
+Retomada: `git fetch origin && git checkout claude/charming-darwin-kz3xvn`.
+Testes: ver `.github/workflows/godot-network-tests.yml`.
 
 ## Métricas medidas no código
 
