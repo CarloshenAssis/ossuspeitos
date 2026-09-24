@@ -429,3 +429,35 @@ não há RPC nova nem mudança de regra, autorização, privacidade ou vitória.
 `tests/match_hud_test.gd` (nós reais, no CI) cobre a sequência vivo →
 eliminado → espectador → ENDED → nova rodada. `tests/hud_presentation_test.gd`
 mede o layout dos novos elementos em 960×540 e 1920×1080.
+
+## Fase 4: efeitos e sons das ações de combate
+
+Todo efeito nasce de um evento oficial que o cliente já recebia; nenhuma RPC,
+dano, cadência, munição, raycast ou regra de vitória mudou.
+
+| Ação | Evento oficial | Efeito |
+|---|---|---|
+| Coleta aceita | estado privado (arma nova ou reserva maior sem recarga) | som `pickup_ok` |
+| Coleta/ação recusada | `combat_action_rejected` (só para quem agiu) | som `pickup_deny` (ou `dry_fire` no pente vazio), nunca o de sucesso |
+| Pickup some | `public_pickups` (`available` false) | anel neutro no lugar, igual para todos, sem dizer quem pegou |
+| Próprio disparo | `combat_public_shot` com `shooter_peer_id` próprio | som, recuo e clarão só na pistola da mão |
+| Disparo alheio | `combat_public_shot` | clarão fraco e som posicional na origem pública |
+| Impacto | `end` e `hit_player` públicos do disparo | marca de parede ou de jogador (quem foi atingido não é revelado) |
+| Acerto confirmado | `combat_hit_confirmed` (só para quem atirou) | marcador da mira (já existia) e som `hit` |
+| Dano recebido | vida privada oficial diminui na mesma rodada | som `hurt`, tranco curto e a vinheta de borda que já existia |
+| Recarga | `reloading` oficial false→true e true→false com pente maior | sons de início e fim; pistola inclinada enquanto a recarga oficial durar |
+| Eliminação | `combat_public_elimination` | fumaça cinza neutra no corpo e som, sem cor de papel |
+
+- **Mira:** recuo e pose de recarga mexem só num pivô da pistola. O tranco de
+  dano usa `v_offset`/`h_offset` da câmera, que não mudam a origem nem a direção
+  usadas no disparo.
+- **Impacto na própria câmera:** um impacto colado na câmera (quem foi atingido
+  é você) não é desenhado.
+- **Discrição:** clarões duram 60 ms, a luz tem energia máxima de 0,9 e não há
+  flash de tela. Todos os efeitos somem sozinhos em menos de 1 s e são limpos
+  quando o cliente zera o estado de combate entre rodadas.
+- **Áudio:** `client/sfx_bank.gd` gera 9 sons curtos (PCM 16 bits, 22 050 Hz)
+  com seno, ruído de semente fixa e envelopes. Não há arquivo de áudio externo
+  nem licença de terceiros, e o mesmo código roda em Windows e na Web.
+- **Testes:** `tests/combat_feedback_test.gd` confere evento → efeito e roda
+  no CI.

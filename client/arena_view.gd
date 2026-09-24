@@ -9,6 +9,15 @@ var player_rig: Node3D
 var pickup_nodes: Dictionary = {}
 var pickup_states: Dictionary = {}
 var weapon_model: Node3D
+## Pivô entre a câmera e a pistola: recuo e pose de recarga mexem só aqui,
+## nunca na câmera (a direção do disparo vem da câmera).
+var weapon_pivot: Node3D
+var fx: CombatFx
+var _muzzle_flash: MeshInstance3D
+var _combat_prev: Dictionary = {}
+var _reload_pose := false
+var _pose_tween: Tween
+var _kick_tween: Tween
 var crosshair: Crosshair
 var spectator_target_peer_id := 0
 ## Chip da região (canto superior esquerdo): lado + nome, na cor do mapa.
@@ -58,11 +67,31 @@ func _ready() -> void:
 	# Pistola na mão no canto inferior direito da visão: não cobre o centro
 	# nem o painel de munição. Só aparece com arma no inventário oficial.
 	weapon_model = ArenaModels.build_pistol()
-	weapon_model.position = VIEWMODEL_OFFSET
 	weapon_model.scale = Vector3.ONE * VIEWMODEL_SCALE
 	weapon_model.rotation = Vector3(0.04, 0.06, 0.0)
 	weapon_model.visible = false
-	camera.add_child(weapon_model)
+	weapon_pivot = Node3D.new()
+	weapon_pivot.name = "WeaponPivot"
+	# O pivô fica na própria arma: recuo e recarga são inclinações curtas no
+	# lugar, sem varrer a pistola pela tela.
+	weapon_pivot.position = VIEWMODEL_OFFSET
+	camera.add_child(weapon_pivot)
+	weapon_pivot.add_child(weapon_model)
+	# Clarão da própria arma: pequeno, na boca do cano, só por um instante.
+	_muzzle_flash = MeshInstance3D.new()
+	var flash_mesh := SphereMesh.new()
+	flash_mesh.radius = 0.035
+	flash_mesh.height = 0.07
+	_muzzle_flash.mesh = flash_mesh
+	var flash_material := StandardMaterial3D.new()
+	flash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	flash_material.albedo_color = Color(1.0, 0.85, 0.55)
+	_muzzle_flash.material_override = flash_material
+	_muzzle_flash.position = Vector3(0.0, 0.03, -0.19)
+	_muzzle_flash.visible = false
+	weapon_model.add_child(_muzzle_flash)
+	fx = CombatFx.new()
+	add_child(fx)
 	var overlay := CanvasLayer.new()
 	add_child(overlay)
 	var overlay_root := Control.new()
@@ -345,9 +374,102 @@ func camera_direction() -> Vector3:
 
 var _combat_has_weapon := false
 
+const RELOAD_POSE := Vector3(-0.45, 0.25, 0.2)
+const RELOAD_DROP := Vector3(0.0, -0.04, 0.02)
+const RECOIL_BACK := Vector3(0.0, 0.01, 0.05)
+const RECOIL_TILT := 0.14
+const DAMAGE_KICK := 0.035
+const IMPACT_CAMERA_CLEARANCE := 1.2
+
 func apply_combat_state(state: Dictionary) -> void:
 	_combat_has_weapon = not str(state.get("weapon_id", "")).is_empty() and int(state.get("health", 0)) > 0
 	_refresh_gameplay_visuals()
+	for feedback in combat_feedback(_combat_prev, state):
+		match feedback:
+			"pickup_ok", "reload_start", "reload_end": fx.play_ui(feedback)
+			"hurt":
+				fx.play_ui("hurt")
+				_damage_kick()
+	if state.is_empty():
+		# Estado limpo (nova rodada, fim): nenhum efeito ou pose antiga.
+		fx.clear()
+	_combat_prev = state.duplicate(true)
+	_set_reload_pose(bool(state.get("reloading", false)) and _combat_has_weapon)
+
+## Retorno sonoro das mudanças do estado privado oficial entre duas versões
+## seguidas da mesma rodada. Coleta só conta se o servidor já a aplicou (arma
+## nova ou reserva maior sem recarga); recusas nunca chegam aqui.
+static func combat_feedback(before: Dictionary, after: Dictionary) -> Array:
+	var result: Array = []
+	if before.is_empty() or after.is_empty() or int(before.get("round_id", -1)) != int(after.get("round_id", -2)):
+		return result
+	var health_before := int(before.get("health", 0))
+	var health_after := int(after.get("health", 0))
+	if health_after < health_before:
+		result.append("hurt")
+	if health_after <= 0:
+		return result
+	var weapon_before := str(before.get("weapon_id", ""))
+	var weapon_after := str(after.get("weapon_id", ""))
+	var reloading_before := bool(before.get("reloading", false))
+	var reloading_after := bool(after.get("reloading", false))
+	if weapon_before.is_empty() and not weapon_after.is_empty():
+		result.append("pickup_ok")
+	elif not weapon_after.is_empty() and int(after.get("reserve", 0)) > int(before.get("reserve", 0)) and not reloading_before:
+		result.append("pickup_ok")
+	if not reloading_before and reloading_after:
+		result.append("reload_start")
+	elif reloading_before and not reloading_after and int(after.get("magazine", 0)) > int(before.get("magazine", 0)):
+		result.append("reload_end")
+	return result
+
+## Recusa oficial de uma ação do próprio jogador: som de "não", nunca o de
+## sucesso. Motivos silenciosos no HUD (cadência, técnicos) ficam mudos aqui.
+func show_rejection(action: String, reason: String) -> void:
+	if RoundHud.rejection_notice(action, reason).is_empty():
+		return
+	fx.play_ui("dry_fire" if action == "fire" and reason == "empty_magazine" else "pickup_deny")
+
+## Eliminação pública: fumaça neutra onde o corpo estava e o corpo some.
+func show_elimination(peer_id: int) -> void:
+	if peer_id == local_peer_id:
+		fx.play_ui("elimination")
+	elif avatars.has(peer_id):
+		fx.elimination((avatars[peer_id] as Node3D).global_position)
+	elif targets.has(peer_id):
+		fx.elimination(targets[peer_id]["position"])
+	set_player_alive(peer_id, false)
+
+func _set_reload_pose(active: bool) -> void:
+	if active == _reload_pose:
+		return
+	_reload_pose = active
+	if _pose_tween != null: _pose_tween.kill()
+	_pose_tween = weapon_pivot.create_tween().set_parallel(true)
+	_pose_tween.tween_property(weapon_pivot, "rotation", RELOAD_POSE if active else Vector3.ZERO, 0.18)
+	_pose_tween.tween_property(weapon_pivot, "position", VIEWMODEL_OFFSET + (RELOAD_DROP if active else Vector3.ZERO), 0.18)
+
+func _recoil() -> void:
+	if _reload_pose:
+		return
+	if _pose_tween != null: _pose_tween.kill()
+	_pose_tween = weapon_pivot.create_tween()
+	_pose_tween.tween_property(weapon_pivot, "position", VIEWMODEL_OFFSET + RECOIL_BACK, 0.04)
+	_pose_tween.parallel().tween_property(weapon_pivot, "rotation:x", RECOIL_TILT, 0.04)
+	_pose_tween.tween_property(weapon_pivot, "position", VIEWMODEL_OFFSET, 0.12)
+	_pose_tween.parallel().tween_property(weapon_pivot, "rotation:x", 0.0, 0.12)
+	_muzzle_flash.visible = true
+	get_tree().create_timer(CombatFx.FLASH_SECONDS).timeout.connect(func(): _muzzle_flash.visible = false)
+
+## Dano recebido: tranco curto só no deslocamento de projeção da câmera
+## (`v_offset`/`h_offset`); a orientação e a origem da mira não mudam.
+func _damage_kick() -> void:
+	if _kick_tween != null: _kick_tween.kill()
+	camera.v_offset = -DAMAGE_KICK
+	camera.h_offset = DAMAGE_KICK * 0.5
+	_kick_tween = camera.create_tween().set_parallel(true)
+	_kick_tween.tween_property(camera, "v_offset", 0.0, 0.16)
+	_kick_tween.tween_property(camera, "h_offset", 0.0, 0.16)
 
 ## Seleciona apenas um ID previamente autorizado pela camada de rede. A camera
 ## segue posicao/yaw oficiais recebidos em snapshots; nunca envia controle.
@@ -382,7 +504,14 @@ func apply_pickups(entries: Array) -> void:
 		pickup_states[pickup_id] = entry
 		if not pickup_nodes.has(pickup_id):
 			pickup_nodes[pickup_id] = _create_pickup(entry)
-		(pickup_nodes[pickup_id] as Node3D).visible = bool(entry.get("available", false))
+		var node := pickup_nodes[pickup_id] as Node3D
+		var available := bool(entry.get("available", false))
+		# Sumiu agora (público): anel neutro no lugar, igual para todos. Quem
+		# pegou não é revelado.
+		if node.visible and not available:
+			var color := ArenaModels.WEAPON_GLOW if str(entry.get("type", "")) == "weapon" else ArenaModels.AMMO_GLOW
+			fx.pickup_vanish(entry.get("position", node.position), color)
+		node.visible = available
 	for pickup_id in pickup_nodes.keys():
 		if not pickup_states.has(pickup_id):
 			(pickup_nodes[pickup_id] as Node).queue_free()
@@ -414,9 +543,23 @@ func show_shot(payload: Dictionary) -> void:
 	add_child(tracer)
 	var timer := get_tree().create_timer(0.08)
 	timer.timeout.connect(tracer.queue_free)
+	# Quem atirou vem no evento público; o alvo não. O próprio disparo tem som
+	# e recuo na primeira pessoa; o dos outros tem clarão e som na origem.
+	if int(payload.get("shooter_peer_id", 0)) == local_peer_id and local_peer_id != 0:
+		fx.play_ui("shot")
+		_recoil()
+	else:
+		fx.muzzle_flash(start, finish - start)
+		fx.play_world("shot", start)
+	# Impacto colado na própria câmera (é você quem foi atingido) viraria uma
+	# mancha no centro da tela; aí basta o retorno de dano do estado privado.
+	if finish.distance_to(camera_origin()) > IMPACT_CAMERA_CLEARANCE:
+		fx.impact(finish, bool(payload.get("hit_player", false)))
 
 func show_hit_marker() -> void:
-	if crosshair != null and crosshair.visible: crosshair.show_hit()
+	if crosshair != null and crosshair.visible:
+		crosshair.show_hit()
+		fx.play_ui("hit")
 
 func set_player_alive(peer_id: int, alive: bool) -> void:
 	_alive_flags[peer_id] = alive

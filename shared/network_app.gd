@@ -1079,7 +1079,7 @@ func combat_public_elimination(peer_id: int) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1: return
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "elimination", peer_id)
 	if arena_view != null:
-		arena_view.set_player_alive(peer_id, false)
+		arena_view.show_elimination(peer_id)
 	if round_hud != null: round_hud.call("apply_elimination", peer_id)
 
 @rpc("authority", "call_remote", "reliable")
@@ -1092,8 +1092,9 @@ func combat_hit_confirmed() -> void:
 func combat_action_rejected(action: String, sequence: int, reason: String) -> void:
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "rejection", {"action": action, "sequence": sequence, "reason": reason})
 	print("COMBAT_REJECTED id=%s action=%s sequence=%d reason=%s" % [client_label, action, sequence, reason])
-	if round_hud != null and not multiplayer.is_server() and multiplayer.get_remote_sender_id() == 1:
-		round_hud.call("show_rejection", action, reason)
+	if not multiplayer.is_server() and multiplayer.get_remote_sender_id() == 1:
+		if round_hud != null: round_hud.call("show_rejection", action, reason)
+		if arena_view != null: arena_view.show_rejection(action, reason)
 
 func _on_pickups_changed(snapshot: Array) -> void:
 	if multiplayer.is_server() and not shutting_down:
