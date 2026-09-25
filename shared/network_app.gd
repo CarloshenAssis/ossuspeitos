@@ -530,6 +530,16 @@ func _broadcast_snapshot() -> void:
 		world_snapshot.rpc_id(int(peer_id), {"tick": server_tick, "session": session_nonce,
 			"players": players, "ack": authoritative_world.ack_for(int(peer_id))})
 
+## Membros da sala corrente com o socket aberto. Um cliente que caiu fica
+## no lobby até o aviso de desconexão chegar; enviar a ele só gera erro do
+## engine no log a cada mensagem.
+func _open_members() -> Array:
+	var result: Array = []
+	for peer_id in lobby.peer_ids():
+		if _peer_socket_open(int(peer_id)):
+			result.append(int(peer_id))
+	return result
+
 func _peer_socket_open(peer_id: int) -> bool:
 	var transport := multiplayer.multiplayer_peer as WebSocketMultiplayerPeer
 	if transport == null:
@@ -902,7 +912,7 @@ func _publish_room_state() -> void:
 	if not rooms_enabled or current_room == null or shutting_down or not multiplayer.is_server():
 		return
 	var payload := current_room.public_state(Time.get_ticks_msec())
-	for peer_id in lobby.peer_ids():
+	for peer_id in _open_members():
 		room_state.rpc_id(int(peer_id), payload)
 
 func _destroy_room(room: MatchRoom, reason: String) -> Array:
@@ -1044,7 +1054,7 @@ func _finish_probe(result: String, detail: String) -> void:
 func publish_client_count() -> void:
 	if shutting_down:
 		return
-	for peer_id in lobby.peer_ids():
+	for peer_id in _open_members():
 		client_count_changed.rpc_id(int(peer_id), lobby.size())
 	_publish_round_state()
 
@@ -1642,7 +1652,7 @@ func _on_round_roles_ready(round_id: int, participant_ids: Array) -> void:
 	# ao spawn oficial, parados, com época nova. Corpos da rodada anterior saem
 	# antes de os vivos aparecerem.
 	body_registry.clear()
-	for raw_peer_id in lobby.peer_ids():
+	for raw_peer_id in _open_members():
 		round_bodies_state.rpc_id(int(raw_peer_id), {"round_id": round_id, "bodies": []})
 	for raw_peer_id in participant_ids:
 		authoritative_world.reset_to_spawn(int(raw_peer_id))
@@ -1734,7 +1744,7 @@ func _publish_round_state(target_peer_id: int = 0) -> void:
 		round_roster.rpc_id(target_peer_id, roster)
 		return
 	# Só os membros desta sala (nunca broadcast a todas as conexões).
-	for peer_id in lobby.peer_ids():
+	for peer_id in _open_members():
 		round_public_state.rpc_id(int(peer_id), payload)
 		round_roster.rpc_id(int(peer_id), roster)
 
@@ -2153,7 +2163,7 @@ func combat_action_rejected(action: String, sequence: int, reason: String) -> vo
 
 func _on_pickups_changed(snapshot: Array) -> void:
 	if multiplayer.is_server() and not shutting_down:
-		for peer_id in lobby.peer_ids():
+		for peer_id in _open_members():
 			pickup_public_state.rpc_id(int(peer_id), snapshot)
 
 func _on_combat_private_state_changed(peer_id: int, state: Dictionary) -> void:
@@ -2164,13 +2174,13 @@ func _on_combat_private_state_changed(peer_id: int, state: Dictionary) -> void:
 func _on_shot_resolved(event: Dictionary) -> void:
 	if combat_network_test != null: combat_network_test.call("observe_server_shot", event)
 	if multiplayer.is_server() and not shutting_down:
-		for peer_id in lobby.peer_ids():
+		for peer_id in _open_members():
 			combat_public_shot.rpc_id(int(peer_id), event)
 
 func _on_combat_player_eliminated(peer_id: int, _instigator_peer_id: int) -> void:
 	if combat_network_test != null: combat_network_test.call("observe_server_elimination", peer_id)
 	if multiplayer.is_server() and not shutting_down:
-		for member in lobby.peer_ids():
+		for member in _open_members():
 			combat_public_elimination.rpc_id(int(member), peer_id)
 		_register_body(peer_id)
 
