@@ -43,17 +43,38 @@ func _process(_delta: float) -> void:
 	_check_isolation()
 	_maybe_finish(now)
 
+## "sala:rodada" -> PRONTO no instante em que a sala voltou ao lobby.
+var ready_at_reset_by_key: Dictionary = {}
+var watched_rooms: Dictionary = {}
+
+func _watch_room(room: MatchRoom) -> void:
+	if watched_rooms.has(room.room_id):
+		return
+	watched_rooms[room.room_id] = true
+	var ra := room.round_authority
+	var last := {"state": ra.state}
+	# Só ENDED -> WAITING é fim de rodada (contagem cancelada também volta a
+	# WAITING, sem rodada jogada).
+	ra.state_changed.connect(func(state: int, round_id: int):
+		if state == RoundState.WAITING and int(last["state"]) == RoundState.ENDED:
+			ready_at_reset_by_key["%d:%d" % [room.room_id, round_id]] = ra.ready_count()
+		last["state"] = state)
+
 func _drive_room(room: MatchRoom, now: int) -> void:
+	_watch_room(room)
 	var ra := room.round_authority
 	var key := "%d:%d" % [room.room_id, ra.round_id]
 	if ra.state != RoundState.ACTIVE or room.combat.active_round_id <= 0:
-		if ra.state == RoundState.WAITING and ra.round_id > 0 and not completed_rounds.has(key):
+		if ready_at_reset_by_key.has(key) and not completed_rounds.has(key):
 			completed_rounds[key] = true
 			var count := _completed_for(room.room_id)
+			# PRONTO medido no instante da volta ao lobby (sinal), não agora: um
+			# cliente com PRONTO automático já pode ter marcado de novo.
+			var ready_at_reset := int(ready_at_reset_by_key.get(key, -1))
 			print("ROOMS_TEST_ROUND_DONE room=%d round_id=%d completed=%d ready=%d players=%d result=%s" % [
-				room.room_id, ra.round_id, count, ra.ready_count(), room.member_count(), str(not room.last_result.is_empty())])
-			if ra.ready_count() != 0:
-				_fail("ready_not_reset room=%d ready=%d" % [room.room_id, ra.ready_count()])
+				room.room_id, ra.round_id, count, ready_at_reset, room.member_count(), str(not room.last_result.is_empty())])
+			if ready_at_reset != 0:
+				_fail("ready_not_reset room=%d ready=%d" % [room.room_id, ready_at_reset])
 		return
 	if not active_since.has(key):
 		active_since[key] = now
