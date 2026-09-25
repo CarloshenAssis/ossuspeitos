@@ -404,7 +404,7 @@ jobs:
           set -o pipefail
           TEST_LOG_DIR="$RUNNER_TEMP/godot-menu-logs/flow" GAME_BIN="$(command -v godot)" \
             ./tests/menu_flow_test.sh 2>&1 | tee "$RUNNER_TEMP/godot-menu-logs/flow.log"
-          grep -q 'MENU_FLOW_TEST_OK scenes=9' "$RUNNER_TEMP/godot-menu-logs/flow.log"
+          grep -q 'MENU_FLOW_TEST_OK scenes=10' "$RUNNER_TEMP/godot-menu-logs/flow.log"
 
       - name: Upload failure logs
         if: failure()
