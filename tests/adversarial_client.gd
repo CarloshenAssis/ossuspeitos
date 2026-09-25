@@ -43,6 +43,10 @@ func _process(_delta: float) -> bool:
 
 func _on_connected() -> void:
 	print("ATTACKER_CONNECTED id=%s peer_id=%d" % [label, peer_node.multiplayer.get_unique_id()])
+	if peer_node.attack_phase.begins_with("rooms"):
+		peer_node.run_room_prehall_attacks()
+		peer_node.request_join.rpc_id(1, NetworkConfig.PROTOCOL_VERSION, label)
+		return
 	peer_node.run_preauth_attacks()
 	if peer_node.attack_phase == "preauth":
 		return

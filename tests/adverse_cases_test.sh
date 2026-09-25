@@ -194,14 +194,16 @@ case_version_and_crash() {
   port_free "$port" && ok port-released-after-crash || { echo "ASSERT_FAILED case=$CASE name=port-released" >&2; fail 1; }
 }
 
-# --- Protocolo 10: versões diferentes nos dois sentidos, pelo menu ----------------
+# --- Protocolo atual contra o 9: versões diferentes nos dois sentidos, pelo menu ---
+# A versão atual vem de `shared/network_config.gd` (11 desde as salas online).
 case_protocol_mismatch() {
-  local port=$1 status
-  [[ "$(sed -n 's/^const PROTOCOL_VERSION := \([0-9]*\).*/\1/p' "$ROOT/shared/network_config.gd")" == 10 ]] && ok protocol-is-10
-  # Servidor 10, cliente 9.
-  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 --port="$port" >"$CASE_DIR/server-10.log" 2>&1 &
+  local port=$1 status current
+  current="$(sed -n 's/^const PROTOCOL_VERSION := \([0-9]*\).*/\1/p' "$ROOT/shared/network_config.gd")"
+  [[ "$current" =~ ^[0-9]+$ && "$current" -gt 9 ]] && ok "protocol-is-$current" || { echo "ASSERT_FAILED case=$CASE name=protocol-current value=$current" >&2; fail 1; }
+  # Servidor atual, cliente 9.
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 --port="$port" >"$CASE_DIR/server-current.log" 2>&1 &
   local server_pid=$!; ALL_PIDS+=("$server_pid")
-  wait_marker 'SERVER_READY' "$CASE_DIR/server-10.log" "$server_pid"
+  wait_marker 'SERVER_READY' "$CASE_DIR/server-current.log" "$server_pid"
   "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-settings-path="$CASE_DIR/settings-$RANDOM.cfg" --menu-exit-on-return=true --menu-auto=join --menu-name=antigo \
     --menu-address=127.0.0.1 --menu-port="$port" --test-protocol-version=9 >"$CASE_DIR/client-9.log" 2>&1 && status=0 || status=$?
   assert_equal client-9-exit "$status" 0
@@ -210,22 +212,22 @@ case_protocol_mismatch() {
   assert_grep client-9-clear-message 'JOIN_REJECTED_MESSAGE id=antigo text=Versão incompatível do jogo \(este build usa o protocolo 9\)' "$CASE_DIR/client-9.log"
   assert_grep client-9-back-to-menu 'MENU_RETURNED reason=join_rejected' "$CASE_DIR/client-9.log"
   assert_no_grep client-9-no-entry 'JOIN_ACCEPTED|CLIENT_ROUND_STATE|CLIENT_ROSTER|CLIENT_BODY_SHOWN|CLIENT_PRIVATE_ROLE' "$CASE_DIR/client-9.log"
-  assert_grep server-10-mismatch 'JOIN_PROTOCOL_MISMATCH peer_id=[0-9]+ client=9 server=10' "$CASE_DIR/server-10.log"
-  assert_grep server-10-refused-empty 'JOIN_REFUSED peer_id=[0-9]+ reason=protocol_version count=0' "$CASE_DIR/server-10.log"
-  assert_no_grep server-10-no-partial-entry 'CLIENT_JOINED|PLAYER_SPAWNED|ROUND_LATE_JOIN|ROUND_STATE' "$CASE_DIR/server-10.log"
+  assert_grep server-current-mismatch "JOIN_PROTOCOL_MISMATCH peer_id=[0-9]+ client=9 server=$current" "$CASE_DIR/server-current.log"
+  assert_grep server-current-refused-empty 'JOIN_REFUSED peer_id=[0-9]+ reason=protocol_version count=0' "$CASE_DIR/server-current.log"
+  assert_no_grep server-current-no-partial-entry 'CLIENT_JOINED|PLAYER_SPAWNED|ROUND_LATE_JOIN|ROUND_STATE' "$CASE_DIR/server-current.log"
   kill "$server_pid"; status_of "$server_pid"
-  # Servidor 9 (build antiga simulada), cliente 10.
+  # Servidor 9 (build antiga simulada), cliente atual.
   "$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 --port="$((port + 1))" --test-protocol-version=9 >"$CASE_DIR/server-9.log" 2>&1 &
   server_pid=$!; ALL_PIDS+=("$server_pid")
   wait_marker 'SERVER_READY' "$CASE_DIR/server-9.log" "$server_pid"
   "$GODOT_BIN" --headless --path "$ROOT" -- --mode=menu --menu-settings-path="$CASE_DIR/settings-$RANDOM.cfg" --menu-exit-on-return=true --menu-auto=join --menu-name=novo \
-    --menu-address=127.0.0.1 --menu-port="$((port + 1))" >"$CASE_DIR/client-10.log" 2>&1 && status=0 || status=$?
-  assert_equal client-10-exit "$status" 0
-  assert_grep client-10-announces-10 'CLIENT_PROTOCOL id=novo version=10' "$CASE_DIR/client-10.log"
-  assert_grep client-10-refused 'JOIN_REJECTED id=novo reason=protocol_version' "$CASE_DIR/client-10.log"
-  assert_grep client-10-clear-message 'JOIN_REJECTED_MESSAGE id=novo text=Versão incompatível do jogo \(este build usa o protocolo 10\)' "$CASE_DIR/client-10.log"
-  assert_no_grep client-10-no-entry 'JOIN_ACCEPTED|CLIENT_ROUND_STATE|CLIENT_ROSTER|CLIENT_BODY_SHOWN' "$CASE_DIR/client-10.log"
-  assert_grep server-9-mismatch 'JOIN_PROTOCOL_MISMATCH peer_id=[0-9]+ client=10 server=9' "$CASE_DIR/server-9.log"
+    --menu-address=127.0.0.1 --menu-port="$((port + 1))" >"$CASE_DIR/client-current.log" 2>&1 && status=0 || status=$?
+  assert_equal client-current-exit "$status" 0
+  assert_grep client-current-announces "CLIENT_PROTOCOL id=novo version=$current" "$CASE_DIR/client-current.log"
+  assert_grep client-current-refused 'JOIN_REJECTED id=novo reason=protocol_version' "$CASE_DIR/client-current.log"
+  assert_grep client-current-clear-message "JOIN_REJECTED_MESSAGE id=novo text=Versão incompatível do jogo \\(este build usa o protocolo $current\\)" "$CASE_DIR/client-current.log"
+  assert_no_grep client-current-no-entry 'JOIN_ACCEPTED|CLIENT_ROUND_STATE|CLIENT_ROSTER|CLIENT_BODY_SHOWN' "$CASE_DIR/client-current.log"
+  assert_grep server-9-mismatch "JOIN_PROTOCOL_MISMATCH peer_id=[0-9]+ client=$current server=9" "$CASE_DIR/server-9.log"
   assert_no_grep server-9-no-partial-entry 'CLIENT_JOINED|PLAYER_SPAWNED|ROUND_STATE' "$CASE_DIR/server-9.log"
   kill "$server_pid"; status_of "$server_pid"
 }

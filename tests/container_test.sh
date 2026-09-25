@@ -110,8 +110,8 @@ T0=$(date +%s%N)
 start_container "$MAIN" -e PORT="$PORT" -e ARMED_MYSTERY_STATUS_SECONDS=5 -p "127.0.0.1:$PORT:$PORT" "$IMAGE"
 wait_clog "$MAIN" 'DEDICATED_READY' 30
 echo "STARTUP ready_ms=$(( ($(date +%s%N) - T0) / 1000000 ))"
-assert_grep ready-line "DEDICATED_READY bind=0.0.0.0 port=$PORT port_source=env capacity=8 protocol=10" <(clog "$MAIN")
-assert_grep release-build 'DEDICATED_START game=armed-mystery commit=[0-9a-f]+ godot=4\.4\.1-stable .*protocol=10 build=release display=headless capacity=8' <(clog "$MAIN")
+assert_grep ready-line "DEDICATED_READY bind=0.0.0.0 port=$PORT port_source=env capacity=8 protocol=11 shutdown_file=on max_rooms=12" <(clog "$MAIN")
+assert_grep release-build 'DEDICATED_START game=armed-mystery commit=[0-9a-f]+ godot=4\.4\.1-stable .*protocol=11 build=release display=headless capacity=8' <(clog "$MAIN")
 assert_equal non-root-uid "$(docker exec "$MAIN" id -u)" 10001
 assert_equal app-read-only "$(docker exec "$MAIN" sh -c 'touch /app/x 2>/dev/null && echo writable || echo read-only')" read-only
 BUSY_STATUS=0
@@ -162,17 +162,25 @@ assert_grep ws-handshake-accepted 'WS_HANDSHAKE HTTP/1.1 101' "$TMP_DIR/stalled.
 assert_grep raw-tcp-dropped 'RAW_CLOSED_AFTER [0-9]' "$TMP_DIR/stalled.log"
 assert_grep ws-without-join-dropped 'WS_CLOSED_AFTER [0-9]' "$TMP_DIR/stalled.log"
 assert_grep join-deadline-logged 'DEDICATED_JOIN_DEADLINE peer_id=' <(clog "$MAIN")
-assert_grep status-line 'DEDICATED_STATUS uptime_s=[0-9]+ peers=0 lobby=0 pending=0 round_state=WAITING' <(clog "$MAIN")
+assert_grep status-line 'DEDICATED_STATUS uptime_s=[0-9]+ peers=0 hall=0 pending=0 rooms=0 rooms_playing=0 room_members=0 ' <(clog "$MAIN")
 stats "$MAIN" idle
 probe after-idle && ok probe-after-idle || bad probe-after-idle
-assert_grep probe-joined 'PROBE_OK .* result=joined .* protocol=10' "$TMP_DIR/probe-after-idle.log"
+assert_grep probe-joined 'PROBE_OK .* result=joined .* round_state=WAITING room=lobby protocol=11' "$TMP_DIR/probe-after-idle.log"
 
 # --- multiplayer: 8 clientes, sigilo, recusas, adversário, saídas ---------------
 SCENE=multiplayer
 CLIENT_PIDS=()
-for id in 1 2 3 4 5 6 7 8; do client "jogador-$id"; CLIENT_PIDS+=("$LAST_PID"); done
+# Salas (fase 9): o primeiro cria, os outros entram pelo código; todos marcam
+# PRONTO sozinhos quando a sala tem 8 e a contagem real (10 s) começa.
+READY8=(--auto-ready-rounds=1 --auto-ready-min-players=8)
+client "jogador-1" --room-action=create "${READY8[@]}"; CLIENT_PIDS+=("$LAST_PID")
+for _ in $(seq 1 300); do grep -q 'ROOM_JOINED id=jogador-1 code=' "$TMP_DIR/client-jogador-1.log" && break; sleep 0.1; done
+CODE="$(sed -n 's/.*ROOM_JOINED id=jogador-1 code=\([A-Z0-9]*\).*/\1/p' "$TMP_DIR/client-jogador-1.log" | head -n1)"
+[[ -n "$CODE" ]] && ok room-created || bad room-created
+for id in 2 3 4 5 6 7 8; do client "jogador-$id" --room-action=join --room-code="$CODE" "${READY8[@]}"; CLIENT_PIDS+=("$LAST_PID"); done
 wait_count "$MAIN" 'CLIENT_JOINED id=jogador-' 8 60
-wait_clog "$MAIN" 'ROUND_STATE state=ACTIVE round_id=1 players=8 participants=8' 60
+wait_count "$MAIN" 'ROOM_READY room=[0-9]+ peer_id=[0-9]+ ready=true ready_count=8 players=8' 1 60
+wait_clog "$MAIN" 'ROUND_STATE state=ACTIVE round_id=1 players=8 participants=8 room=' 60
 ok eight-joined-round-active
 sleep 2
 stats "$MAIN" eight-clients
@@ -186,33 +194,41 @@ APPEARANCES="$(for id in 1 2 3 4 5 6 7 8; do grep 'CLIENT_ROSTER_APPEARANCES' "$
 assert_equal appearance-consistent "$APPEARANCES" 1
 assert_no_grep server-log-no-roles 'ASSASSIN|DETECTIVE|VICTIM|assassino|detetive' <(clog "$MAIN")
 assert_no_grep client-logs-no-roles 'ASSASSIN|DETECTIVE|VICTIM' "$TMP_DIR"/client-jogador-*.log
-probe nono && ok ninth-probe-ran || bad ninth-probe-ran
-assert_grep ninth-refused 'PROBE_OK .* result=refused detail=room_unavailable' "$TMP_DIR/probe-nono.log"
+probe nono --room-action=join --room-code="$CODE" && ok ninth-probe-ran || bad ninth-probe-ran
+assert_grep ninth-refused 'PROBE_OK .* result=refused detail=room_full' "$TMP_DIR/probe-nono.log"
 VERSION_STATUS=0; probe versao-9 --test-protocol-version=9 || VERSION_STATUS=$?
 assert_equal protocol-9-refused-exit "$VERSION_STATUS" 1
 assert_grep protocol-9-reason 'PROBE_FAILED .* reason=join_rejected:protocol_version' "$TMP_DIR/probe-versao-9.log"
-assert_grep protocol-9-server 'JOIN_PROTOCOL_MISMATCH peer_id=[0-9]+ client=9 server=10' <(clog "$MAIN")
+assert_grep protocol-9-server 'JOIN_PROTOCOL_MISMATCH peer_id=[0-9]+ client=9 server=11' <(clog "$MAIN")
 # Cliente adversarial (payloads e RPCs hostis) contra o container.
 timeout 60 "$GODOT_BIN" --headless --path "$ROOT" --script tests/adversarial_client.gd -- \
   --url="ws://127.0.0.1:$PORT" --client-id=invasor --attack=full --quit-after-msec=6000 >"$TMP_DIR/attacker.log" 2>&1 || true
 sleep 1
 running "$MAIN" && ok alive-after-attack || bad alive-after-attack
-assert_equal eight-still-in-room "$(clog "$MAIN" | grep -cE 'CLIENT_LEFT peer_id=[0-9]+ count=[1-7]$' || true)" 0
+assert_equal eight-still-in-room "$(clog "$MAIN" | grep -cE 'CLIENT_LEFT peer_id=[0-9]+ count=[1-7] room=' || true)" 0
 # Cliente derrubado (SIGKILL) sai do lobby.
 kill -KILL "${CLIENT_PIDS[7]}"; wait "${CLIENT_PIDS[7]}" 2>/dev/null || true
-wait_clog "$MAIN" 'CLIENT_LEFT peer_id=[0-9]+ count=7' 30
+wait_clog "$MAIN" 'CLIENT_LEFT peer_id=[0-9]+ count=7 room=' 30
 ok killed-client-left
 for index in 0 1 2 3 4 5 6; do kill -TERM "${CLIENT_PIDS[$index]}" 2>/dev/null || true; done
 for index in 0 1 2 3 4 5 6; do wait "${CLIENT_PIDS[$index]}" 2>/dev/null || true; done
-wait_clog "$MAIN" 'CLIENT_LEFT peer_id=[0-9]+ count=0' 30
+wait_clog "$MAIN" 'CLIENT_LEFT peer_id=[0-9]+ count=0 room=' 30
 ok everyone-left
 sleep 2
 stats "$MAIN" after-leave
 running "$MAIN" && ok alive-when-empty-again || bad alive-when-empty-again
 # Nova turma na mesma sessão do servidor.
 GROUP2=()
-for id in 1 2 3 4; do client "turma2-$id"; GROUP2+=("$LAST_PID"); done
-wait_clog "$MAIN" 'ROUND_STATE state=ACTIVE round_id=2 players=4 participants=4' 60
+start_group() { # prefixo -> sala nova com 4, todos prontos
+  local prefix=$1 code=""
+  client "$prefix-1" --room-action=create --auto-ready-rounds=1 --auto-ready-min-players=4; GROUP+=("$LAST_PID")
+  for _ in $(seq 1 300); do grep -q "ROOM_JOINED id=$prefix-1 code=" "$TMP_DIR/client-$prefix-1.log" && break; sleep 0.1; done
+  code="$(sed -n "s/.*ROOM_JOINED id=$prefix-1 code=\([A-Z0-9]*\).*/\1/p" "$TMP_DIR/client-$prefix-1.log" | head -n1)"
+  for id in 2 3 4; do client "$prefix-$id" --room-action=join --room-code="$code" --auto-ready-rounds=1 --auto-ready-min-players=4; GROUP+=("$LAST_PID"); done
+}
+GROUP=(); start_group turma2; GROUP2=("${GROUP[@]}")
+# Sala nova: a rodada dela começa em 1, independente da sala anterior.
+wait_clog "$MAIN" 'ROUND_STATE state=ACTIVE round_id=1 players=4 participants=4 room=' 60
 ok new-group-plays-next-round
 
 # --- stop: encerramento coordenado com jogadores conectados ---------------------
@@ -235,11 +251,11 @@ SCENE=restart
 docker start "$MAIN" >/dev/null
 wait_count "$MAIN" 'DEDICATED_READY' 2 30
 GROUP3=()
-for id in 1 2 3 4; do client "turma3-$id"; GROUP3+=("$LAST_PID"); done
-wait_count "$MAIN" 'ROUND_STATE state=ACTIVE round_id=1 players=4 participants=4' 1 60
-# A rodada volta a 1 depois do reinício (as rodadas 1 e 2 anteriores se
-# perderam com o processo, como esperado sem persistência).
-[[ "$(clog "$MAIN" | grep -c 'ROUND_STATE state=ACTIVE round_id=1 ' || true)" -ge 2 ]] && ok fresh-state-after-restart || bad fresh-state-after-restart
+GROUP=(); start_group turma3; GROUP3=("${GROUP[@]}")
+wait_count "$MAIN" 'ROUND_STATE state=ACTIVE round_id=1 players=4 participants=4 room=1$' 1 60
+# Sem persistência: as salas anteriores se perderam com o processo e a
+# numeração recomeça (a primeira sala depois do reinício é a 1 de novo).
+[[ "$(clog "$MAIN" | grep -c 'ROOM_CREATED room=1 rooms=1' || true)" -ge 2 ]] && ok fresh-state-after-restart || bad fresh-state-after-restart
 docker stop -t 20 "$MAIN" >/dev/null
 assert_equal restart-stop-exit "$(exit_code "$MAIN")" 0
 for pid in "${GROUP3[@]}"; do wait "$pid" 2>/dev/null || true; done

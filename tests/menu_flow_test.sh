@@ -193,8 +193,47 @@ assert_grep name-taken-message 'JOIN_REJECTED_MESSAGE id=Ana text=Já existe alg
 status_of "$FIRST_ANA"; assert_equal first-exit "$LAST_STATUS" 0
 kill "$NAME_SERVER" 2>/dev/null || true; status_of "$NAME_SERVER"
 
+# --- 10. Salas online pelo menu: criar, entrar pelo código, PRONTO, resultado --
+# Servidor com salas; o coordenador de teste só fecha a rodada (elimina pela
+# API interna). Tudo no menu é feito pelos botões reais: JOGAR ONLINE,
+# CRIAR SALA, ENTRAR EM SALA, PRONTO e SAIR DA SALA.
+SCENE=online-rooms
+ROOMS_PORT=$((PORT + 7))
+server rooms-server --port="$ROOMS_PORT" --rooms=true --rooms-test=true --countdown-seconds=2 \
+  --round-end-delay-seconds=2 --rooms-target-rounds=1 --rooms-expect-peers=99 --rooms-step-gap-msec=800 &
+ROOMS_SERVER=$!; PIDS+=("$ROOMS_SERVER")
+wait_marker 'SERVER_READY' "$TMP_DIR/rooms-server.log" "$ROOMS_SERVER"
+ROOM_ARGS=(--menu-exit-on-return=true --menu-auto=online --online-url="ws://127.0.0.1:$ROOMS_PORT" --menu-room-ready-min-players=4 --menu-room-leave-after-result=true)
+menu room-host "${ROOM_ARGS[@]}" --menu-name=Dona --menu-room=create &
+ROOM_MENUS=("$!"); PIDS+=("$!")
+wait_marker 'ROOM_JOINED id=Dona code=' "$TMP_DIR/room-host.log" "${ROOM_MENUS[0]}"
+ROOM_CODE="$(sed -n 's/.*ROOM_JOINED id=Dona code=\([A-Z0-9]*\).*/\1/p' "$TMP_DIR/room-host.log" | head -n1)"
+TYPED_CODE="$(echo "${ROOM_CODE:0:3}-${ROOM_CODE:3:3}" | tr 'A-Z' 'a-z')"
+for guest in Beto Caio Duda; do
+  menu "room-$guest" "${ROOM_ARGS[@]}" --menu-name="$guest" --menu-room=join --room-code="$TYPED_CODE" &
+  ROOM_MENUS+=("$!"); PIDS+=("$!")
+done
+for index in "${!ROOM_MENUS[@]}"; do status_of "${ROOM_MENUS[$index]}"; assert_equal "room-menu-$index-exit" "$LAST_STATUS" 0; done
+for name in host Beto Caio Duda; do
+  log="$TMP_DIR/room-$name.log"
+  assert_grep "$name-hall" 'MENU_ONLINE_HALL' "$log"
+  assert_grep "$name-room-shown" "MENU_ROOM_SHOWN code=$ROOM_CODE" "$log"
+  assert_grep "$name-pressed-ready" 'MENU_ROOM_READY value=true' "$log"
+  assert_grep "$name-countdown" 'MENU_ROOM phase=countdown players=4 ready=4' "$log"
+  assert_grep "$name-played" 'CLIENT_VIEW id=[^ ]+ game=true' "$log"
+  assert_grep "$name-back-in-room" 'MENU_ROOM phase=lobby players=[0-9] ready=0 own_ready=false' "$log"
+  assert_grep "$name-result" 'CLIENT_ROOM_STATE .* phase=lobby round_id=1 .*result=true' "$log"
+  assert_grep "$name-left" 'MENU_ONLINE_LEAVE panel=room' "$log"
+  assert_grep "$name-returned" 'MENU_RETURNED reason=left' "$log"
+done
+assert_grep host-created 'MENU_ROOM_CREATE' "$TMP_DIR/room-host.log"
+assert_grep guest-joined 'MENU_ROOM_JOIN' "$TMP_DIR/room-Beto.log"
+assert_grep rooms-round 'ROUND_STATE state=ACTIVE round_id=1 players=4 participants=4 room=1' "$TMP_DIR/rooms-server.log"
+assert_no_grep rooms-no-second-round 'ROUND_STATE state=(COUNTDOWN|ACTIVE) round_id=2' "$TMP_DIR/rooms-server.log"
+kill "$ROOMS_SERVER" 2>/dev/null || true; status_of "$ROOMS_SERVER"
+
 SCENE=all
 kill "$WATCHDOG_PID" 2>/dev/null || true; wait "$WATCHDOG_PID" 2>/dev/null || true; WATCHDOG_PID=""
 [[ ! -f "$TMP_DIR/watchdog.log" ]] || fail 1
 assert_no_grep no-script-errors 'SCRIPT ERROR|Parse Error' "$TMP_DIR"/*.log
-echo "MENU_FLOW_TEST_OK scenes=9"
+echo "MENU_FLOW_TEST_OK scenes=10"
