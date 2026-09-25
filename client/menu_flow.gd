@@ -6,12 +6,13 @@ extends RefCounted
 ## eventos. Cada tentativa tem uma identidade; evento de tentativa anterior é
 ## ignorado (`accepts`).
 
-enum State { IDLE, VALIDATING, STARTING_SERVER, CONNECTING, AWAITING_RESPONSE, CONNECTED, CANCELLING, FAILED, DISCONNECTED, SHUTTING_DOWN }
+enum State { IDLE, VALIDATING, STARTING_SERVER, CONNECTING, AWAITING_RESPONSE, CONNECTED, CANCELLING, FAILED, DISCONNECTED, SHUTTING_DOWN, ONLINE }
 
 const NAMES := {
 	State.IDLE: "idle", State.VALIDATING: "validating", State.STARTING_SERVER: "starting_server",
 	State.CONNECTING: "connecting", State.AWAITING_RESPONSE: "awaiting_response", State.CONNECTED: "connected",
 	State.CANCELLING: "cancelling", State.FAILED: "failed", State.DISCONNECTED: "disconnected", State.SHUTTING_DOWN: "shutting_down",
+	State.ONLINE: "online",
 }
 
 ## Por estado: texto, spinner, se pode cancelar, se os campos/botões de ação
@@ -27,6 +28,9 @@ const SPEC := {
 	State.FAILED: {"text": "", "spinner": false, "cancel": false, "inputs": true, "overlay": true},
 	State.DISCONNECTED: {"text": "", "spinner": false, "cancel": false, "inputs": true, "overlay": true},
 	State.SHUTTING_DOWN: {"text": "Encerrando…", "spinner": true, "cancel": false, "inputs": false, "overlay": true},
+	## Fase 9: conectado ao servidor online, no lobby online ou numa sala. Os
+	## painéis de sala ficam ativos; a conexão continua aberta.
+	State.ONLINE: {"text": "", "spinner": false, "cancel": false, "inputs": true, "overlay": false},
 }
 
 ## Transições permitidas (o resto é ignorado e contado).
@@ -35,12 +39,13 @@ const NEXT := {
 	State.VALIDATING: [State.IDLE, State.FAILED, State.STARTING_SERVER, State.CONNECTING],
 	State.STARTING_SERVER: [State.CONNECTING, State.FAILED, State.CANCELLING, State.SHUTTING_DOWN],
 	State.CONNECTING: [State.AWAITING_RESPONSE, State.FAILED, State.CANCELLING, State.SHUTTING_DOWN],
-	State.AWAITING_RESPONSE: [State.CONNECTED, State.FAILED, State.CANCELLING, State.SHUTTING_DOWN],
+	State.AWAITING_RESPONSE: [State.CONNECTED, State.ONLINE, State.FAILED, State.CANCELLING, State.SHUTTING_DOWN],
 	State.CONNECTED: [State.DISCONNECTED, State.SHUTTING_DOWN],
 	State.CANCELLING: [State.IDLE],
 	State.FAILED: [State.IDLE, State.VALIDATING, State.SHUTTING_DOWN],
 	State.DISCONNECTED: [State.IDLE, State.VALIDATING, State.SHUTTING_DOWN],
 	State.SHUTTING_DOWN: [],
+	State.ONLINE: [State.CONNECTED, State.DISCONNECTED, State.SHUTTING_DOWN],
 }
 
 var state := State.IDLE

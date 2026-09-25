@@ -141,8 +141,19 @@ RPC_SURFACE="$(awk '
   pending && $0 !~ /^[[:space:]]*(#|$)/ { pending = 0 }
 ' "$ROOT"/shared/*.gd "$ROOT"/client/*.gd "$ROOT"/server/*.gd | sort -u | tr '\n' ' ')"
 echo "RPC_SURFACE $RPC_SURFACE"
-EXPECTED_RPC_SURFACE="client_count_changed client_test_completed combat_action_rejected combat_hit_confirmed combat_private_state combat_public_elimination combat_public_shot input_rejected join_accepted join_rejected pickup_public_state request_join round_bodies_state round_body_added round_final_reveal round_private_role round_private_spectator_targets round_public_state round_role_acknowledged round_roster shutdown_prepare shutdown_ready spectator_reveal_received spectator_test_followed submit_commands world_snapshot "
+# Fase 9 (protocolo 11): salas online. Cliente -> servidor: room_create,
+# room_join, room_set_ready (só intenções; a sala vem do vínculo do servidor).
+# Servidor -> cliente: room_welcome, room_state, room_error.
+EXPECTED_RPC_SURFACE="client_count_changed client_test_completed combat_action_rejected combat_hit_confirmed combat_private_state combat_public_elimination combat_public_shot input_rejected join_accepted join_rejected pickup_public_state request_join room_create room_error room_join room_set_ready room_state room_welcome round_bodies_state round_body_added round_final_reveal round_private_role round_private_spectator_targets round_public_state round_role_acknowledged round_roster shutdown_prepare shutdown_ready spectator_reveal_received spectator_test_followed submit_commands world_snapshot "
 assert_equal "declared-rpc-surface" "$RPC_SURFACE" "$EXPECTED_RPC_SURFACE"
+# O Godot endereça RPC pelo índice na lista ordenada de nomes. O handshake
+# (`request_join` e a recusa `join_rejected`) precisa manter o índice entre
+# versões: assim uma build antiga recebe a recusa `protocol_version` legível
+# em vez de uma RPC trocada. Nomes novos devem ordenar depois de
+# `request_join` (desde o protocolo 10: join_rejected=9, request_join=11).
+rpc_index() { local i=0; for name in $RPC_SURFACE; do [[ "$name" == "$1" ]] && { echo "$i"; return; }; i=$((i + 1)); done; echo -1; }
+assert_equal "handshake-index-join-rejected" "$(rpc_index join_rejected)" "9"
+assert_equal "handshake-index-request-join" "$(rpc_index request_join)" "11"
 # Restringe a revisão estática ao construtor do roster público. O mesmo arquivo
 # também contém o DTO de reveal pós-ENDED, onde `role` é legítimo e obrigatório.
 assert_no_grep "public-roster-has-no-role-field" '"role"' \

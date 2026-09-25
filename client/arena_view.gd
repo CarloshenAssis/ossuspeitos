@@ -157,6 +157,9 @@ func _ready() -> void:
 	region_chip.offset_top = region_chip_top
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Oculta (lobby da sala online, fase 9): não prende o mouse.
+	if not is_visible_in_tree():
+		return
 	if event is InputEventMouseButton and event.pressed:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	elif event.is_action_pressed("release_mouse"):

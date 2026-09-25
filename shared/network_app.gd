@@ -120,6 +120,24 @@ var dedicated_stats := {"connections": 0, "joins": 0, "refusals": 0, "deadline_d
 ## peer_id -> recusas de entrada já registradas (log limitado por peer).
 var refusal_logs: Dictionary = {}
 const REFUSAL_LOGS_PER_PEER := 3
+## Fase 9: salas privadas online. Com salas ligadas (servidor dedicado, ou
+## `--rooms=true` em testes), cada sala tem o próprio estado de partida; os
+## campos `lobby`, `round_authority`, `authoritative_world`, `combat_authority`
+## e `body_registry` apontam para a sala do evento que está sendo tratado
+## (`_use_room`). Sem salas (local/LAN/testes antigos), eles apontam sempre
+## para a sala única `default_room`, como antes.
+var rooms_enabled := false
+var room_registry: RoomRegistry
+var default_room: MatchRoom
+var current_room: MatchRoom
+## Salas online: conexões que fizeram o handshake (protocolo + nome válido).
+## peer_id -> {"since": msec, "failures": tentativas de entrada recusadas}
+var hall_peers: Dictionary = {}
+## room_id -> [[sinal, Callable], ...] para desligar quando a sala sai.
+var room_connections: Dictionary = {}
+var rooms_next_housekeeping_msec := 0
+## Capacidade de conexões em salas online além dos membros das salas.
+const HALL_EXTRA_CAPACITY := 16
 
 func _ready() -> void:
 	GameControls.ensure()
@@ -172,8 +190,11 @@ func start_dedicated() -> void:
 
 func start_server(port: int = -1, bind_address: String = "") -> void:
 	spectator_reveal_test_mode = NetworkConfig.bool_argument(arguments, "spectator-reveal-test")
-	authoritative_world = AuthoritativeWorld.new()
-	_start_round_authority()
+	rooms_enabled = dedicated or NetworkConfig.bool_argument(arguments, "rooms")
+	if rooms_enabled:
+		_start_room_registry()
+	else:
+		_start_round_authority()
 	if not dedicated:
 		_start_combat_network_test()
 	shutdown_prepare_timer = Timer.new()
@@ -216,31 +237,100 @@ func start_server(port: int = -1, bind_address: String = "") -> void:
 	_write_status_file(DesktopSession.STATUS_READY)
 	if dedicated:
 		# Pronto de verdade: mundo, autoridades e listener criados sem erro.
-		print("DEDICATED_READY bind=%s port=%d port_source=%s capacity=%d protocol=%d shutdown_file=%s" % [
+		print("DEDICATED_READY bind=%s port=%d port_source=%s capacity=%d protocol=%d shutdown_file=%s max_rooms=%d" % [
 			bind_address, port, dedicated_config["port_source"], RoundRules.MAX_PLAYERS,
-			NetworkConfig.PROTOCOL_VERSION, "on" if not str(dedicated_config["shutdown_file"]).is_empty() else "off"])
+			NetworkConfig.PROTOCOL_VERSION, "on" if not str(dedicated_config["shutdown_file"]).is_empty() else "off",
+			room_registry.max_rooms])
 		dedicated_next_status_msec = Time.get_ticks_msec() + int(dedicated_config["status_interval_seconds"]) * 1000
 
+## Sala única (local/LAN/testes antigos): sem código e sem gate de PRONTO.
 func _start_round_authority() -> void:
-	round_authority = RoundAuthority.new(lobby, NetworkConfig.integer_argument(arguments, "round-seed", 0))
-	round_authority.configure(
+	default_room = MatchRoom.new(0, "", Time.get_ticks_msec(), false,
 		NetworkConfig.float_argument(arguments, "countdown-seconds", RoundRules.COUNTDOWN_SECONDS),
-		NetworkConfig.float_argument(arguments, "round-end-delay-seconds", RoundRules.ROUND_END_DELAY_SECONDS))
+		NetworkConfig.float_argument(arguments, "round-end-delay-seconds", RoundRules.ROUND_END_DELAY_SECONDS),
+		NetworkConfig.integer_argument(arguments, "round-seed", 0))
 	round_stop_after = NetworkConfig.integer_argument(arguments, "stop-after-round-active", 0)
 	round_expect_late_joins = NetworkConfig.integer_argument(arguments, "expect-late-joins", 0)
-	round_authority.state_changed.connect(_on_round_state_changed)
-	round_authority.roles_ready.connect(_on_round_roles_ready)
-	round_authority.alive_changed.connect(_on_round_alive_changed)
-	round_authority.round_ended.connect(_on_round_ended)
-	round_authority.reveal_ready.connect(_on_round_reveal_ready)
-	round_authority.spectator_targets_changed.connect(_on_spectator_targets_changed)
-	round_authority.round_reset.connect(_on_round_reset)
-	round_authority.invalid_transition.connect(_on_round_invalid_transition)
-	combat_authority = CombatAuthority.new(round_authority, authoritative_world)
-	combat_authority.pickups_changed.connect(_on_pickups_changed)
-	combat_authority.private_state_changed.connect(_on_combat_private_state_changed)
-	combat_authority.shot_resolved.connect(_on_shot_resolved)
-	combat_authority.player_eliminated.connect(_on_combat_player_eliminated)
+	_wire_room(default_room)
+	_use_room(default_room)
+
+## Salas online: registro vazio; as salas nascem por `room_create`.
+func _start_room_registry() -> void:
+	room_registry = RoomRegistry.new()
+	if dedicated:
+		room_registry.max_rooms = int(dedicated_config.get("max_rooms", RoomRegistry.DEFAULT_MAX_ROOMS))
+	else:
+		room_registry.max_rooms = clampi(NetworkConfig.integer_argument(arguments, "max-rooms", RoomRegistry.DEFAULT_MAX_ROOMS), 1, RoomRegistry.MAX_ROOMS_LIMIT)
+		room_registry.countdown_seconds = NetworkConfig.float_argument(arguments, "countdown-seconds", RoomRules.COUNTDOWN_SECONDS)
+		room_registry.results_seconds = NetworkConfig.float_argument(arguments, "round-end-delay-seconds", RoomRules.RESULTS_SECONDS)
+	print("ROOMS_ENABLED max_rooms=%d room_capacity=%d countdown_s=%.1f results_s=%.1f" % [
+		room_registry.max_rooms, RoundRules.MAX_PLAYERS, room_registry.countdown_seconds, room_registry.results_seconds])
+
+## Aponta os campos de trabalho do servidor para a sala do evento corrente.
+## Toda entrada do servidor (RPC de cliente, tick, sinal de autoridade,
+## chamada adiada, desconexão) passa por aqui antes de ler ou enviar estado.
+func _use_room(room: MatchRoom) -> void:
+	current_room = room
+	lobby = room.lobby
+	round_authority = room.round_authority
+	authoritative_world = room.world
+	combat_authority = room.combat
+	body_registry = room.bodies
+
+## Liga os sinais das autoridades da sala; cada callback entra na própria sala
+## antes de agir, então nada de uma sala é tratado no contexto de outra.
+func _wire_room(room: MatchRoom) -> void:
+	var links: Array = []
+	var ra := room.round_authority
+	links.append([ra.state_changed, func(s: int, r: int): _use_room(room); _on_round_state_changed(s, r)])
+	links.append([ra.roles_ready, func(r: int, ids: Array): _use_room(room); _on_round_roles_ready(r, ids)])
+	links.append([ra.alive_changed, func(r: int, p: int, a: bool): _use_room(room); _on_round_alive_changed(r, p, a)])
+	links.append([ra.round_ended, func(r: int, t: int, why: String): _use_room(room); _on_round_ended(r, t, why)])
+	links.append([ra.reveal_ready, func(r: int, result: Dictionary): _use_room(room); _on_round_reveal_ready(r, result)])
+	links.append([ra.spectator_targets_changed, func(r: int): _use_room(room); _on_spectator_targets_changed(r)])
+	links.append([ra.round_reset, func(r: int): _use_room(room); _on_round_reset(r)])
+	links.append([ra.invalid_transition, func(a: int, b: int): _use_room(room); _on_round_invalid_transition(a, b)])
+	var combat := room.combat
+	links.append([combat.pickups_changed, func(snapshot: Array): _use_room(room); _on_pickups_changed(snapshot)])
+	links.append([combat.private_state_changed, func(p: int, state: Dictionary): _use_room(room); _on_combat_private_state_changed(p, state)])
+	links.append([combat.shot_resolved, func(event: Dictionary): _use_room(room); _on_shot_resolved(event)])
+	links.append([combat.player_eliminated, func(p: int, i: int): _use_room(room); _on_combat_player_eliminated(p, i)])
+	for link in links:
+		(link[0] as Signal).connect(link[1])
+	room_connections[room.room_id] = links
+
+func _unwire_room(room: MatchRoom) -> void:
+	for link in room_connections.get(room.room_id, []):
+		if (link[0] as Signal).is_connected(link[1]):
+			(link[0] as Signal).disconnect(link[1])
+	room_connections.erase(room.room_id)
+
+## Salas que o tick percorre.
+func _active_rooms() -> Array:
+	if rooms_enabled:
+		return room_registry.rooms.values() if room_registry != null else []
+	return [default_room] if default_room != null else []
+
+## Entra na sala do remetente (salas online). Falso se ele não está em sala:
+## o evento é ignorado, sem tocar estado de nenhuma sala.
+func _enter_sender_room(sender: int) -> bool:
+	if not rooms_enabled:
+		return true
+	var room := room_registry.room_of(sender) if room_registry != null else null
+	if room == null:
+		return false
+	_use_room(room)
+	return true
+
+## Sessões com handshake feito: salas online (todas as conexões aceitas) ou a
+## sala única.
+func _session_peers() -> Array:
+	if rooms_enabled:
+		return hall_peers.keys()
+	return lobby.peer_ids()
+
+func _is_session_peer(peer_id: int) -> bool:
+	return hall_peers.has(peer_id) if rooms_enabled else lobby.has(peer_id)
 
 func start_client() -> void:
 	client_label = str(arguments.get("client-id", "client"))
@@ -338,6 +428,8 @@ func _start_combat_network_test() -> void:
 		path = "res://tests/campaign_coordinator.gd"
 	elif NetworkConfig.bool_argument(arguments, "sync-test"):
 		path = "res://tests/sync_network_coordinator.gd"
+	elif NetworkConfig.bool_argument(arguments, "rooms-test"):
+		path = "res://tests/rooms_coordinator.gd"
 	if path.is_empty():
 		return
 	var script := load(path) as GDScript
@@ -345,7 +437,7 @@ func _start_combat_network_test() -> void:
 		fail("COMBAT_TEST_ERROR coordinator_missing")
 		return
 	combat_network_test = script.new()
-	combat_network_test.name = "CombatNetworkCoordinator" if path.contains("combat") else ("CampaignCoordinator" if path.contains("campaign") or path.contains("adverse") else "SyncNetworkCoordinator")
+	combat_network_test.name = "CombatNetworkCoordinator" if path.contains("combat") else ("CampaignCoordinator" if path.contains("campaign") or path.contains("adverse") else ("RoomsCoordinator" if path.contains("rooms") else "SyncNetworkCoordinator"))
 	add_child(combat_network_test)
 
 func _process(_delta: float) -> void:
@@ -394,7 +486,9 @@ func _physics_process(_delta: float) -> void:
 	if mode == "client":
 		_client_command_tick()
 		return
-	if (mode != "server" and mode != "dedicated") or authoritative_world == null:
+	if mode != "server" and mode != "dedicated":
+		return
+	if not rooms_enabled and default_room == null:
 		return
 	var now_msec := Time.get_ticks_msec()
 	if dedicated:
@@ -405,13 +499,20 @@ func _physics_process(_delta: float) -> void:
 		_check_hosted_idle(now_msec)
 	server_tick += 1
 	_maybe_test_shutdown(now_msec)
+	if rooms_enabled:
+		_rooms_housekeeping(now_msec)
+	# Cada sala avança isolada, com seus campos de trabalho.
+	for room in _active_rooms():
+		_use_room(room)
+		_tick_room(now_msec)
+
+func _tick_room(now_msec: int) -> void:
 	authoritative_world.step(_command_gate, _run_command_action, _on_command_rejected)
-	if combat_authority != null:
-		combat_authority.tick(now_msec)
-	if round_authority != null:
-		round_authority.tick(now_msec)
-		if round_authority.consume_countdown_tick(now_msec):
-			_publish_round_state()
+	combat_authority.tick(now_msec)
+	round_authority.tick(now_msec)
+	if round_authority.consume_countdown_tick(now_msec):
+		_publish_round_state()
+		_publish_room_state()
 	if server_tick % NetSync.SNAPSHOT_INTERVAL_TICKS == 0:
 		_broadcast_snapshot()
 
@@ -428,6 +529,16 @@ func _broadcast_snapshot() -> void:
 			continue
 		world_snapshot.rpc_id(int(peer_id), {"tick": server_tick, "session": session_nonce,
 			"players": players, "ack": authoritative_world.ack_for(int(peer_id))})
+
+## Membros da sala corrente com o socket aberto. Um cliente que caiu fica
+## no lobby até o aviso de desconexão chegar; enviar a ele só gera erro do
+## engine no log a cada mensagem.
+func _open_members() -> Array:
+	var result: Array = []
+	for peer_id in lobby.peer_ids():
+		if _peer_socket_open(int(peer_id)):
+			result.append(int(peer_id))
+	return result
 
 func _peer_socket_open(peer_id: int) -> bool:
 	var transport := multiplayer.multiplayer_peer as WebSocketMultiplayerPeer
@@ -474,22 +585,44 @@ func _on_peer_connected(peer_id: int) -> void:
 func _on_peer_disconnected(peer_id: int) -> void:
 	pending_peers.erase(peer_id)
 	refusal_logs.erase(peer_id)
-	if dedicated and not lobby.has(peer_id) and not server_terminal:
+	var had_session := hall_peers.has(peer_id)
+	hall_peers.erase(peer_id)
+	if rooms_enabled:
+		var room := room_registry.room_of(peer_id) if room_registry != null else null
+		if room == null:
+			if not server_terminal:
+				print("PEER_DISCONNECTED peer_id=%d joined=false hall=%s" % [peer_id, str(had_session)])
+			if shutting_down and had_session:
+				shutdown_handshake.forget_peer(peer_id)
+				shutdown_ready_rejections_logged.erase(peer_id)
+				_maybe_close_after_shutdown_ready()
+			return
+		_use_room(room)
+	if dedicated and not rooms_enabled and not lobby.has(peer_id) and not server_terminal:
 		print("PEER_DISCONNECTED peer_id=%d joined=false" % peer_id)
 	if server_terminal or not lobby.has(peer_id):
 		return
-	if authoritative_world != null:
-		authoritative_world.remove_player(peer_id)
-	if combat_authority != null:
-		combat_authority.clear_player(peer_id)
-	# A autoridade remove a sessão do lobby e aplica a política da fase atual:
-	# cancelar o countdown, marcar o participante como eliminado ou apenas
-	# atualizar o lobby. O papel do jogador que saiu nunca é anunciado.
-	if round_authority != null:
-		round_authority.leave(peer_id, Time.get_ticks_msec())
+	if rooms_enabled:
+		# Mesma política da sala única (contagem cancelada, participante
+		# eliminado sem anunciar papel), mais a passagem do posto de anfitrião.
+		var host_before := current_room.host_peer_id
+		current_room.remove_member(peer_id, Time.get_ticks_msec())
+		room_registry.unassign(peer_id)
+		if current_room.host_peer_id != host_before:
+			print("ROOM_HOST room=%d host=%d previous=%d" % [current_room.room_id, current_room.host_peer_id, host_before])
 	else:
-		lobby.remove(peer_id)
-	print("CLIENT_LEFT peer_id=%d count=%d" % [peer_id, lobby.size()])
+		if authoritative_world != null:
+			authoritative_world.remove_player(peer_id)
+		if combat_authority != null:
+			combat_authority.clear_player(peer_id)
+		# A autoridade remove a sessão do lobby e aplica a política da fase atual:
+		# cancelar o countdown, marcar o participante como eliminado ou apenas
+		# atualizar o lobby. O papel do jogador que saiu nunca é anunciado.
+		if round_authority != null:
+			round_authority.leave(peer_id, Time.get_ticks_msec())
+		else:
+			lobby.remove(peer_id)
+	print("CLIENT_LEFT peer_id=%d count=%d%s" % [peer_id, lobby.size(), _room_log_suffix()])
 	if shutting_down:
 		# Quem sai durante o encerramento não vai mais confirmar: deixa de ser
 		# esperado, e os demais podem concluir sem cair no timeout.
@@ -504,6 +637,7 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	round_ack_peers.erase(peer_id)
 	round_late_join_peers.erase(peer_id)
 	publish_client_count()
+	_publish_room_state()
 
 func _on_connected_to_server() -> void:
 	client_connected = true
@@ -555,6 +689,9 @@ func request_join(protocol_version: int, requested_label: String) -> void:
 		print("JOIN_PROTOCOL_MISMATCH peer_id=%d client=%d server=%d" % [sender, protocol_version, NetworkConfig.effective_protocol_version(arguments)])
 		_refuse_join(sender, "protocol_version")
 		return
+	if rooms_enabled:
+		_accept_into_hall(sender, requested_label)
+		return
 	var reason := lobby.validate_join(sender, requested_label)
 	if not reason.is_empty():
 		_refuse_join(sender, reason)
@@ -587,6 +724,31 @@ func request_join(protocol_version: int, requested_label: String) -> void:
 		round_bodies_state.rpc_id(sender, {"round_id": round_authority.round_id, "bodies": body_registry.public_list()})
 	_maybe_finish_round_privacy_test()
 
+## Salas online: o handshake só confirma protocolo e nome e põe a conexão no
+## "hall" (sem sala). Nada de mundo, rodada ou sala é enviado até ela criar
+## uma sala ou entrar por código.
+func _accept_into_hall(sender: int, requested_label: String) -> void:
+	if hall_peers.has(sender):
+		_refuse_join(sender, "invalid_client")
+		return
+	var label_reason := RoundRules.validate_label(requested_label)
+	if not label_reason.is_empty():
+		_refuse_join(sender, label_reason)
+		return
+	# Capacidade: todas as salas cheias mais uma folga para quem ainda escolhe.
+	if hall_peers.size() >= room_registry.max_rooms * RoundRules.MAX_PLAYERS + HALL_EXTRA_CAPACITY:
+		_refuse_join(sender, "server_full")
+		return
+	hall_peers[sender] = {"since": Time.get_ticks_msec(), "failures": 0}
+	pending_peers.erase(sender)
+	if dedicated:
+		dedicated_stats["joins"] = int(dedicated_stats["joins"]) + 1
+	print("HALL_JOINED peer_id=%d hall=%d rooms=%d" % [sender, hall_peers.size(), room_registry.room_count()])
+	room_welcome.rpc_id(sender, {"rooms": true, "min_players": RoundRules.MIN_PLAYERS, "max_players": RoundRules.MAX_PLAYERS})
+
+func _room_log_suffix() -> String:
+	return " room=%d" % current_room.room_id if rooms_enabled and current_room != null else ""
+
 ## Recusa pública (sem papel nem estado de rodada) e marcador para os testes.
 func _refuse_join(sender: int, reason: String) -> void:
 	if dedicated:
@@ -605,10 +767,208 @@ func _refuse_join(sender: int, reason: String) -> void:
 		combat_network_test.call("observe_join_refused", sender, reason)
 	join_rejected.rpc_id(sender, reason)
 
+# --- Salas online (fase 9) -------------------------------------------------------
+#
+# Cliente -> servidor: `room_create`, `room_join`, `room_set_ready`. Argumentos
+# sem tipo: um valor hostil vira recusa registrada, nunca erro de RPC. A sala
+# vem sempre do vínculo peer -> sala do servidor, nunca de um id do cliente.
+# Servidor -> cliente: `room_welcome`, `room_state` (só aos membros da sala),
+# `room_error` (só ao remetente).
+
+@rpc("any_peer", "call_remote", "reliable")
+func room_create(requested_label: Variant) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	var reason := _room_request_precheck(sender)
+	if reason.is_empty() and (typeof(requested_label) != TYPE_STRING or not RoundRules.validate_label(str(requested_label)).is_empty()):
+		reason = "invalid_name"
+	if reason.is_empty() and not room_registry.can_create():
+		reason = "server_full"
+	if not reason.is_empty():
+		_room_refuse(sender, "create", reason)
+		return
+	var now := Time.get_ticks_msec()
+	var room := room_registry.create_room(now)
+	if room == null:
+		_room_refuse(sender, "create", "server_full")
+		return
+	_wire_room(room)
+	_use_room(room)
+	var result := room.add_member(sender, str(requested_label), now)
+	if not str(result["reason"]).is_empty():
+		_destroy_room(room, "create_failed")
+		_room_refuse(sender, "create", str(result["reason"]))
+		return
+	room_registry.assign(sender, room)
+	print("ROOM_CREATED room=%d rooms=%d" % [room.room_id, room_registry.room_count()])
+	_after_room_join(sender, result["state"])
+
+@rpc("any_peer", "call_remote", "reliable")
+func room_join(raw_code: Variant, requested_label: Variant) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	var reason := _room_request_precheck(sender)
+	if not reason.is_empty():
+		_room_refuse(sender, "join", reason)
+		return
+	var code := RoomRules.normalize_code(raw_code)
+	var room: MatchRoom = null
+	if code.is_empty():
+		reason = "invalid_code"
+	else:
+		room = room_registry.find_by_code(code)
+		if room == null:
+			reason = "room_not_found"
+	if reason.is_empty() and (typeof(requested_label) != TYPE_STRING or not RoundRules.validate_label(str(requested_label)).is_empty()):
+		reason = "invalid_name"
+	var result := {}
+	if reason.is_empty():
+		_use_room(room)
+		result = room.add_member(sender, str(requested_label), Time.get_ticks_msec())
+		reason = str(result["reason"])
+	if not reason.is_empty():
+		_room_refuse(sender, "join", reason)
+		_count_join_failure(sender)
+		return
+	room_registry.assign(sender, room)
+	_after_room_join(sender, result["state"])
+
+@rpc("any_peer", "call_remote", "reliable")
+func room_set_ready(value: Variant) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	if not multiplayer.is_server() or shutting_down or not rooms_enabled:
+		return
+	if typeof(value) != TYPE_BOOL:
+		_room_refuse(sender, "ready", "not_in_room" if room_registry.room_of(sender) == null else "not_ready_phase")
+		return
+	if not _enter_sender_room(sender):
+		_room_refuse(sender, "ready", "not_in_room")
+		return
+	var reason := current_room.set_ready(sender, bool(value), Time.get_ticks_msec())
+	if not reason.is_empty():
+		_room_refuse(sender, "ready", reason)
+		return
+	print("ROOM_READY room=%d peer_id=%d ready=%s ready_count=%d players=%d" % [
+		current_room.room_id, sender, str(bool(value)), round_authority.ready_count(), lobby.size()])
+	_publish_room_state()
+
+## Checagens comuns de criar/entrar: servidor com salas, handshake feito e
+## ainda fora de qualquer sala.
+func _room_request_precheck(sender: int) -> String:
+	if not multiplayer.is_server() or shutting_down or not rooms_enabled:
+		return "rooms_unavailable"
+	if not hall_peers.has(sender):
+		return "not_in_room"
+	if room_registry.room_of(sender) != null:
+		return "already_in_room"
+	return ""
+
+## Recusa: só ao remetente, com motivo público. Log limitado por peer.
+func _room_refuse(sender: int, action: String, reason: String) -> void:
+	var logged := int(refusal_logs.get(sender, 0))
+	refusal_logs[sender] = logged + 1
+	if logged < REFUSAL_LOGS_PER_PEER:
+		print("ROOM_REFUSED peer_id=%d action=%s reason=%s" % [sender, action, reason])
+	elif dedicated:
+		dedicated_stats["suppressed_logs"] = int(dedicated_stats["suppressed_logs"]) + 1
+	if sender > 0 and multiplayer.get_peers().has(sender):
+		room_error.rpc_id(sender, reason)
+
+## Tentativas de entrada recusadas por conexão: passou do limite, a conexão
+## cai (código de convite não vira alvo de força bruta barata). Atrás do
+## proxy do Railway o IP visto é o do proxy, então o limite é por conexão.
+func _count_join_failure(sender: int) -> void:
+	if not hall_peers.has(sender):
+		return
+	var entry: Dictionary = hall_peers[sender]
+	entry["failures"] = int(entry["failures"]) + 1
+	if int(entry["failures"]) >= RoomRegistry.MAX_JOIN_FAILURES:
+		print("ROOM_JOIN_ATTEMPTS_EXCEEDED peer_id=%d failures=%d" % [sender, int(entry["failures"])])
+		room_error.rpc_id(sender, "too_many_attempts")
+		_disconnect_peer_later(sender)
+
+func _disconnect_peer_later(peer_id: int) -> void:
+	# Fora do callback de RPC: dá tempo de a última mensagem sair.
+	get_tree().create_timer(0.2).timeout.connect(func():
+		var transport := multiplayer.multiplayer_peer as WebSocketMultiplayerPeer
+		if transport != null and multiplayer.get_peers().has(peer_id):
+			transport.disconnect_peer(peer_id))
+
+## Entrada aceita numa sala: o mesmo caminho da sala única (entrada, spawn,
+## estado da rodada, corpos) mais o estado da sala, tudo só para esta sala.
+func _after_room_join(sender: int, state: Dictionary) -> void:
+	print("CLIENT_JOINED id=%s peer_id=%d count=%d%s" % [lobby.label_for(sender), sender, lobby.size(), _room_log_suffix()])
+	print("SERVER_APPEARANCE peer_id=%d appearance=%s" % [sender, lobby.appearance_for(sender)])
+	var spawn: Vector3 = state["position"]
+	print("PLAYER_SPAWNED peer_id=%d position=%.2f,%.2f,%.2f" % [sender, spawn.x, spawn.y, spawn.z])
+	join_accepted.rpc_id(sender, sender)
+	publish_client_count()
+	_broadcast_snapshot()
+	_publish_round_state(sender)
+	if body_registry.size() > 0:
+		round_bodies_state.rpc_id(sender, {"round_id": round_authority.round_id, "bodies": body_registry.public_list()})
+	_publish_room_state()
+
+## Estado público da sala, a todos os membros da sala corrente e só a eles.
+func _publish_room_state() -> void:
+	if not rooms_enabled or current_room == null or shutting_down or not multiplayer.is_server():
+		return
+	var payload := current_room.public_state(Time.get_ticks_msec())
+	for peer_id in _open_members():
+		room_state.rpc_id(int(peer_id), payload)
+
+func _destroy_room(room: MatchRoom, reason: String) -> Array:
+	_unwire_room(room)
+	var members := room_registry.destroy(room)
+	if current_room == room:
+		current_room = null
+	print("ROOM_DESTROYED room=%d reason=%s members=%d rooms=%d" % [room.room_id, reason, members.size(), room_registry.room_count()])
+	return members
+
+## Uma vez por segundo: salas vazias depois da carência, lobbies parados e
+## conexões esquecidas no hall.
+func _rooms_housekeeping(now_msec: int) -> void:
+	if now_msec < rooms_next_housekeeping_msec or room_registry == null:
+		return
+	rooms_next_housekeeping_msec = now_msec + 1000
+	for due in room_registry.due_for_removal(now_msec):
+		var members := _destroy_room(due["room"], str(due["reason"]))
+		for peer_id in members:
+			room_error.rpc_id(int(peer_id), "room_expired")
+			_disconnect_peer_later(int(peer_id))
+	for peer_id in hall_peers.keys():
+		if room_registry.room_of(int(peer_id)) == null \
+				and now_msec - int(hall_peers[peer_id]["since"]) >= RoomRegistry.HALL_IDLE_MSEC:
+			print("HALL_IDLE_TIMEOUT peer_id=%d" % int(peer_id))
+			hall_peers[peer_id]["since"] = now_msec
+			_disconnect_peer_later(int(peer_id))
+
+@rpc("authority", "call_remote", "reliable")
+func room_welcome(payload: Dictionary) -> void:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
+		return
+	_on_room_welcome(payload)
+
+@rpc("authority", "call_remote", "reliable")
+func room_state(payload: Dictionary) -> void:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
+		return
+	_on_room_state(payload)
+
+@rpc("authority", "call_remote", "reliable")
+func room_error(reason: String) -> void:
+	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
+		return
+	_on_room_error(reason)
+
 @rpc("authority", "call_remote", "reliable")
 func join_accepted(peer_id: int) -> void:
 	joined = true
-	if interactive_session and desktop_menu != null:
+	if online_rooms:
+		# Salas online: entrou numa sala. A mansão é montada agora, oculta; o
+		# menu continua mostrando a sala até a rodada começar.
+		if interactive_session and desktop_menu != null and arena_view == null:
+			_create_client_presentation()
+			_set_game_view(false)
+	elif interactive_session and desktop_menu != null:
 		desktop_menu.enter(MenuFlow.State.CONNECTED, "", menu_attempt)
 		desktop_menu.queue_free()
 		desktop_menu = null
@@ -667,9 +1027,13 @@ const PROBE_MIN_SNAPSHOTS := 3
 func _check_probe_traffic() -> void:
 	if probe_finished or probe_joined_msec == 0:
 		return
-	if probe_snapshots >= PROBE_MIN_SNAPSHOTS and not local_round_public.is_empty():
-		_finish_probe("joined", "peer_id=%d snapshots=%d round_state=%s" % [probe_peer_id, probe_snapshots,
-			RoundState.to_label(int(local_round_public.get("state", RoundState.WAITING)))])
+	# Servidor com salas: a sonda também espera o estado da sala que criou (ou
+	# em que entrou); ao sair, a sala vazia é destruída depois da carência.
+	if probe_snapshots >= PROBE_MIN_SNAPSHOTS and not local_round_public.is_empty() \
+			and (not online_rooms or not local_room_state.is_empty()):
+		_finish_probe("joined", "peer_id=%d snapshots=%d round_state=%s%s" % [probe_peer_id, probe_snapshots,
+			RoundState.to_label(int(local_round_public.get("state", RoundState.WAITING))),
+			" room=%s" % str(local_room_state.get("phase", "")) if online_rooms else ""])
 	elif Time.get_ticks_msec() - probe_joined_msec > PROBE_GAME_TRAFFIC_MSEC:
 		probe_finished = true
 		print("PROBE_FAILED url=%s reason=no_game_traffic snapshots=%d round_state_received=%s" % [
@@ -690,7 +1054,8 @@ func _finish_probe(result: String, detail: String) -> void:
 func publish_client_count() -> void:
 	if shutting_down:
 		return
-	client_count_changed.rpc(lobby.size())
+	for peer_id in _open_members():
+		client_count_changed.rpc_id(int(peer_id), lobby.size())
 	_publish_round_state()
 
 @rpc("authority", "call_remote", "reliable")
@@ -876,6 +1241,8 @@ func submit_commands(payload: Variant) -> void:
 		return
 	# Remetente derivado da conexão; o pacote não carrega identidade.
 	var sender := multiplayer.get_remote_sender_id()
+	if not _enter_sender_room(sender):
+		return
 	if not lobby.has(sender) or authoritative_world == null:
 		return
 	var result := authoritative_world.receive_commands(sender, payload, Time.get_ticks_msec())
@@ -974,6 +1341,9 @@ func input_rejected(reason: String, _sequence: int) -> void:
 func world_snapshot(payload: Dictionary) -> void:
 	if multiplayer.is_server() or shutdown_prepare_received:
 		return
+	if online_rooms:
+		for raw_state in payload.get("players", []):
+			if typeof(raw_state) == TYPE_DICTIONARY: _note_peer((raw_state as Dictionary).get("peer_id", 0), "snapshot")
 	var rejection := snapshot_rejection(payload, snapshot_session, last_snapshot_tick)
 	if rejection == "foreign_session":
 		net_stats.foreign_session_snapshots += 1
@@ -1042,6 +1412,8 @@ func client_test_completed() -> void:
 	if not multiplayer.is_server() or shutting_down:
 		return
 	var sender := multiplayer.get_remote_sender_id()
+	if not _enter_sender_room(sender):
+		return
 	var stop_after := NetworkConfig.integer_argument(arguments, "stop-after-clients", 0)
 	if stop_after <= 0 or not lobby.has(sender) or completed_peers.has(sender):
 		return
@@ -1099,7 +1471,7 @@ func shutdown_ready(generation: Variant, token: Variant) -> void:
 		return
 	var sender := multiplayer.get_remote_sender_id()
 	var reason := ShutdownHandshake.REASON_UNEXPECTED_PEER
-	if lobby.has(sender):
+	if _is_session_peer(sender):
 		reason = shutdown_handshake.accept_ready(sender, generation, token)
 	if not reason.is_empty():
 		_log_shutdown_ready_rejection(sender, reason)
@@ -1135,13 +1507,21 @@ func _close_server_peer() -> void:
 	server_peer_closing = true
 	server_terminal = true
 	closed_session_count = shutdown_handshake.expected_count()
-	if round_authority != null:
-		round_authority.clear()
-	lobby.clear()
-	if authoritative_world != null:
-		authoritative_world.clear()
-	if combat_authority != null:
-		combat_authority.clear_round()
+	if rooms_enabled:
+		# Todas as salas saem junto com o processo (salas são efêmeras).
+		for room in room_registry.rooms.values():
+			_unwire_room(room)
+		room_registry.clear()
+		hall_peers.clear()
+		current_room = null
+	else:
+		if round_authority != null:
+			round_authority.clear()
+		lobby.clear()
+		if authoritative_world != null:
+			authoritative_world.clear()
+		if combat_authority != null:
+			combat_authority.clear_round()
 	completed_peers.clear()
 	impossible_input_rejected_peers.clear()
 	command_logs.clear()
@@ -1160,7 +1540,7 @@ func _close_server_peer() -> void:
 func _server_shutdown_timeout() -> void:
 	if server_terminal or shutdown_handshake.is_complete():
 		return
-	print("SERVER_SHUTDOWN_TIMEOUT ready=%d remaining=%d" % [shutdown_handshake.ready_count(), lobby.size()])
+	print("SERVER_SHUTDOWN_TIMEOUT ready=%d remaining=%d" % [shutdown_handshake.ready_count(), _session_peers().size()])
 	if operator_shutdown:
 		# Encerramento pedido pelo operador: cliente que não confirmou a tempo
 		# é desconectado e o processo sai normalmente (não é falha).
@@ -1202,10 +1582,15 @@ func _dedicated_housekeeping(now_msec: int) -> void:
 ## Uma linha, sem nomes, papéis ou inventário: só contadores e recursos.
 func _print_dedicated_status(now_msec: int) -> void:
 	var peers := multiplayer.get_peers().size() if multiplayer.multiplayer_peer != null else 0
-	print("DEDICATED_STATUS uptime_s=%d peers=%d lobby=%d pending=%d round_state=%s round_id=%d bodies=%d connections=%d joins=%d refusals=%d deadline_drops=%d suppressed_logs=%d rss_mb=%.1f objects=%d nodes=%d" % [
-		(now_msec - dedicated_started_msec) / 1000, peers, lobby.size(), pending_peers.size(),
-		RoundState.to_label(round_authority.state) if round_authority != null else "none",
-		round_authority.round_id if round_authority != null else 0, body_registry.size(),
+	var rooms := room_registry.room_count() if room_registry != null else 0
+	var playing := 0
+	if room_registry != null:
+		for room in room_registry.rooms.values():
+			if (room as MatchRoom).round_authority.state == RoundState.ACTIVE:
+				playing += 1
+	print("DEDICATED_STATUS uptime_s=%d peers=%d hall=%d pending=%d rooms=%d rooms_playing=%d room_members=%d connections=%d joins=%d refusals=%d deadline_drops=%d suppressed_logs=%d rss_mb=%.1f objects=%d nodes=%d" % [
+		(now_msec - dedicated_started_msec) / 1000, peers, hall_peers.size(), pending_peers.size(),
+		rooms, playing, room_registry.total_members() if room_registry != null else 0,
 		int(dedicated_stats["connections"]), int(dedicated_stats["joins"]), int(dedicated_stats["refusals"]),
 		int(dedicated_stats["deadline_drops"]), int(dedicated_stats["suppressed_logs"]),
 		_process_rss_mb(),
@@ -1231,13 +1616,14 @@ func _begin_operator_shutdown(reason: String) -> void:
 	if operator_shutdown or server_terminal:
 		return
 	operator_shutdown = true
-	print("DEDICATED_SHUTDOWN_REQUESTED reason=%s lobby=%d peers=%d" % [reason, lobby.size(), multiplayer.get_peers().size()])
+	print("DEDICATED_SHUTDOWN_REQUESTED reason=%s lobby=%d peers=%d" % [reason, _session_peers().size(), multiplayer.get_peers().size()])
 	_print_dedicated_status(Time.get_ticks_msec())
-	if lobby.is_empty():
+	if _session_peers().is_empty():
 		shutting_down = true
 		_close_server_peer()
 		return
-	_begin_server_shutdown(lobby.peer_ids())
+	# Todas as sessões (hall e salas) recebem o aviso de encerramento.
+	_begin_server_shutdown(_session_peers())
 
 # --- Ciclo de partida --------------------------------------------------------
 #
@@ -1247,9 +1633,12 @@ func _begin_operator_shutdown(reason: String) -> void:
 # jamais sai de `RoundAuthority`.
 
 func _on_round_state_changed(state: int, round_id: int) -> void:
-	print("ROUND_STATE state=%s round_id=%d players=%d participants=%d" % [
-		RoundState.to_label(state), round_id, lobby.size(), round_authority.participants.size()])
+	print("ROUND_STATE state=%s round_id=%d players=%d participants=%d%s" % [
+		RoundState.to_label(state), round_id, lobby.size(), round_authority.participants.size(), _room_log_suffix()])
 	_publish_round_state()
+	if rooms_enabled and current_room != null:
+		current_room.touch(Time.get_ticks_msec())
+		_publish_room_state()
 	if spectator_reveal_test_mode and state == RoundState.COUNTDOWN \
 			and spectator_reveal_acks.size() == round_stop_after:
 		print("ROUND_REVEAL_CLEARED_OK")
@@ -1263,7 +1652,7 @@ func _on_round_roles_ready(round_id: int, participant_ids: Array) -> void:
 	# ao spawn oficial, parados, com época nova. Corpos da rodada anterior saem
 	# antes de os vivos aparecerem.
 	body_registry.clear()
-	for raw_peer_id in lobby.peer_ids():
+	for raw_peer_id in _open_members():
 		round_bodies_state.rpc_id(int(raw_peer_id), {"round_id": round_id, "bodies": []})
 	for raw_peer_id in participant_ids:
 		authoritative_world.reset_to_spawn(int(raw_peer_id))
@@ -1305,7 +1694,7 @@ func _on_round_ended(round_id: int, winning_team: int, reason: String) -> void:
 	# `state_changed` já publicou o payload com o resultado; aqui só registramos.
 	print("ROUND_RESULT round_id=%d team=%s reason=%s" % [
 		round_id, Role.team_to_label(winning_team), reason])
-	call_deferred("_clear_combat_round_if_ended", round_id)
+	call_deferred("_clear_combat_round_if_ended", round_id, current_room)
 
 func _on_round_reveal_ready(reveal_round_id: int, result: Dictionary) -> void:
 	if not multiplayer.is_server() or shutting_down or round_authority.state != RoundState.ENDED \
@@ -1317,9 +1706,18 @@ func _on_round_reveal_ready(reveal_round_id: int, result: Dictionary) -> void:
 		if not lobby.has(peer_id): continue
 		round_final_reveal.rpc_id(peer_id, result)
 		delivered += 1
-	print("ROUND_REVEAL_SENT round_id=%d peers=%d" % [reveal_round_id, delivered])
+	print("ROUND_REVEAL_SENT round_id=%d peers=%d%s" % [reveal_round_id, delivered, _room_log_suffix()])
+	if rooms_enabled and current_room != null:
+		# Resultado público da sala (papéis por nome), mostrado no lobby dela.
+		current_room.record_result(result)
+		_publish_room_state()
 
-func _clear_combat_round_if_ended(ended_round_id: int) -> void:
+func _clear_combat_round_if_ended(ended_round_id: int, room: MatchRoom = null) -> void:
+	if room != null:
+		# Adiada: a sala pode ter saído do registro no meio tempo.
+		if rooms_enabled and not room_registry.rooms.has(room.room_id):
+			return
+		_use_room(room)
 	if combat_authority != null and round_authority.state == RoundState.ENDED \
 			and round_authority.round_id == ended_round_id and combat_authority.active_round_id == ended_round_id:
 		combat_authority.clear_round()
@@ -1327,7 +1725,7 @@ func _clear_combat_round_if_ended(ended_round_id: int) -> void:
 func _on_round_reset(round_id: int) -> void:
 	round_ack_peers.clear()
 	round_late_join_peers.clear()
-	print("ROUND_RESET round_id=%d players=%d" % [round_id, lobby.size()])
+	print("ROUND_RESET round_id=%d players=%d%s" % [round_id, lobby.size(), _room_log_suffix()])
 
 func _on_round_invalid_transition(from_state: int, to_state: int) -> void:
 	print("ROUND_TRANSITION_REJECTED from=%s to=%s" % [
@@ -1345,8 +1743,10 @@ func _publish_round_state(target_peer_id: int = 0) -> void:
 		round_public_state.rpc_id(target_peer_id, payload)
 		round_roster.rpc_id(target_peer_id, roster)
 		return
-	round_public_state.rpc(payload)
-	round_roster.rpc(roster)
+	# Só os membros desta sala (nunca broadcast a todas as conexões).
+	for peer_id in _open_members():
+		round_public_state.rpc_id(int(peer_id), payload)
+		round_roster.rpc_id(int(peer_id), roster)
 
 @rpc("authority", "call_remote", "reliable")
 func round_public_state(payload: Dictionary) -> void:
@@ -1402,6 +1802,8 @@ func round_public_state(payload: Dictionary) -> void:
 func round_private_spectator_targets(payload: Dictionary) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
 		return
+	if online_rooms and typeof(payload.get("targets")) == TYPE_ARRAY:
+		for target in payload["targets"]: _note_peer(target, "spectator")
 	if payload.keys().size() != 2 or not payload.has("round_id") or not payload.has("targets") \
 			or typeof(payload["round_id"]) != TYPE_INT or typeof(payload["targets"]) != TYPE_ARRAY:
 		return
@@ -1430,6 +1832,9 @@ func round_private_spectator_targets(payload: Dictionary) -> void:
 func round_final_reveal(payload: Dictionary) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
 		return
+	if online_rooms:
+		for raw_entry in payload.get("players", []):
+			if typeof(raw_entry) == TYPE_DICTIONARY: _note_peer((raw_entry as Dictionary).get("peer_id", 0), "reveal")
 	var expected_round := int(local_round_public.get("round_id", 0))
 	if int(local_round_public.get("state", RoundState.WAITING)) != RoundState.ENDED \
 			or int(payload.get("round_id", 0)) != expected_round or expected_round <= 0 \
@@ -1464,14 +1869,16 @@ func round_final_reveal(payload: Dictionary) -> void:
 func spectator_test_followed() -> void:
 	if not multiplayer.is_server() or not spectator_reveal_test_mode: return
 	var sender := multiplayer.get_remote_sender_id()
+	if not _enter_sender_room(sender): return
 	if sender != spectator_test_dead_peer or round_authority.get_spectator_state(sender).is_empty(): return
 	spectator_test_observed = true
 	_maybe_finish_spectator_probe()
 
 @rpc("any_peer", "call_remote", "reliable")
 func spectator_reveal_received() -> void:
-	if not multiplayer.is_server() or not spectator_reveal_test_mode or round_authority.state != RoundState.ENDED: return
+	if not multiplayer.is_server() or not spectator_reveal_test_mode: return
 	var sender := multiplayer.get_remote_sender_id()
+	if not _enter_sender_room(sender) or round_authority.state != RoundState.ENDED: return
 	if round_authority.is_participant(sender) and lobby.has(sender): spectator_reveal_acks[sender] = true
 	if spectator_reveal_acks.size() == round_authority.participants.size():
 		print("ROUND_REVEAL_NETWORK_ACK_OK clients=%d" % spectator_reveal_acks.size())
@@ -1480,6 +1887,9 @@ func spectator_reveal_received() -> void:
 func round_roster(entries: Array) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1:
 		return
+	if online_rooms:
+		for raw_entry in entries:
+			if typeof(raw_entry) == TYPE_DICTIONARY: _note_peer((raw_entry as Dictionary).get("peer_id", 0), "roster")
 	local_roster_peers.clear()
 	var clean_entries: Array = []
 	for raw_entry in entries:
@@ -1562,6 +1972,8 @@ func round_role_acknowledged(acknowledged_round_id: int) -> void:
 	if not multiplayer.is_server() or shutting_down or round_authority == null:
 		return
 	var sender := multiplayer.get_remote_sender_id()
+	if not _enter_sender_room(sender):
+		return
 	if round_stop_after <= 0:
 		return
 	var reason := ""
@@ -1725,6 +2137,7 @@ func combat_public_shot(payload: Dictionary) -> void:
 @rpc("authority", "call_remote", "reliable")
 func combat_public_elimination(peer_id: int) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1: return
+	if online_rooms: _note_peer(peer_id, "elimination")
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "elimination", peer_id)
 	if arena_view != null:
 		arena_view.show_elimination(peer_id)
@@ -1750,7 +2163,8 @@ func combat_action_rejected(action: String, sequence: int, reason: String) -> vo
 
 func _on_pickups_changed(snapshot: Array) -> void:
 	if multiplayer.is_server() and not shutting_down:
-		pickup_public_state.rpc(snapshot)
+		for peer_id in _open_members():
+			pickup_public_state.rpc_id(int(peer_id), snapshot)
 
 func _on_combat_private_state_changed(peer_id: int, state: Dictionary) -> void:
 	if combat_network_test != null: combat_network_test.call("observe_private_emission", peer_id, state)
@@ -1760,12 +2174,14 @@ func _on_combat_private_state_changed(peer_id: int, state: Dictionary) -> void:
 func _on_shot_resolved(event: Dictionary) -> void:
 	if combat_network_test != null: combat_network_test.call("observe_server_shot", event)
 	if multiplayer.is_server() and not shutting_down:
-		combat_public_shot.rpc(event)
+		for peer_id in _open_members():
+			combat_public_shot.rpc_id(int(peer_id), event)
 
 func _on_combat_player_eliminated(peer_id: int, _instigator_peer_id: int) -> void:
 	if combat_network_test != null: combat_network_test.call("observe_server_elimination", peer_id)
 	if multiplayer.is_server() and not shutting_down:
-		combat_public_elimination.rpc(peer_id)
+		for member in _open_members():
+			combat_public_elimination.rpc_id(int(member), peer_id)
 		_register_body(peer_id)
 
 ## Corpo no ponto oficial da eliminação (fase 6). Só eliminação de combate
@@ -1826,6 +2242,7 @@ func round_bodies_state(payload: Dictionary) -> void:
 			_accept_body(dto)
 
 func _accept_body(dto: Dictionary) -> void:
+	if online_rooms: _note_peer(dto.get("peer_id", 0), "body")
 	for existing in local_bodies.values():
 		if int(existing["body_id"]) == int(dto["body_id"]) or (int(existing["peer_id"]) == int(dto["peer_id"]) and int(existing["round_id"]) == int(dto["round_id"])):
 			print("CLIENT_BODY_DUPLICATE_IGNORED id=%s" % client_label)
@@ -1853,6 +2270,187 @@ func _safe_combat_reason(raw_reason: Variant) -> String:
 # processo vira um cliente comum conectado em loopback. "Entrar" conecta direto.
 # Nenhum caminho daqui instancia RoundAuthority, CombatAuthority ou o mundo.
 
+# --- Cliente: salas online (fase 9) ------------------------------------------------
+
+## O servidor respondeu ao handshake com o lobby online (servidor com salas).
+var online_rooms := false
+var local_room_state: Dictionary = {}
+var room_seen_code := ""
+var room_auto_ready_round := -1
+var room_auto_ready_count := 0
+## Teste de isolamento: peers e rótulos vistos em qualquer mensagem recebida.
+var room_seen_peers: Dictionary = {}
+var room_seen_labels: Dictionary = {}
+
+func _on_room_welcome(payload: Dictionary) -> void:
+	online_rooms = true
+	print("HALL_WELCOME id=%s rooms=%s" % [client_label, str(payload.get("rooms", false) == true)])
+	if interactive_session and desktop_menu != null:
+		desktop_menu.enter(MenuFlow.State.ONLINE, "", menu_attempt)
+		desktop_menu.show_hall()
+		var automation := str(arguments.get("menu-room", ""))
+		if not automation.is_empty():
+			call_deferred("_run_room_automation", automation)
+		return
+	# Clientes de teste e sonda: criam sala ou entram pelo código.
+	var action := str(arguments.get("room-action", ""))
+	if NetworkConfig.bool_argument(arguments, "probe") and action.is_empty():
+		action = "create"
+	if action == "create":
+		room_create.rpc_id(1, client_label)
+	elif action == "join":
+		room_join.rpc_id(1, str(arguments.get("room-code", "")), client_label)
+
+## Automação do menu de sala (testes): usa os botões reais.
+func _run_room_automation(automation: String) -> void:
+	if desktop_menu == null:
+		return
+	if automation == "create":
+		desktop_menu.press("room_create")
+	elif automation == "join":
+		desktop_menu.set_field("room_code", str(arguments.get("room-code", "")))
+		desktop_menu.press("room_join")
+
+func _on_room_state(payload: Dictionary) -> void:
+	var dto := RoomRules.sanitize_room_state(payload)
+	if dto.is_empty():
+		print("ROOM_STATE_REJECTED id=%s" % client_label)
+		return
+	var previous_phase := str(local_room_state.get("phase", ""))
+	local_room_state = dto
+	var labels: Array = []
+	for entry in dto["players"]:
+		labels.append(str(entry["label"]))
+		_note_peer(int(entry["peer_id"]), "room_state")
+		room_seen_labels[str(entry["label"])] = true
+	labels.sort()
+	if room_seen_code.is_empty():
+		room_seen_code = str(dto["code"])
+		print("ROOM_JOINED id=%s code=%s" % [client_label, room_seen_code])
+	elif room_seen_code != str(dto["code"]):
+		print("ROOM_CODE_CHANGED id=%s from=%s to=%s" % [client_label, room_seen_code, str(dto["code"])])
+	print("CLIENT_ROOM_STATE id=%s code=%s phase=%s round_id=%d players=%d ready=%d labels=%s result=%s" % [
+		client_label, str(dto["code"]), str(dto["phase"]), int(dto["round_id"]), (dto["players"] as Array).size(),
+		int(dto["ready_count"]), ",".join(PackedStringArray(labels)), str(not (dto["result"] as Dictionary).is_empty())])
+	if NetworkConfig.bool_argument(arguments, "probe"):
+		_check_probe_traffic()
+	_maybe_auto_ready(dto)
+	if not interactive_session or desktop_menu == null:
+		return
+	desktop_menu.show_room(dto, multiplayer.get_unique_id())
+	_run_room_menu_automation(dto)
+	var phase := str(dto["phase"])
+	if phase == RoomRules.PHASE_PLAYING and previous_phase != RoomRules.PHASE_PLAYING:
+		_set_game_view(true)
+	elif phase in [RoomRules.PHASE_LOBBY, RoomRules.PHASE_COUNTDOWN] and previous_phase in [RoomRules.PHASE_PLAYING, RoomRules.PHASE_RESULTS]:
+		# Fim da rodada: todos voltam ao lobby da sala com o resultado.
+		_set_game_view(false)
+	if round_hud != null:
+		round_hud.call("set_session_info", "Sala %s\n%s: soltar mouse · %s: sair para o menu" % [
+			RoomRules.display_code(str(dto["code"])), GameControls.action_text("release_mouse"), GameControls.action_text("leave_match")])
+
+## Automação do menu na sala (testes): aperta os botões reais PRONTO (com a
+## sala cheia o bastante) e SAIR DA SALA (depois de ver um resultado).
+var menu_room_ready_round := -1
+var menu_room_left := false
+func _run_room_menu_automation(dto: Dictionary) -> void:
+	if str(dto["phase"]) != RoomRules.PHASE_LOBBY:
+		return
+	if NetworkConfig.bool_argument(arguments, "menu-room-leave-after-result") and not (dto["result"] as Dictionary).is_empty():
+		if not menu_room_left:
+			menu_room_left = true
+			desktop_menu.call_deferred("press", "room_leave")
+		return
+	var min_players := NetworkConfig.integer_argument(arguments, "menu-room-ready-min-players", 0)
+	if min_players <= 0 or (dto["players"] as Array).size() < min_players:
+		return
+	if menu_room_ready_round == int(dto["round_id"]) or desktop_menu.own_ready():
+		return
+	menu_room_ready_round = int(dto["round_id"])
+	desktop_menu.call_deferred("press", "room_ready")
+
+## Testes: marca PRONTO sozinho a cada volta ao lobby, até N rodadas.
+func _maybe_auto_ready(dto: Dictionary) -> void:
+	var rounds := NetworkConfig.integer_argument(arguments, "auto-ready-rounds", 0)
+	if rounds <= 0 or str(dto["phase"]) != RoomRules.PHASE_LOBBY:
+		return
+	var min_players := NetworkConfig.integer_argument(arguments, "auto-ready-min-players", 1)
+	if (dto["players"] as Array).size() < min_players:
+		return
+	if room_auto_ready_round == int(dto["round_id"]) or room_auto_ready_count >= rounds:
+		return
+	for entry in dto["players"]:
+		if int(entry["peer_id"]) == multiplayer.get_unique_id() and bool(entry["ready"]):
+			return
+	room_auto_ready_round = int(dto["round_id"])
+	room_auto_ready_count += 1
+	print("ROOM_AUTO_READY id=%s round_id=%d count=%d" % [client_label, int(dto["round_id"]), room_auto_ready_count])
+	room_set_ready.rpc_id(1, true)
+
+## Teste de isolamento (salas online): cada peer_id que aparece em qualquer
+## mensagem recebida é registrado uma vez; o harness confere que todos são da
+## mesma sala.
+func _note_peer(raw_peer_id: Variant, via: String) -> void:
+	if typeof(raw_peer_id) != TYPE_INT or int(raw_peer_id) <= 0:
+		return
+	var key := "%d:%s" % [int(raw_peer_id), via]
+	if room_seen_peers.has(key):
+		return
+	room_seen_peers[key] = true
+	print("CLIENT_SEEN_PEER id=%s peer=%d via=%s" % [client_label, int(raw_peer_id), via])
+
+func _on_room_error(reason: String) -> void:
+	var clean := reason if RoomRules.ERRORS.has(reason) else "unknown"
+	print("ROOM_ERROR id=%s reason=%s" % [client_label, clean])
+	if interactive_session and desktop_menu != null:
+		desktop_menu.show_room_error(clean)
+		return
+	if NetworkConfig.bool_argument(arguments, "probe"):
+		# Sala cheia, em rodada, nome em uso ou servidor lotado ainda provam um
+		# servidor vivo com o mesmo protocolo.
+		if clean in ["room_full", "round_in_progress", "name_taken", "server_full"]:
+			_finish_probe("refused", clean)
+			return
+		print("PROBE_FAILED url=%s reason=room_error:%s" % [str(arguments.get("url", "")), clean])
+		get_tree().quit(1)
+		return
+	if NetworkConfig.bool_argument(arguments, "exit-on-room-error"):
+		get_tree().quit(0)
+
+## Lobby da sala (menu) ou partida (mansão + HUD). O mouse só fica preso na
+## partida; no lobby, a mansão fica oculta e não reage a cliques.
+func _set_game_view(visible_game: bool) -> void:
+	if arena_view != null:
+		arena_view.visible = visible_game
+	if round_hud != null:
+		round_hud.visible = visible_game
+	if desktop_menu != null:
+		desktop_menu.visible = not visible_game
+	if not visible_game:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	print("CLIENT_VIEW id=%s game=%s" % [client_label, str(visible_game)])
+
+func _on_menu_room_create(player_name: String) -> void:
+	if not online_rooms or joined:
+		return
+	client_label = player_name
+	arguments["client-id"] = player_name
+	room_create.rpc_id(1, player_name)
+
+func _on_menu_room_join(code: String, player_name: String) -> void:
+	if not online_rooms or joined:
+		return
+	client_label = player_name
+	arguments["client-id"] = player_name
+	room_join.rpc_id(1, code, player_name)
+
+func _on_menu_room_ready(value: bool) -> void:
+	if online_rooms and joined:
+		room_set_ready.rpc_id(1, value)
+
+func _on_menu_online_leave() -> void:
+	_return_to_menu("Você saiu da sala." if joined else "", "left" if joined else "cancelled")
+
 func start_menu() -> void:
 	# Testes (e várias janelas no mesmo PC) podem isolar as preferências.
 	MenuSettings.path_override = str(arguments.get("menu-settings-path", ""))
@@ -1865,6 +2463,10 @@ func start_menu() -> void:
 	desktop_menu.cancel_requested.connect(_on_menu_cancel)
 	desktop_menu.quit_requested.connect(_on_menu_quit)
 	desktop_menu.settings_changed.connect(_apply_menu_settings)
+	desktop_menu.room_create_requested.connect(_on_menu_room_create)
+	desktop_menu.room_join_requested.connect(_on_menu_room_join)
+	desktop_menu.room_ready_requested.connect(_on_menu_room_ready)
+	desktop_menu.online_leave_requested.connect(_on_menu_online_leave)
 	desktop_menu.input_rejected.connect(func(_field): _exit_if_menu_test())
 	_apply_menu_settings(desktop_menu.settings)
 	if not DesktopSession.pending_message.is_empty() or not DesktopSession.pending_kind.is_empty():
@@ -1914,8 +2516,11 @@ func _run_menu_automation(auto: String) -> void:
 			desktop_menu.press("host_create")
 			desktop_menu.press("host_create")
 		"online":
+			# JOGAR ONLINE com endereço configurado já conecta (fase 9); sem
+			# endereço, abre o aviso.
+			var configured := bool(desktop_menu.online["ok"])
 			_menu_open("online")
-			if not desktop_menu.press("online_connect"):
+			if not configured:
 				print("MENU_ONLINE_UNAVAILABLE reason=%s" % desktop_menu.online["reason"])
 				if NetworkConfig.bool_argument(arguments, "menu-exit-on-return"):
 					get_tree().quit(0)

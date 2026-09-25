@@ -16,8 +16,19 @@ signal cancel_requested(attempt: int)
 signal quit_requested
 signal input_rejected(field: String)
 signal settings_changed(settings: MenuSettings)
+## Fase 9 (salas online): pedidos do lobby online e da sala. O menu só pede;
+## quem cria, entra e decide PRONTO/início é o servidor.
+signal room_create_requested(player_name: String)
+signal room_join_requested(code: String, player_name: String)
+signal room_ready_requested(ready: bool)
+signal online_leave_requested
 
-const PANELS := ["main", "host", "join", "online", "howto", "settings"]
+const PANELS := ["main", "host", "join", "online", "howto", "settings", "hall", "room"]
+## Cor cosmética por aparência (só um ponto ao lado do nome na lista da sala).
+const APPEARANCE_COLORS := {
+	"ember": Color("#E0703A"), "moss": Color("#7FA35A"), "dawn": Color("#E3A0B0"), "night": Color("#5B6FB0"),
+	"cedar": Color("#A8583C"), "ash": Color("#A8A8A8"), "sand": Color("#D9C08A"), "plum": Color("#9B5FA8"),
+}
 const CARD_WIDTH := 452.0
 
 ## Argumentos do processo (endpoint online, automação). Definir antes de
@@ -101,12 +112,16 @@ func _build_card() -> void:
 	panels["online"] = _build_online()
 	panels["howto"] = _build_howto()
 	panels["settings"] = _build_settings()
+	panels["hall"] = _build_hall()
+	panels["room"] = _build_room()
 	for panel_id in PANELS:
 		panel_stack.add_child(panels[panel_id])
 	status_box = _build_status()
 	body.add_child(status_box)
-	var footer := MenuTheme.label("Protocolo %d · build de teste" % NetworkConfig.PROTOCOL_VERSION, MenuTheme.SMALL_SIZE - 1, Color(MenuTheme.MUTED, 0.7))
+	# Versão/protocolo só discretamente em build de desenvolvimento.
+	var footer := MenuTheme.label("Protocolo %d · build de desenvolvimento" % NetworkConfig.PROTOCOL_VERSION, MenuTheme.SMALL_SIZE - 1, Color(MenuTheme.MUTED, 0.7))
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	footer.visible = OS.is_debug_build() and not OS.has_feature("template")
 	body.add_child(footer)
 
 func _panel() -> VBoxContainer:
@@ -156,7 +171,9 @@ func _build_main() -> VBoxContainer:
 	var saved_name := settings.player_name if not settings.player_name.is_empty() else DesktopSession.default_player_name()
 	_field("name", "Seu nome", saved_name, "Como os outros vão te ver", box, RoundRules.MAX_LABEL_LENGTH)
 	var online_primary := bool(online["ok"])
-	_button("online", "JOGAR ONLINE", box, online_primary, func(): _show_panel("online"))
+	# Com servidor configurado, JOGAR ONLINE conecta e abre o lobby online;
+	# sem servidor, mostra o aviso (sem tentar conexão).
+	_button("online", "JOGAR ONLINE", box, online_primary, func(): _submit_online() if bool(online["ok"]) else _show_panel("online"))
 	_button("host", "CRIAR PARTIDA LOCAL", box, not online_primary, func(): _open_with_name("host"))
 	_button("join", "ENTRAR EM PARTIDA LAN", box, false, func(): _open_with_name("join"))
 	var row := _row()
@@ -227,6 +244,251 @@ func _build_online() -> VBoxContainer:
 	_expand(row)
 	box.add_child(row)
 	return box
+
+# --- Salas online (fase 9) ------------------------------------------------------
+
+var room_view: Dictionary = {}
+var room_own_peer_id := 0
+var room_request_pending := false
+var room_ready_pending := false
+var room_title: Label
+var room_players: VBoxContainer
+var room_status: Label
+var room_result: Label
+var room_copy_feedback: Label
+var hall_info: Label
+
+func _build_hall() -> VBoxContainer:
+	var box := _panel()
+	box.add_child(MenuTheme.heading("Lobby online"))
+	hall_info = MenuTheme.label("Conectado. Crie uma sala e mande o código aos amigos, ou entre com o código de alguém.", MenuTheme.SMALL_SIZE, MenuTheme.PARCHMENT, true)
+	box.add_child(hall_info)
+	_field("hall_name", "Seu nome", "", "Como os outros vão te ver", box, RoundRules.MAX_LABEL_LENGTH)
+	_button("room_create", "CRIAR SALA", box, true, _submit_room_create)
+	var code_row := _row()
+	var code_col := VBoxContainer.new()
+	code_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	code_row.add_child(code_col)
+	_field("room_code", "Código da sala", "", "ex.: ABC-234", code_col, RoomRules.MAX_RAW_CODE_LENGTH)
+	var join_col := VBoxContainer.new()
+	join_col.alignment = BoxContainer.ALIGNMENT_END
+	code_row.add_child(join_col)
+	_button("room_join", "ENTRAR EM SALA", join_col, false, _submit_room_join)
+	box.add_child(code_row)
+	_button("hall_back", "VOLTAR", box, false, _leave_online)
+	return box
+
+func _build_room() -> VBoxContainer:
+	var box := _panel()
+	var title_row := _row()
+	room_title = MenuTheme.heading("Sala")
+	room_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(room_title)
+	_button("room_copy", "COPIAR CÓDIGO", title_row, false, _copy_room_code)
+	box.add_child(title_row)
+	room_copy_feedback = MenuTheme.label("", MenuTheme.SMALL_SIZE, MenuTheme.MUTED, true)
+	room_copy_feedback.visible = false
+	box.add_child(room_copy_feedback)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 150)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(scroll)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 4)
+	scroll.add_child(content)
+	# O resultado da última rodada vem antes da lista: é o que o jogador quer
+	# ver ao voltar da partida.
+	room_result = MenuTheme.label("", MenuTheme.SMALL_SIZE, MenuTheme.PARCHMENT, true)
+	room_result.visible = false
+	content.add_child(room_result)
+	room_players = VBoxContainer.new()
+	room_players.add_theme_constant_override("separation", 2)
+	content.add_child(room_players)
+	room_status = MenuTheme.label("", MenuTheme.BODY_SIZE, MenuTheme.CREAM, true)
+	box.add_child(room_status)
+	var row := _row()
+	_button("room_leave", "SAIR DA SALA", row, false, _leave_online)
+	_button("room_ready", "PRONTO", row, true, _toggle_ready)
+	_expand(row)
+	box.add_child(row)
+	return box
+
+## Conectado ao servidor online: mostra o lobby online (criar/entrar).
+func show_hall() -> void:
+	if flow.state != MenuFlow.State.ONLINE:
+		enter(MenuFlow.State.ONLINE, "", flow.attempt)
+	room_request_pending = false
+	(fields["hall_name"] as LineEdit).text = (fields["name"] as LineEdit).text
+	_show_panel("hall")
+	print("MENU_ONLINE_HALL")
+
+## Estado da sala vindo do servidor (já sanitizado). Mostra/atualiza a sala.
+func show_room(dto: Dictionary, own_peer_id: int) -> void:
+	if dto.is_empty():
+		return
+	var first := room_view.is_empty()
+	room_view = dto
+	room_own_peer_id = own_peer_id
+	room_request_pending = false
+	room_ready_pending = false
+	if flow.state != MenuFlow.State.ONLINE:
+		enter(MenuFlow.State.ONLINE, "", flow.attempt)
+	_render_room()
+	if panel_name != "room":
+		_show_panel("room", not first)
+	if first:
+		print("MENU_ROOM_SHOWN code=%s" % str(dto["code"]))
+
+func own_ready() -> bool:
+	for entry in room_view.get("players", []):
+		if int(entry["peer_id"]) == room_own_peer_id:
+			return bool(entry["ready"])
+	return false
+
+func _render_room() -> void:
+	var code := str(room_view.get("code", ""))
+	room_title.text = "Sala %s" % RoomRules.display_code(code)
+	for child in room_players.get_children():
+		child.queue_free()
+	var players: Array = room_view.get("players", [])
+	for entry in players:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var dot := MenuTheme.label("●", MenuTheme.BODY_SIZE, APPEARANCE_COLORS.get(str(entry["appearance"]), MenuTheme.CREAM))
+		row.add_child(dot)
+		var name_text := str(entry["label"])
+		if int(entry["peer_id"]) == room_own_peer_id:
+			name_text += " (você)"
+		var name_label := MenuTheme.label(name_text, MenuTheme.BODY_SIZE, MenuTheme.CREAM)
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_label.clip_text = true
+		row.add_child(name_label)
+		if bool(entry["host"]):
+			row.add_child(MenuTheme.label("ANFITRIÃO", MenuTheme.SMALL_SIZE, MenuTheme.GOLD))
+		var ready := bool(entry["ready"])
+		row.add_child(MenuTheme.label("PRONTO" if ready else "AGUARDANDO", MenuTheme.SMALL_SIZE, MenuTheme.OK if ready else MenuTheme.MUTED))
+		room_players.add_child(row)
+	var total := players.size()
+	var ready_count := int(room_view.get("ready_count", 0))
+	var min_players := int(room_view.get("min_players", RoundRules.MIN_PLAYERS))
+	var phase := str(room_view.get("phase", RoomRules.PHASE_LOBBY))
+	var status := ""
+	match phase:
+		RoomRules.PHASE_COUNTDOWN:
+			status = "Todos prontos! A partida começa em %d s…" % int(ceil(float(room_view.get("countdown_msec", 0)) / 1000.0))
+		RoomRules.PHASE_PLAYING:
+			status = "Partida em andamento."
+		RoomRules.PHASE_RESULTS:
+			status = "Rodada encerrada. Voltando ao lobby da sala…"
+		_:
+			status = "%d de %d jogadores prontos." % [ready_count, total]
+			if total < min_players:
+				status += " Mínimo de %d jogadores para começar." % min_players
+			elif ready_count < total:
+				status += " A partida começa quando todos marcarem PRONTO."
+	room_status.text = status
+	var result: Dictionary = room_view.get("result", {})
+	room_result.visible = not result.is_empty()
+	if not result.is_empty():
+		room_result.text = _result_text(result)
+	var ready_button := buttons["room_ready"] as Button
+	ready_button.text = "CANCELAR PRONTO" if own_ready() else "PRONTO"
+	ready_button.disabled = phase not in [RoomRules.PHASE_LOBBY, RoomRules.PHASE_COUNTDOWN]
+	print("MENU_ROOM phase=%s players=%d ready=%d own_ready=%s" % [phase, total, ready_count, str(own_ready())])
+
+static func _result_text(result: Dictionary) -> String:
+	var winner := "Inocentes venceram" if str(result["winner"]) == "INNOCENTS" else "O assassino venceu"
+	var reason: String = {"assassin_down": "o assassino caiu", "innocents_down": "todos os inocentes caíram"}.get(str(result["reason"]), "")
+	var roles := {"ASSASSIN": "Assassino", "DETECTIVE": "Detetive", "VICTIM": "Vítima"}
+	var lines: Array = ["RESULTADO DA RODADA %d: %s%s." % [int(result["round_id"]), winner, (" — " + reason) if not reason.is_empty() else ""]]
+	var parts: Array = []
+	for entry in result["players"]:
+		parts.append("%s: %s" % [str(entry["label"]), roles.get(str(entry["role"]), "?")])
+	if not parts.is_empty():
+		lines.append("Papéis: " + ", ".join(PackedStringArray(parts)) + ".")
+	return "\n".join(PackedStringArray(lines))
+
+## Erro de sala vindo do servidor, em português, no painel atual.
+func show_room_error(reason: String) -> void:
+	room_request_pending = false
+	room_ready_pending = false
+	var message := RoomRules.error_message(reason)
+	print("MENU_ROOM_ERROR reason=%s" % reason)
+	_sound("ui_error")
+	if panel_name == "hall":
+		var field := "hall_name" if reason in ["invalid_name", "name_taken"] else "room_code"
+		var label: Label = errors[field]
+		label.text = message
+		label.visible = true
+		_refresh_status()
+	elif panel_name == "room":
+		room_status.text = message
+	_refresh_room_buttons()
+
+func _submit_room_create() -> void:
+	if room_request_pending or flow.state != MenuFlow.State.ONLINE:
+		print("MENU_DUPLICATE_IGNORED action=room_create")
+		return
+	_clear_errors()
+	var player_name := _validated_name("hall_name")
+	if player_name.is_empty():
+		return
+	room_request_pending = true
+	_refresh_room_buttons()
+	_sound("ui_confirm")
+	print("MENU_ROOM_CREATE")
+	room_create_requested.emit(player_name)
+
+func _submit_room_join() -> void:
+	if room_request_pending or flow.state != MenuFlow.State.ONLINE:
+		print("MENU_DUPLICATE_IGNORED action=room_join")
+		return
+	_clear_errors()
+	var player_name := _validated_name("hall_name")
+	if player_name.is_empty():
+		return
+	var code := RoomRules.normalize_code((fields["room_code"] as LineEdit).text)
+	if code.is_empty():
+		_reject("room_code", "room_code", RoomRules.error_message("invalid_code"))
+		return
+	(fields["room_code"] as LineEdit).text = RoomRules.display_code(code)
+	room_request_pending = true
+	_refresh_room_buttons()
+	_sound("ui_confirm")
+	print("MENU_ROOM_JOIN")
+	room_join_requested.emit(code, player_name)
+
+func _toggle_ready() -> void:
+	if room_ready_pending or room_view.is_empty() or (buttons["room_ready"] as Button).disabled:
+		print("MENU_DUPLICATE_IGNORED action=room_ready")
+		return
+	room_ready_pending = true
+	var value := not own_ready()
+	_sound("ui_confirm")
+	print("MENU_ROOM_READY value=%s" % str(value))
+	room_ready_requested.emit(value)
+
+func _refresh_room_buttons() -> void:
+	for id in ["room_create", "room_join"]:
+		(buttons[id] as Button).disabled = room_request_pending
+
+func _copy_room_code() -> void:
+	var code := RoomRules.display_code(str(room_view.get("code", "")))
+	if code.is_empty():
+		return
+	room_copy_feedback.visible = true
+	if DisplayServer.has_feature(DisplayServer.FEATURE_CLIPBOARD):
+		DisplayServer.clipboard_set(code)
+		room_copy_feedback.text = "Código %s copiado. Mande para os amigos." % code
+	else:
+		room_copy_feedback.text = "Anote e mande aos amigos: %s" % code
+	print("MENU_ROOM_COPY")
+
+func _leave_online() -> void:
+	print("MENU_ONLINE_LEAVE panel=%s" % panel_name)
+	online_leave_requested.emit()
 
 func _build_howto() -> VBoxContainer:
 	var box := _panel()
@@ -412,6 +674,8 @@ func _first_focus_target() -> Control:
 		"host": return buttons["host_create"]
 		"join": return fields["join_address"]
 		"online": return buttons["online_connect"] if buttons.has("online_connect") else buttons["online_back"]
+		"hall": return buttons["room_create"]
+		"room": return buttons["room_ready"]
 		"howto": return buttons["howto_back"]
 		"settings": return buttons["settings_volume"]
 	return null
@@ -422,8 +686,12 @@ func _submit_current() -> void:
 		return
 	match panel_name:
 		"main":
-			if bool(online["ok"]): _show_panel("online")
+			if bool(online["ok"]): _submit_online()
 			else: _open_with_name("host")
+		"hall":
+			if not (fields["room_code"] as LineEdit).text.strip_edges().is_empty(): _submit_room_join()
+			else: _submit_room_create()
+		"room": _toggle_ready()
 		"host": _submit_host()
 		"join": _submit_join()
 		"online":
@@ -441,6 +709,8 @@ func _escape() -> void:
 		_cancel()
 	elif status_box.visible and not flow.busy():
 		_dismiss_status()
+	elif panel_name in ["hall", "room"]:
+		_leave_online()
 	elif panel_name != "main" and not flow.busy():
 		_show_panel("main")
 
@@ -625,6 +895,11 @@ func _refresh_status() -> void:
 			(buttons[id] as BaseButton).disabled = not inputs
 	for id in fields:
 		(fields[id] as LineEdit).editable = inputs
+	if inputs:
+		# Salas: pedido em curso e PRONTO só no lobby/contagem da sala.
+		_refresh_room_buttons()
+		if not room_view.is_empty():
+			(buttons["room_ready"] as Button).disabled = str(room_view.get("phase", "")) not in [RoomRules.PHASE_LOBBY, RoomRules.PHASE_COUNTDOWN]
 	if overlay:
 		call_deferred("_focus_first")
 

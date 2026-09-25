@@ -25,7 +25,15 @@ const MAX_PLAYERS := RoundRules.MAX_PLAYERS
 ## `round_bodies_state` com DTO público (`BodyRules.PUBLIC_KEYS`). Comandos,
 ## snapshot e ACK iguais aos da versão 9, mas a superfície de RPC mudou: uma
 ## build 9 e uma 10 não podem jogar juntas.
-const PROTOCOL_VERSION := 10
+## 11: salas privadas online (fase 9). RPCs novas `room_create`, `room_join`,
+## `room_set_ready` (cliente -> servidor) e `room_welcome`, `room_state`,
+## `room_error` (servidor -> cliente); no servidor online, `request_join` só
+## faz o handshake (protocolo + nome) e a entrada numa sala vem depois. Os
+## estados de rodada, roster, snapshots e combate passam a sair por sala.
+## Os nomes novos ordenam depois de `request_join`: os índices de RPC do
+## handshake (`join_rejected`, `request_join`) são os mesmos do protocolo 10,
+## então 10 e 11 se recusam com `protocol_version` legível.
+const PROTOCOL_VERSION := 11
 const CONNECT_TIMEOUT_SECONDS := 10.0
 
 ## Versão anunciada/aceita por este processo. Só um binário de

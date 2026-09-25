@@ -54,6 +54,7 @@ func _process(_delta: float) -> bool:
 	if _frame == 6:
 		_test_online_configured_by_argument_and_setting()
 		_test_project_default_and_disable()
+		_test_online_rooms()
 		return false
 	if _frame < 9:
 		return false
@@ -363,3 +364,65 @@ func _test_project_default_and_disable() -> void:
 
 func await_ready(_node: Node) -> void:
 	pass
+
+## Fase 9: lobby online e sala. O menu só pede; quem decide é o servidor.
+func _test_online_rooms() -> void:
+	var rooms_menu := _new_menu({"online-url": "wss://exemplo.invalid"})
+	var requests: Array = []
+	rooms_menu.room_create_requested.connect(func(n): requests.append({"kind": "create", "name": n}))
+	rooms_menu.room_join_requested.connect(func(c, n): requests.append({"kind": "join", "code": c, "name": n}))
+	rooms_menu.room_ready_requested.connect(func(v): requests.append({"kind": "ready", "value": v}))
+	rooms_menu.online_leave_requested.connect(func(): requests.append({"kind": "leave"}))
+	rooms_menu.set_field("name", "Ana")
+	var attempt := rooms_menu.flow.begin_attempt()
+	rooms_menu.enter(MenuFlow.State.CONNECTING, "", attempt)
+	rooms_menu.enter(MenuFlow.State.AWAITING_RESPONSE, "", attempt)
+	rooms_menu.show_hall()
+	_expect(rooms_menu.panel_name == "hall" and rooms_menu.flow.state == MenuFlow.State.ONLINE, "connected online shows the online lobby")
+	_expect((rooms_menu.fields["hall_name"] as LineEdit).text == "Ana", "online lobby keeps the chosen name")
+	# Código: inválido não sai do menu; válido vai normalizado.
+	rooms_menu.set_field("room_code", "O0I1")
+	rooms_menu.press("room_join")
+	_expect(requests.is_empty() and (rooms_menu.errors["room_code"] as Label).visible, "invalid code refused locally")
+	rooms_menu.set_field("room_code", " k7m-2qx ")
+	rooms_menu.press("room_join")
+	_expect(requests.size() == 1 and requests[0]["code"] == "K7M2QX" and requests[0]["name"] == "Ana", "join sends the normalized code (%s)" % str(requests))
+	_expect(not rooms_menu.press("room_create") and requests.size() == 1, "no second request while one is pending")
+	rooms_menu.show_room_error("room_not_found")
+	_expect((rooms_menu.errors["room_code"] as Label).text == RoomRules.error_message("room_not_found"), "server error shown in Portuguese")
+	_expect(rooms_menu.press("room_create") and requests[-1]["kind"] == "create", "create allowed again after an error")
+	# Sala: anfitrião, PRONTO/AGUARDANDO, contagem de prontos.
+	var dto := RoomRules.sanitize_room_state({"code": "K7M2QX", "phase": "lobby", "round_id": 0, "countdown_msec": 0,
+		"min_players": 4, "max_players": 8, "ready_count": 1, "result": {}, "players": [
+			{"peer_id": 5, "label": "Ana", "appearance": "ember", "ready": false, "host": true},
+			{"peer_id": 6, "label": "Beto", "appearance": "moss", "ready": true, "host": false}]})
+	rooms_menu.show_room(dto, 5)
+	_expect(rooms_menu.panel_name == "room" and rooms_menu.room_title.text == "Sala K7M-2QX", "room shows the display code")
+	_expect(rooms_menu.room_status.text.begins_with("1 de 2 jogadores prontos. Mínimo de 4"), "room shows ready count and the minimum (%s)" % rooms_menu.room_status.text)
+	var texts: Array = []
+	for row in rooms_menu.room_players.get_children():
+		for child in row.get_children():
+			if child is Label:
+				texts.append((child as Label).text)
+	_expect("Ana (você)" in texts and "ANFITRIÃO" in texts and "AGUARDANDO" in texts and "PRONTO" in texts, "players, host tag and ready states listed (%s)" % str(texts))
+	requests.clear()
+	_expect(rooms_menu.press("room_ready") and requests.size() == 1 and requests[0]["value"] == true, "PRONTO asks the server")
+	rooms_menu.press("room_ready")
+	_expect(requests.size() == 1, "double click on PRONTO sends once")
+	dto["players"][0]["ready"] = true
+	dto["ready_count"] = 2
+	rooms_menu.show_room(dto, 5)
+	_expect((rooms_menu.buttons["room_ready"] as Button).text == "CANCELAR PRONTO", "ready state comes from the server")
+	dto["phase"] = "playing"
+	rooms_menu.show_room(dto, 5)
+	_expect((rooms_menu.buttons["room_ready"] as Button).disabled, "ready locked during the round")
+	dto["phase"] = "lobby"
+	dto["result"] = {"round_id": 1, "winner": "ASSASSIN", "reason": "innocents_down", "players": [{"label": "Beto", "role": "ASSASSIN"}]}
+	rooms_menu.show_room(RoomRules.sanitize_room_state(dto), 5)
+	_expect(rooms_menu.room_result.visible and rooms_menu.room_result.text.begins_with("RESULTADO DA RODADA 1: O assassino venceu"), "round result shown back in the room")
+	requests.clear()
+	rooms_menu.press("room_copy")
+	_expect(rooms_menu.room_copy_feedback.visible and rooms_menu.room_copy_feedback.text.contains("K7M-2QX"), "copy shows the code (clipboard or fallback)")
+	rooms_menu.press("room_leave")
+	_expect(requests.size() == 1 and requests[0]["kind"] == "leave", "leave asks to go back")
+	rooms_menu.queue_free()

@@ -379,7 +379,7 @@ jobs:
           set -o pipefail
           TEST_LOG_DIR="$RUNNER_TEMP/godot-menu-logs/flow" GAME_BIN="$(command -v godot)" \
             ./tests/menu_flow_test.sh 2>&1 | tee "$RUNNER_TEMP/godot-menu-logs/flow.log"
-          grep -q 'MENU_FLOW_TEST_OK scenes=9' "$RUNNER_TEMP/godot-menu-logs/flow.log"
+          grep -q 'MENU_FLOW_TEST_OK scenes=10' "$RUNNER_TEMP/godot-menu-logs/flow.log"
 
       - name: Upload failure logs
         if: failure()
@@ -387,4 +387,59 @@ jobs:
         with:
           name: godot-menu-test-logs
           path: ${{ runner.temp }}/godot-menu-logs
+          if-no-files-found: warn
+
+  # Fase 9: salas privadas. Job próprio (em paralelo) para não somar ao
+  # tempo do network-tests.
+  rooms-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Create log directory
+        run: mkdir -p "$RUNNER_TEMP/godot-rooms-logs"
+
+      - name: Validate project
+        run: |
+          set -o pipefail
+          godot --headless --path . --editor --quit 2>&1 \
+            | tee "$RUNNER_TEMP/godot-rooms-logs/parser.log"
+
+      - name: Validate private rooms and ready lobby rules
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/rooms_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-rooms-logs/rooms.log"
+          grep -q 'ROOMS_TEST_OK' "$RUNNER_TEMP/godot-rooms-logs/rooms.log"
+
+      # 3 salas em paralelo (uma joga 2 rodadas, outra fica no lobby, outra
+      # troca de anfitrião), isolamento por peer visto em cada cliente.
+      - name: Run private rooms network test
+        run: |
+          set -o pipefail
+          TEST_LOG_DIR="$RUNNER_TEMP/godot-rooms-logs/network" GODOT_BIN="$(command -v godot)" \
+            ./tests/rooms_network_test.sh 2>&1 | tee "$RUNNER_TEMP/godot-rooms-logs/rooms-network.log"
+
+      - name: Run adversarial rooms test
+        run: |
+          set -o pipefail
+          TEST_LOG_DIR="$RUNNER_TEMP/godot-rooms-logs/adversarial" GODOT_BIN="$(command -v godot)" \
+            ./tests/rooms_adversarial_test.sh 2>&1 | tee "$RUNNER_TEMP/godot-rooms-logs/rooms-adversarial.log"
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-rooms-test-logs
+          path: ${{ runner.temp }}/godot-rooms-logs
           if-no-files-found: warn

@@ -2,7 +2,8 @@ extends SceneTree
 
 ## Fase 7: capturas do menu real numa resolução e verificação de corte.
 ## Para cada tela (principal, criar partida, entrar por LAN, online sem URL,
-## conectando, erro recuperável, como jogar, configurações) grava um PNG e
+## conectando, erro recuperável, como jogar, configurações e, desde a fase 9,
+## lobby online, sala e sala com resultado) grava um PNG e
 ## confere que todo controle visível cabe na janela (exceto conteúdo dentro de
 ## rolagem, que é conferido pela própria área de rolagem) e que nenhum texto
 ## de uma linha (rótulo, botão, campo) é mais largo que o próprio controle.
@@ -11,7 +12,7 @@ extends SceneTree
 ## Uso: xvfb-run -s "-screen 0 1920x1080x24" godot --rendering-driver opengl3 \
 ##   --resolution 1280x720 --path . --script tests/menu_capture.gd -- SAIDA_DIR
 
-const SCREENS := ["main", "host", "join", "online", "connecting", "error", "howto", "settings"]
+const SCREENS := ["main", "host", "join", "online", "connecting", "error", "howto", "settings", "hall", "room", "room_result"]
 
 var out_dir := ""
 var menu: DesktopMenu
@@ -60,6 +61,9 @@ func _prepare(screen: String) -> void:
 		if menu.flow.busy():
 			menu.fail("", menu.flow.attempt)
 		menu.press("status_back")
+	if screen in ["hall", "room", "room_result"]:
+		_prepare_online(screen)
+		return
 	if menu.panel_name != "main":
 		menu._show_panel("main", false)
 	match screen:
@@ -78,6 +82,39 @@ func _prepare(screen: String) -> void:
 			menu.press("join_enter")
 			menu.enter(MenuFlow.State.CONNECTING, "", menu.flow.attempt)
 			menu.fail("Não foi possível conectar a 192.168.0.10:9080. Confira o endereço, a porta e se o anfitrião está com a partida aberta.", menu.flow.attempt)
+
+## Telas das salas online (fase 9) com dados de exemplo, pelo mesmo caminho
+## que a rede usa: conectado -> lobby online -> estado da sala.
+func _prepare_online(screen: String) -> void:
+	menu.flow.state = MenuFlow.State.IDLE
+	menu.room_view = {}
+	var attempt := menu.flow.begin_attempt()
+	menu.enter(MenuFlow.State.CONNECTING, "", attempt)
+	menu.enter(MenuFlow.State.AWAITING_RESPONSE, "", attempt)
+	menu.fields["name"].text = "Ana Luísa"
+	menu.show_hall()
+	if screen == "hall":
+		menu.fields["room_code"].text = "k7m-2qx"
+		menu.buttons["room_create"].grab_focus()
+		return
+	var players := [
+		{"peer_id": 11, "label": "Ana Luísa", "appearance": "ember", "ready": screen == "room", "host": true},
+		{"peer_id": 12, "label": "Beto", "appearance": "moss", "ready": screen == "room", "host": false},
+		{"peer_id": 13, "label": "Caio", "appearance": "night", "ready": false, "host": false},
+		{"peer_id": 14, "label": "Eduarda Maria", "appearance": "plum", "ready": screen == "room", "host": false},
+		{"peer_id": 15, "label": "Duda", "appearance": "sand", "ready": false, "host": false},
+	]
+	var result := {}
+	if screen == "room_result":
+		result = {"round_id": 1, "winner": "INNOCENTS", "reason": "assassin_down", "players": [
+			{"label": "Ana Luísa", "role": "VICTIM"}, {"label": "Beto", "role": "ASSASSIN"},
+			{"label": "Caio", "role": "DETECTIVE"}, {"label": "Eduarda Maria", "role": "VICTIM"},
+			{"label": "Duda", "role": "VICTIM"}]}
+	var dto := RoomRules.sanitize_room_state({"code": "K7M2QX", "phase": "lobby", "round_id": 1 if screen == "room_result" else 0,
+		"countdown_msec": 0, "min_players": 4, "max_players": 8, "players": players,
+		"ready_count": 3 if screen == "room" else 0, "result": result})
+	menu.show_room(dto, 11)
+	menu.buttons["room_ready"].grab_focus()
 
 func _capture(screen: String) -> void:
 	var image := root.get_viewport().get_texture().get_image()
@@ -143,14 +180,15 @@ func _problem(screen: String, kind: String, control: Control, detail: String) ->
 	printerr("MENU_CAPTURE_PROBLEM screen=%s resolution=%s kind=%s node=%s text=%s %s" % [screen, _label, kind, control.get_path(), str(control.get("text")).left(40), detail])
 	return 1
 
-## Prancha 4x2 com as oito telas, para revisão rápida.
+## Prancha com 4 colunas e todas as telas, para revisão rápida.
 func _save_sheet() -> void:
 	if _images.size() != SCREENS.size():
 		return
 	var first: Image = _images[0]
 	var tile_w := 640
 	var tile_h := int(float(first.get_height()) * tile_w / first.get_width())
-	var sheet := Image.create(tile_w * 4, tile_h * 2, false, Image.FORMAT_RGB8)
+	var rows := int(ceil(_images.size() / 4.0))
+	var sheet := Image.create(tile_w * 4, tile_h * rows, false, Image.FORMAT_RGB8)
 	for i in _images.size():
 		var tile: Image = (_images[i] as Image).duplicate()
 		tile.convert(Image.FORMAT_RGB8)

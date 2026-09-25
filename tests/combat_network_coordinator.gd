@@ -78,7 +78,7 @@ func _process(_delta: float) -> void:
 		_try_run_client_command()
 
 func _server_tick() -> void:
-	if Time.get_ticks_msec() - stage_started_msec > 10000:
+	if Time.get_ticks_msec() - stage_started_msec > _stage_timeout_msec():
 		_print_timeout_diagnostic()
 		app.get_tree().quit(1)
 		return
@@ -663,7 +663,14 @@ func _print_timeout_diagnostic() -> void:
 	push_error("COMBAT_TEST_STAGE_TIMEOUT stage=%s previous=%s expected_round=%d actual_round=%d expected_peers=%s confirmed=%s commands=%s actions=%s action_sequences=%s owner_count=%d shooter_selected=%s target_selected=%s weapon_pickup=weapon_1 ammo_pickup=ammo_0 availability=%s shooter_inventory=%s positions=%s last_rejections=%s deadline=%d now=%d" % [
 		stage, previous_stage, expected_round_id, app.round_authority.round_id, expected_peers.keys(), acknowledgements.keys(), sent_commands, action_results,
 		action_sequences, _count_weapon_owners(), str(shooter > 0), str(target > 0), pickup_availability, inventories.get(shooter, {}), positions,
-		last_rejection_by_peer, stage_started_msec + 10000, Time.get_ticks_msec()])
+		last_rejection_by_peer, stage_started_msec + _stage_timeout_msec(), Time.get_ticks_msec()])
+
+## 10 s por etapa. A espera pela rodada também inclui a contagem configurada
+## (8 s no cenário de 8 clientes), que só começa quando o 4º cliente entra.
+func _stage_timeout_msec() -> int:
+	if stage != "WAIT_FOR_ACTIVE":
+		return 10000
+	return 10000 + int(NetworkConfig.float_argument(app.arguments, "countdown-seconds", 0.0) * 1000.0)
 
 func _count_weapon_owners() -> int:
 	var owners := 0

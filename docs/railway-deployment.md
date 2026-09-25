@@ -5,8 +5,12 @@ Estado em 24/09/2026:
 - Serviço ativo em `wss://ossuspeitos-production.up.railway.app`, com porta
   interna 8080, segundo o operador.
 - Um cliente Godot real, rodando no GitHub Actions, conectou pelo domínio
-  público: TLS, WebSocket, protocolo 10, entrada na sala, snapshots e estado
-  da rodada.
+  público: TLS, WebSocket, protocolo 10 (antes das salas), entrada na sala,
+  snapshots e estado da rodada.
+- Fase 9: o mesmo processo passa a manter várias salas privadas (código de
+  6 caracteres, PRONTO, até 8 por sala), com protocolo 11. Como o Railway
+  republica a `main`, o merge da fase 9 troca o servidor online para o
+  protocolo 11.
 - **Ainda falta** uma partida completa com jogadores humanos pela internet
   (passo 6 abaixo) antes de anunciar o jogo como online.
 
@@ -115,7 +119,7 @@ O wrapper executa:
 | Build Command | vazio |
 | Start Command | **vazio** (usa o `ENTRYPOINT`) |
 | Variável `PORT` | `8080` (fixa: deixa porta, domínio e healthcheck coerentes) |
-| Variáveis opcionais | `ARMED_MYSTERY_STATUS_SECONDS` (padrão 60; 0 desliga), `ARMED_MYSTERY_SHUTDOWN_GRACE_SECONDS` (padrão 8) |
+| Variáveis opcionais | `ARMED_MYSTERY_STATUS_SECONDS` (padrão 60; 0 desliga), `ARMED_MYSTERY_SHUTDOWN_GRACE_SECONDS` (padrão 8), `ARMED_MYSTERY_MAX_ROOMS` (1 a 64, padrão 12) |
 | Domínio público | gerar domínio `*.up.railway.app`, **target port 8080** |
 | TCP Proxy | não usar (o cliente usa `wss://` pelo domínio HTTP) |
 | Healthcheck Path | **vazio** (ver abaixo) |
@@ -152,12 +156,12 @@ memória. Faça merges fora das partidas.
 O que substitui o healthcheck:
 
 - **Log de prontidão:**
-  `DEDICATED_READY bind=0.0.0.0 port=8080 port_source=env capacity=8 protocol=10`.
+  `DEDICATED_READY bind=0.0.0.0 port=8080 port_source=env capacity=8 protocol=11 shutdown_file=on max_rooms=12`.
   Só é impresso depois que mundo, autoridades e listener subiram sem erro.
   Falha de configuração ou bind sai com código diferente de 0, e o restart
   policy entra em ação.
 - **Sonda externa com um cliente Godot real**, que faz o handshake do
-  protocolo 10, entra e sai:
+  protocolo 11, entra e sai:
 
   ```
   godot --headless --path . -- --mode=client --probe=true --url=wss://DOMINIO
@@ -220,7 +224,8 @@ A saída vai para stdout e stderr. Linhas principais:
 | Início | `DEDICATED_START` (commit, Godot, protocolo, build, capacidade) e `DEDICATED_READY` |
 | Conexões | `PEER_CONNECTED`, `CLIENT_JOINED`, `CLIENT_LEFT`, `JOIN_REFUSED` (no máximo 3 por peer) |
 | Rodadas | `ROUND_STATE`, `ROUND_RESULT` |
-| Periódico | `DEDICATED_STATUS` a cada 60 s: contadores, RSS e objetos; sem nomes, papéis ou inventário |
+| Periódico | `DEDICATED_STATUS` a cada 60 s: contadores (conexões, hall, salas, salas jogando, membros), RSS e objetos; sem nomes, papéis ou inventário |
+| Salas | `ROOM_CREATED`, `ROOM_READY`, `ROOM_HOST`, `ROOM_REFUSED` (no máximo 3 por peer), `ROOM_JOIN_ATTEMPTS_EXCEEDED`, `ROOM_DESTROYED` (motivo `empty` ou `idle`); o código de convite nunca vai para o log do servidor |
 | Encerramento | `DEDICATED_SHUTDOWN_REQUESTED`, `SERVER_SHUTDOWN_COMPLETE`, `DEDICATED_EXIT`, `WRAPPER_EXIT` |
 | Falha | `DEDICATED_CONFIG_ERROR`, `DEDICATED_FATAL` |
 
@@ -234,7 +239,7 @@ Nenhum snapshot é logado.
 | Porta inválida ou ocupada | `DEDICATED_CONFIG_ERROR PORT inválida` / `DEDICATED_FATAL reason=listen_failed` | variável `PORT` mal definida |
 | Serviço Active mas inacessível | sonda com `PROBE_FAILED reason=client_connection_failed` | target port do domínio diferente de `PORT`; domínio não gerado; TCP Proxy no lugar do domínio |
 | WebSocket conecta mas a entrada falha | `JOIN_REFUSED reason=...` | sala cheia (`room_unavailable`), nome em uso, nome inválido |
-| Protocolo incompatível | `JOIN_PROTOCOL_MISMATCH client=X server=10` | build do cliente diferente da do servidor |
+| Protocolo incompatível | `JOIN_PROTOCOL_MISMATCH client=X server=11` | build do cliente diferente da do servidor |
 | Cliente cai durante a partida | `CLIENT_LEFT` e o log do cliente | rede do jogador; redeploy (há `DEDICATED_SHUTDOWN_REQUESTED`); restart após falha (procure `DEDICATED_FATAL`) |
 
 ## Redeploy e rollback
@@ -283,9 +288,11 @@ A demo Web continua offline e não se conecta a este servidor.
 
 ## Segurança operacional
 
-- **Quem pode entrar:** qualquer pessoa que conheça o endereço pode tentar
-  entrar na sala, sujeita às regras atuais: protocolo 10, 8 vagas, nome
-  válido e único, e validação de comandos, sequências e taxas. Não há
+- **Quem pode entrar:** qualquer pessoa que conheça o endereço pode criar
+  uma sala. Para entrar numa sala é preciso o código dela, e não existe
+  lista pública. Valem as regras atuais: protocolo 11, 8 vagas por sala, nome
+  válido e único na sala, e validação de comandos, sequências e taxas.
+  Códigos errados derrubam a conexão depois de 8 tentativas. Não há
   autenticação nesta fase.
 - **Modos de teste:** não são acionáveis por clientes. Eles dependem de
   argumentos do processo, que o modo dedicado recusa, e os ganchos restritos

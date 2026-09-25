@@ -23,11 +23,24 @@ ABRIR
 MENU
 - Digite seu nome (até 20 caracteres: letras, números, espaço, - e _).
   O último nome válido fica salvo neste PC; endereço e porta não são salvos.
-- JOGAR ONLINE: entra no servidor online de teste
-  (wss://ossuspeitos-production.up.railway.app, protocolo 10), uma sala
-  de até 8 jogadores. É preciso internet. A sala é pública para quem tiver
-  a build: nomes repetidos são recusados. Para usar outro servidor sem
-  recompilar, crie override.cfg ao lado do .exe com:
+- JOGAR ONLINE: conecta ao servidor online de teste
+  (wss://ossuspeitos-production.up.railway.app, protocolo 11) e abre o
+  LOBBY ONLINE. É preciso internet.
+  * CRIAR SALA: cria uma sala privada e mostra o código (6 letras e
+    números, ex.: K7M-2QX). COPIAR CÓDIGO copia para mandar aos amigos
+    (se não copiar, o código aparece na tela para anotar).
+  * ENTRAR EM SALA: digite o código recebido (maiúsculas, minúsculas e
+    hífen tanto faz).
+  * Na sala: cada um aperta PRONTO. Com pelo menos 4 jogadores e TODOS
+    prontos, a partida começa em 10 segundos. Desmarcar PRONTO ou alguém
+    sair cancela a contagem. O ANFITRIÃO (quem criou) só organiza; se ele
+    sair, o posto passa para quem está há mais tempo na sala.
+  * No fim da rodada aparece o RESULTADO DA RODADA e todos voltam para a
+    sala; para jogar de novo, todos marcam PRONTO outra vez.
+  * Não dá para entrar numa sala com a rodada em andamento: espere o fim.
+    Cada sala tem até 8 jogadores; nomes repetidos na mesma sala são recusados.
+  Para usar outro servidor sem recompilar, crie override.cfg ao lado do
+  .exe com:
       [armed_mystery]
       network/online_url="wss://OUTRO-SERVIDOR"
   Para desligar o online: ArmedMystery.exe -- --online-url=off
@@ -89,6 +102,9 @@ PROBLEMAS COMUNS
   na LAN, se o anfitrião marcou a opção LAN e liberou o firewall.
 - "A sala está cheia (8 jogadores)": espere alguém sair ou crie outra sala.
 - "Já existe alguém com esse nome nesta sala": escolha outro nome.
+- Online, "Nenhuma sala com esse código" ou "Código inválido": confira; a
+  sala some 30 segundos depois de ficar vazia. Muitos códigos errados
+  seguidos derrubam a conexão: volte ao menu e tente de novo.
 - "Tempo esgotado": o endereço respondeu mas a sala não; confira a porta.
 - Log do servidor da sala: %APPDATA%\Godot\app_userdata\Armed Mystery\hosted-server.log
 - Log de um jogador: abra ArmedMystery.console.exe em vez do .exe; o log

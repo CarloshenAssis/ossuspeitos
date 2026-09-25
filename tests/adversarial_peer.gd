@@ -241,3 +241,83 @@ func world_snapshot(payload) -> void:
 	if typeof(ack) == TYPE_DICTIONARY and (ack as Dictionary).keys().size() > 0 \
 			and (ack as Dictionary).keys() != ["seq", "epoch", "yaw_tokens", "pitch_tokens"]:
 		print("ATTACKER_SNAPSHOT_HAS_PRIVATE id=%s key=ack" % label)
+
+# --- Salas online (fase 9): mesma superfície do servidor -----------------------
+
+@rpc("any_peer", "call_remote", "reliable")
+func room_create(_requested_label) -> void:
+	pass
+
+@rpc("any_peer", "call_remote", "reliable")
+func room_join(_raw_code, _requested_label) -> void:
+	pass
+
+@rpc("any_peer", "call_remote", "reliable")
+func room_set_ready(_value) -> void:
+	pass
+
+@rpc("authority", "call_remote", "reliable")
+func room_welcome(_payload) -> void:
+	print("ATTACKER_HALL_WELCOME id=%s" % label)
+	if attack_phase == "rooms":
+		run_room_hall_attacks()
+	elif attack_phase == "rooms-flood":
+		run_room_flood()
+
+@rpc("authority", "call_remote", "reliable")
+func room_state(payload) -> void:
+	print("ATTACKER_ROOM_STATE id=%s payload=%s" % [label, str(payload)])
+	if attack_phase == "rooms" and not room_member_attacks_done:
+		room_member_attacks_done = true
+		run_room_member_attacks()
+
+# --- Ataques às salas (fase 9) -------------------------------------------------
+
+var room_member_attacks_done := false
+
+## Antes do handshake: nenhuma RPC de sala pode ter efeito.
+func run_room_prehall_attacks() -> void:
+	_send("room_create_before_hall", func(): room_create.rpc_id(1, label))
+	_send("room_join_before_hall", func(): room_join.rpc_id(1, "ABCDEF", label))
+	_send("room_ready_before_hall", func(): room_set_ready.rpc_id(1, true))
+
+## No hall (sem sala): PRONTO fora de sala, códigos e nomes malformados,
+## argumentos extras injetados e RPCs de autoridade forjadas. Por fim cria
+## uma sala de verdade.
+func run_room_hall_attacks() -> void:
+	_send("room_ready_outside_room", func(): room_set_ready.rpc_id(1, true))
+	_send("room_ready_wrong_type", func(): room_set_ready.rpc_id(1, "yes"))
+	_send("room_join_int_code", func(): room_join.rpc_id(1, 123456, label))
+	_send("room_join_array_code", func(): room_join.rpc_id(1, ["ABCDEF"], label))
+	_send("room_join_huge_code", func(): room_join.rpc_id(1, "A".repeat(20000), label))
+	_send("room_join_forged_room_id", func(): room_join.rpc_id(1, {"room_id": 1, "code": "ABCDEF"}, label))
+	_send("room_create_null_label", func(): room_create.rpc_id(1, null))
+	_send("room_create_dict_label", func(): room_create.rpc_id(1, {"host": true, "ready": true}))
+	_send("room_create_huge_label", func(): room_create.rpc_id(1, "B".repeat(20000)))
+	_send("forge_room_state", func(): room_state.rpc_id(1, {"code": "ABCDEF", "phase": "playing", "players": []}))
+	_send("forge_room_error", func(): room_error.rpc_id(1, "room_full"))
+	_send("forge_room_welcome", func(): room_welcome.rpc_id(1, {"rooms": true}))
+	_send("room_create_valid", func(): room_create.rpc_id(1, label))
+
+## Já numa sala: criar/entrar de novo, PRONTO com tipo errado e em rajada.
+func run_room_member_attacks() -> void:
+	_send("room_create_twice", func(): room_create.rpc_id(1, label))
+	_send("room_join_while_in_room", func(): room_join.rpc_id(1, "ABCDEF", label))
+	_send("room_ready_int", func(): room_set_ready.rpc_id(1, 1))
+	_send("room_ready_dict", func(): room_set_ready.rpc_id(1, {"ready": true, "room_id": 2}))
+	for index in 30:
+		room_set_ready.rpc_id(1, index % 2 == 0)
+	attacks_sent += 30
+	print("ATTACKER_SENT id=%s attack=room_ready_spam count=30" % label)
+	_send("room_ready_valid", func(): room_set_ready.rpc_id(1, true))
+
+## Força bruta de código: passa do limite de tentativas e a conexão cai.
+func run_room_flood() -> void:
+	for index in RoomRegistry.MAX_JOIN_FAILURES + 4:
+		room_join.rpc_id(1, "ZZZZ%s" % ["22", "23", "24", "25", "26", "27", "28", "29", "32", "33", "34", "35"][index], label)
+	attacks_sent += RoomRegistry.MAX_JOIN_FAILURES + 4
+	print("ATTACKER_SENT id=%s attack=room_join_flood count=%d" % [label, RoomRegistry.MAX_JOIN_FAILURES + 4])
+
+@rpc("authority", "call_remote", "reliable")
+func room_error(reason) -> void:
+	print("ATTACKER_ROOM_ERROR id=%s reason=%s" % [label, str(reason)])

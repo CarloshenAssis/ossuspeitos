@@ -121,3 +121,17 @@ por cena.
 | C5 | Multiplayer na produção | `container_test.sh` multiplayer | 8 entram, papel privado, aparência igual; 9º e protocolo 9 recusados; adversário sem efeito; nova turma joga |
 | C6 | Encerramento e reinício | `container_test.sh` stop/restart | `docker stop` coordenado, saída 0; reinício sem estado |
 | C7 | Jogo completo no container | `campaign_test.sh` com `CAMPAIGN_SERVER_IMAGE` | 8 clientes, 3 rodadas, reset, pickups, corpos, reveal |
+
+## Fase 9 — salas privadas e lobby com PRONTO
+
+| ID | Requisito | Onde | Resultado esperado |
+| --- | --- | --- | --- |
+| R1 | Códigos | `rooms_test.gd` | 6 caracteres sem O/0/I/1; normalização; tipos e tamanhos hostis recusados; colisão refeita; únicos entre salas ativas |
+| R2 | Regras de sala | `rooms_test.gd` | Cheia, nome repetido (só na mesma sala), rodada em andamento; limite de salas; anfitrião passa adiante; sala vazia sai após a carência; lobby parado expira; rodada nunca expira |
+| R3 | PRONTO | `rooms_test.gd` | 3/4 esperam; 4/4 contam 10 s; desmarcar ou sair cancela; quem chega não está pronto; abaixo do mínimo nunca começa; PRONTO travado durante a rodada |
+| R4 | Fim e volta ao lobby | `rooms_test.gd`, `rooms_network_test.sh`, `menu_flow_test.sh` online-rooms | Resultado → lobby da sala com PRONTO zerado; sem próxima rodada automática |
+| R5 | Isolamento | `rooms_network_test.sh` | 3 salas em paralelo (A joga 2 rodadas, B fica no lobby com 3/4 prontos, C troca de anfitrião); todo peer visto por um cliente é da própria sala; códigos, nomes, rodadas e resultados não se misturam |
+| R6 | Recusas | `rooms_network_test.sh` | Código inválido, inexistente, rodada em andamento e nome repetido com mensagem própria; nenhum dado de sala para quem foi recusado |
+| R7 | Adversário | `rooms_adversarial_test.sh` | RPCs de sala antes do handshake, tipos e tamanhos hostis, `room_id`/`host`/`ready` injetados, criar/entrar duas vezes, RPCs de autoridade forjadas, rajada de PRONTO; força bruta cai no limite; o servidor segue saudável |
+| R8 | Menu | `menu_flow_test.sh` online-rooms, `menu_test.gd` | JOGAR ONLINE → LOBBY ONLINE → CRIAR/ENTRAR → sala → PRONTO → partida → resultado → SAIR DA SALA, só pelos botões reais |
+| R9 | Produção | `container_test.sh` | Modo dedicado com salas: 8 numa sala, 9º recusado com `room_full`, sonda cria sala e sai, protocolo 11 |

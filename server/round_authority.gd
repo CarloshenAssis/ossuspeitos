@@ -48,6 +48,13 @@ var _countdown_round_id := 0
 var _reset_deadline_msec := 0
 var _reset_round_id := 0
 var _published_countdown_seconds := -1
+## Fase 9 (salas online): com o gate ligado, a contagem só começa quando todos
+## os conectados marcam PRONTO (e há o mínimo de jogadores), e o fim da rodada
+## volta ao lobby exigindo PRONTO de novo. Desligado: comportamento de sempre
+## (local/LAN começam sozinhos com o mínimo).
+var ready_gate := false
+## peer_id -> true. Só quem está no lobby; limpo a cada volta ao lobby.
+var ready_peers: Dictionary = {}
 
 func _init(lobby_registry: LobbyRegistry = null, seed_value: int = 0) -> void:
 	lobby = lobby_registry if lobby_registry != null else LobbyRegistry.new()
@@ -78,12 +85,55 @@ func join(peer_id: int, raw_label: String, now_msec: int) -> String:
 func leave(peer_id: int, now_msec: int) -> void:
 	if not lobby.remove(peer_id):
 		return
+	ready_peers.erase(peer_id)
 	if state == RoundState.ACTIVE and participants.has(peer_id) and bool(alive.get(peer_id, false)):
 		# Não anuncia o papel do jogador que saiu: apenas o estado de vida muda.
 		_set_alive(peer_id, false, RoundRules.sanitize_cause("disconnect"), 0)
 		_evaluate_victory(now_msec)
 		return
 	_evaluate_lobby(now_msec)
+
+## Marca/desmarca PRONTO (só com o gate ligado, no lobby ou na contagem).
+## Devolve "" ou o motivo da recusa. Quem decide começar é sempre o servidor.
+func set_ready(peer_id: int, value: bool, now_msec: int) -> String:
+	if not ready_gate:
+		return "rooms_unavailable"
+	if not lobby.has(peer_id):
+		return "not_in_room"
+	if state != RoundState.WAITING and state != RoundState.COUNTDOWN:
+		return "not_ready_phase"
+	if value:
+		ready_peers[peer_id] = true
+	else:
+		ready_peers.erase(peer_id)
+	_evaluate_lobby(now_msec)
+	return ""
+
+func is_ready(peer_id: int) -> bool:
+	return ready_peers.has(peer_id)
+
+func ready_count() -> int:
+	var total := 0
+	for peer_id in lobby.peer_ids():
+		if ready_peers.has(peer_id):
+			total += 1
+	return total
+
+## Todos os conectados prontos (e ao menos um).
+func all_ready() -> bool:
+	if lobby.is_empty():
+		return false
+	for peer_id in lobby.peer_ids():
+		if not ready_peers.has(peer_id):
+			return false
+	return true
+
+## Pode começar/continuar a contagem: mínimo de jogadores e, com o gate,
+## todos prontos.
+func _can_count_down() -> bool:
+	if not RoundRules.can_start_countdown(lobby.size()):
+		return false
+	return not ready_gate or all_ready()
 
 ## Peers conectados que não participam da rodada corrente.
 func waiting_peer_ids() -> Array:
@@ -260,10 +310,10 @@ func _transition(to_state: int) -> bool:
 	return true
 
 func _evaluate_lobby(now_msec: int) -> void:
-	if state == RoundState.WAITING and RoundRules.can_start_countdown(lobby.size()):
+	if state == RoundState.WAITING and _can_count_down():
 		_begin_countdown(now_msec)
 		return
-	if state == RoundState.COUNTDOWN and not RoundRules.can_start_countdown(lobby.size()):
+	if state == RoundState.COUNTDOWN and not _can_count_down():
 		_cancel_countdown()
 
 func _begin_countdown(now_msec: int) -> void:
@@ -298,8 +348,9 @@ func _cancel_countdown() -> void:
 	state_changed.emit(state, round_id)
 
 func _begin_active(now_msec: int) -> void:
-	# Revalida logo antes da transição: o lobby pode ter encolhido.
-	if not RoundRules.can_start_countdown(lobby.size()):
+	# Revalida logo antes da transição: o lobby pode ter encolhido (ou alguém
+	# cancelou o PRONTO, com o gate ligado).
+	if not _can_count_down():
 		_cancel_countdown()
 		return
 	var frozen := lobby.peer_ids()
@@ -406,6 +457,8 @@ func reset_for_next_round(now_msec: int) -> void:
 	_reset_deadline_msec = 0
 	_reset_round_id = 0
 	_published_countdown_seconds = -1
+	# Volta ao lobby: com o gate, todos precisam marcar PRONTO de novo.
+	ready_peers.clear()
 	state_changed.emit(state, round_id)
 	round_reset.emit(round_id)
 	_evaluate_lobby(now_msec)
@@ -419,6 +472,7 @@ func clear() -> void:
 	participants.clear()
 	alive.clear()
 	lobby.clear()
+	ready_peers.clear()
 	state = RoundState.WAITING
 	winning_team = Role.TEAM_NONE
 	winner_reason = ""
