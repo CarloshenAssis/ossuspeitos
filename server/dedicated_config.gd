@@ -65,6 +65,13 @@ static func resolve(arguments: Dictionary, environment: Dictionary) -> Dictionar
 		bind_source = "env"
 	if not is_bind_address(bind):
 		errors.append("endereço de escuta inválido: \"%s\" (use um IP, como 0.0.0.0 ou ::)" % bind)
+	var max_rooms := RoomRegistry.DEFAULT_MAX_ROOMS
+	if environment.has("ARMED_MYSTERY_MAX_ROOMS"):
+		var rooms_text := str(environment["ARMED_MYSTERY_MAX_ROOMS"]).strip_edges()
+		if not rooms_text.is_valid_int() or rooms_text.to_int() < 1 or rooms_text.to_int() > RoomRegistry.MAX_ROOMS_LIMIT:
+			errors.append("ARMED_MYSTERY_MAX_ROOMS inválida: \"%s\" (1 a %d)" % [rooms_text, RoomRegistry.MAX_ROOMS_LIMIT])
+		else:
+			max_rooms = rooms_text.to_int()
 	var status_interval := STATUS_INTERVAL_SECONDS
 	if environment.has("ARMED_MYSTERY_STATUS_SECONDS"):
 		var text := str(environment["ARMED_MYSTERY_STATUS_SECONDS"]).strip_edges()
@@ -82,6 +89,7 @@ static func resolve(arguments: Dictionary, environment: Dictionary) -> Dictionar
 		"bind_source": bind_source,
 		"shutdown_file": str(arguments.get("shutdown-file", "")).strip_edges(),
 		"status_interval_seconds": status_interval,
+		"max_rooms": max_rooms,
 		"commit": commit_from(environment),
 	}
 
@@ -111,7 +119,7 @@ static func commit_from(environment: Dictionary) -> String:
 ## Ambiente relevante do processo (só as chaves que o modo dedicado lê).
 static func process_environment() -> Dictionary:
 	var values := {}
-	for key in ["PORT", "ARMED_MYSTERY_BIND", "ARMED_MYSTERY_STATUS_SECONDS", "ARMED_MYSTERY_COMMIT", "RAILWAY_GIT_COMMIT_SHA"]:
+	for key in ["PORT", "ARMED_MYSTERY_BIND", "ARMED_MYSTERY_STATUS_SECONDS", "ARMED_MYSTERY_MAX_ROOMS", "ARMED_MYSTERY_COMMIT", "RAILWAY_GIT_COMMIT_SHA"]:
 		if OS.has_environment(key):
 			values[key] = OS.get_environment(key)
 	return values
