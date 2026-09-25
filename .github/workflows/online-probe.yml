@@ -4,7 +4,14 @@ name: Online server probe
 # normal (TLS, WebSocket, handshake do protocolo, entrada na sala) e sai.
 # Não usa flags de coordenador de teste e não reinicia nada no servidor; um
 # jogador na sala pode ver a sonda entrar e sair. Não é gate de PR comum:
-# roda sob demanda e quando o endpoint online muda.
+# roda sob demanda, quando o endpoint online muda e quando o protocolo muda.
+#
+# O servidor online roda a `main` (o Railway republica a `main` sozinho):
+#   - num PR que muda o protocolo, a produção ainda fala o protocolo da
+#     `main`; a recusa `protocol_version` é então o resultado esperado e
+#     registrado (não há como o servidor antigo aceitar o cliente novo);
+#   - num push na `main`, a sonda repete por até ~10 min até o servidor
+#     republicado aceitar o protocolo novo (prova do deploy automático).
 
 on:
   workflow_dispatch:
@@ -17,6 +24,12 @@ on:
     paths:
       - project.godot
       - client/online_endpoint.gd
+      - shared/network_config.gd
+      - .github/workflows/online-probe.yml
+  push:
+    branches: [main]
+    paths:
+      - shared/network_config.gd
       - .github/workflows/online-probe.yml
 
 permissions:
@@ -25,7 +38,7 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -52,6 +65,31 @@ jobs:
           if [[ -z "$url" ]]; then url="wss://ossuspeitos-production.up.railway.app"; fi
           echo "PROBE_TARGET url=$url"
           getent hosts "${url#wss://}" || true
-          timeout 60 godot --headless --path . -- --mode=client --probe=true \
-            --client-id="sonda-ci-${GITHUB_RUN_ID: -6}" --url="$url" 2>&1 | tee probe.log
-          grep -qE 'PROBE_OK .* result=(joined detail=peer_id=[0-9]+ snapshots=[0-9]+ round_state=[A-Z]+|refused detail=(room_unavailable|name_taken)) protocol=10' probe.log
+          # Protocolo do código em teste; com salas (protocolo 11+) a sonda
+          # cria uma sala própria e sai (o servidor a destrói em 30 s).
+          protocol="$(sed -n 's/^const PROTOCOL_VERSION := \([0-9]*\).*/\1/p' shared/network_config.gd)"
+          base_protocol="$protocol"
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            git fetch --depth=1 origin "$GITHUB_BASE_REF"
+            base_protocol="$(git show "origin/$GITHUB_BASE_REF:shared/network_config.gd" | sed -n 's/^const PROTOCOL_VERSION := \([0-9]*\).*/\1/p')"
+          fi
+          echo "PROBE_EXPECTED_PROTOCOL code=$protocol base=$base_protocol event=$GITHUB_EVENT_NAME"
+          attempts=1
+          [[ "$GITHUB_EVENT_NAME" == push ]] && attempts=15
+          for attempt in $(seq 1 "$attempts"); do
+            timeout 60 godot --headless --path . -- --mode=client --probe=true \
+              --client-id="sonda-ci-${GITHUB_RUN_ID: -6}" --url="$url" 2>&1 | tee probe.log || true
+            if grep -qE "PROBE_OK .* result=(joined detail=peer_id=[0-9]+ snapshots=[0-9]+ round_state=[A-Z]+( room=[a-z]+)?|refused detail=(room_unavailable|name_taken|room_full|round_in_progress|server_full)) protocol=$protocol" probe.log; then
+              echo "PROBE_RESULT ok attempt=$attempt protocol=$protocol"
+              exit 0
+            fi
+            if [[ "$GITHUB_EVENT_NAME" == pull_request && "$base_protocol" != "$protocol" ]] \
+                && grep -q 'PROBE_FAILED .* reason=join_rejected:protocol_version' probe.log; then
+              echo "::notice::Produção ainda fala o protocolo $base_protocol (main); este PR usa o $protocol. Recusa de versão esperada; a sonda roda de novo no push da main."
+              echo "PROBE_RESULT expected_version_refusal production=$base_protocol code=$protocol"
+              exit 0
+            fi
+            echo "PROBE_RESULT retry attempt=$attempt/$attempts"
+            [[ "$attempt" -lt "$attempts" ]] && sleep 40
+          done
+          exit 1

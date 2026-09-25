@@ -922,3 +922,87 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
 - **Precedência:** a mesma de antes, argumento > variável > projeto (ou
   `override.cfg`). O valor `off` desliga o online na execução.
 - **O que não mudou:** local e LAN; a demo Web continua offline.
+
+## Fase 9 — salas privadas e lobby com PRONTO (protocolo 11)
+
+- **Arquitetura**
+  - Um único processo de servidor (o mesmo container do Railway) mantém
+    várias salas autoritativas: `RoomRegistry` com `MatchRoom`.
+  - Cada `MatchRoom` tem o próprio lobby, rodada, mundo, combate e corpos.
+    Nada é compartilhado entre salas.
+  - Sem banco, Redis ou escala horizontal. As salas são efêmeras e somem
+    quando o processo reinicia.
+- **Troca de contexto na NetworkApp**
+  - Toda entrada do servidor passa por `_use_room(room)` antes de ler ou
+    enviar estado. Isso inclui RPC de cliente (sala tirada do vínculo peer ->
+    sala do servidor), tick, sinal das autoridades, chamada adiada e
+    desconexão.
+  - Os sinais de cada sala são ligados a lambdas que entram na própria sala.
+  - Foi escolhida porque preserva todo o código de rodada, combate e corpos
+    já testado.
+  - Local, LAN e os testes antigos usam uma sala padrão, sem código e sem o
+    gate de PRONTO: o comportamento é o anterior.
+- **Isolamento de envio**
+  - Todo broadcast virou `rpc_id` para os membros da sala corrente: snapshots,
+    roster, pickups, tiros, eliminações, corpos, reveal, espectador, contagem
+    de clientes e estado da sala.
+  - O teste multiprocesso confere, pelo log de cada cliente, que todo peer
+    visto em qualquer mensagem é da própria sala.
+- **Modo dedicado**
+  - Sempre com salas. Fora dele, `--rooms=true` liga as salas nos testes.
+  - `ARMED_MYSTERY_MAX_ROOMS` aceita de 1 a 64; o padrão é 12.
+  - Capacidade do hall: `max_rooms × 8 + 16` conexões.
+- **Códigos**
+  - 6 caracteres de `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (sem O/0/I/1),
+    gerados com `Crypto`, únicos entre as salas ativas.
+  - A entrada é normalizada: maiúsculas, sem espaços nem hífen.
+  - Não há lista pública de salas.
+- **Ciclo de vida**
+  - Sala vazia é destruída depois de 30 s.
+  - Lobby parado por 30 min expira; rodada em andamento nunca expira.
+  - Conexão no hall sem sala cai em 10 min.
+- **Anfitrião**
+  - É só um rótulo de organizador.
+  - Se sair, o posto passa para quem está conectado há mais tempo, pela
+    ordem de entrada.
+- **PRONTO**
+  - A contagem (10 s) só começa quando todos na sala marcam PRONTO e há o
+    mínimo de 4.
+  - Desmarcar ou sair cancela a contagem.
+  - Quem chega depois entra como AGUARDANDO.
+  - Entrar no meio da rodada (ou na tela de resultado) é recusado com
+    `round_in_progress`.
+- **Fim da rodada**
+  - O reveal continua igual.
+  - O resultado público (vencedor, motivo, papéis por nome) fica guardado na
+    sala e aparece no lobby dela.
+  - Depois de 8 s todos voltam ao lobby da sala com PRONTO zerado. Não há
+    próxima rodada automática.
+- **Segurança**
+  - O cliente só manda intenções: `room_create(nome)`,
+    `room_join(código, nome)` e `room_set_ready(bool)`. Os argumentos não
+    têm tipo, então um valor hostil vira recusa registrada.
+  - O cliente nunca informa sala, host, PRONTO de outro ou resultado.
+  - O DTO da sala é uma allowlist: código, fase, rodada, contagem, mínimo e
+    máximo, jogadores (id, nome, aparência, pronto, anfitrião), prontos e
+    resultado. O cliente sanitiza de novo (`RoomRules.sanitize_room_state`).
+  - Falhas de entrada por código são limitadas a 8 por conexão; depois
+    disso a conexão cai. Atrás do proxy do Railway o IP visto é o do proxy,
+    então o limite é por conexão.
+  - Recusas vão para o log no máximo 3 vezes por peer.
+- **Protocolo 11**
+  - A superfície de RPC mudou: entraram `room_create`, `room_join`,
+    `room_set_ready`, `room_welcome`, `room_state` e `room_error`.
+  - O Godot resolve RPC por índice na lista ordenada de métodos, então as
+    duas versões não podem jogar juntas. Por isso a versão sobe.
+  - Os nomes novos ordenam depois de `request_join` (por isso `room_welcome`
+    e não `hall_welcome`). Assim os índices do handshake (`join_rejected` e
+    `request_join`) ficam iguais aos do protocolo 10, e uma build 10 contra
+    um servidor 11 (ou o contrário) recebe a recusa `protocol_version`
+    legível, não uma RPC trocada. `round_network_test.sh` fixa esses
+    índices.
+- **Deploy**
+  - O Railway republica a `main` sozinho. Depois do merge, o servidor online
+    passa a falar o protocolo 11 e a build Windows do protocolo 10 deixa de
+    entrar (recusa clara de versão).
+  - É preciso distribuir uma build nova.

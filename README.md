@@ -62,6 +62,25 @@ encerra sozinho 20 s depois de ficar vazio.
 
 Pelo código-fonte, `godot4 --path .` sem argumentos abre o mesmo menu.
 
+### Jogar online: salas privadas (protocolo 11)
+
+**JOGAR ONLINE** conecta ao servidor online e abre o **lobby online**:
+
+- **Criar sala** gera um código de 6 caracteres (sem O/0/I/1). Mande o
+  código aos amigos.
+- **Entrar em sala** usa o código recebido.
+
+Na sala aparecem os jogadores, o **anfitrião** (só organiza) e quem está
+**PRONTO**. A partida começa depois de 10 s quando todos estão prontos e há
+pelo menos 4. No fim, o resultado aparece e todos voltam à sala; para outra
+rodada, todos marcam PRONTO de novo.
+
+Cada sala tem até 8 jogadores e estado isolado. Não há lista pública, chat nem
+conta. Detalhes em `docs/decisions.md` (fase 9) e `docs/online-endpoint.md`.
+
+Servidor com salas localmente: `godot4 --headless --path . -- --mode=server --rooms=true`.
+O modo dedicado (`--mode=dedicated`, o do container) sempre usa salas.
+
 ## Arena graybox
 
 A arena mede 29 × 29 m entre os muros e tem simetria rotacional de 90°, para nenhum spawn
@@ -234,6 +253,10 @@ godot4 --headless --path . --script tests/desktop_session_test.gd
 ./tests/desktop_local_match_test.sh
 # o mesmo contra um executável exportado (sem o projeto)
 GAME_BIN=caminho/ArmedMystery.console.exe GAME_PATH= ./tests/desktop_local_match_test.sh
+# salas online: regras, 3 salas em paralelo com isolamento, ataques às RPCs de sala
+godot4 --headless --path . --script tests/rooms_test.gd
+./tests/rooms_network_test.sh
+./tests/rooms_adversarial_test.sh
 ```
 
 O teste de movimento abre uma porta local aleatória, inicia cinco processos

@@ -198,6 +198,31 @@ jobs:
           GODOT_BIN="$(command -v godot)" ./tests/round_adversarial_test.sh 2>&1 \
             | tee "$RUNNER_TEMP/godot-network-logs/adversarial.log"
 
+      - name: Validate private rooms and ready lobby rules
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/rooms_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/rooms.log"
+          grep -q 'ROOMS_TEST_OK' "$RUNNER_TEMP/godot-network-logs/rooms.log"
+
+      # Fase 9: 3 salas em paralelo (uma joga 2 rodadas, outra fica no lobby,
+      # outra troca de anfitrião), isolamento por peer visto em cada cliente.
+      - name: Run private rooms network test
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/godot-network-logs/rooms-processes
+        run: |
+          set -o pipefail
+          GODOT_BIN="$(command -v godot)" ./tests/rooms_network_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/rooms-network.log"
+
+      - name: Run adversarial rooms test
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/godot-network-logs/rooms-adversarial-processes
+        run: |
+          set -o pipefail
+          GODOT_BIN="$(command -v godot)" ./tests/rooms_adversarial_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/godot-network-logs/rooms-adversarial.log"
+
       - name: Run network smoke test
         env:
           TEST_LOG_DIR: ${{ runner.temp }}/godot-network-logs/processes

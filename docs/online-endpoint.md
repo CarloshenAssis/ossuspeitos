@@ -1,13 +1,16 @@
 # Servidor online (Railway) — onde fica o endereço
 
-Padrão do projeto: `wss://ossuspeitos-production.up.railway.app` (Railway,
-protocolo 10).
+Padrão do projeto: `wss://ossuspeitos-production.up.railway.app` (Railway).
+Desde a fase 9 o servidor fala o protocolo 11 (salas privadas); builds do
+protocolo 10 recebem a recusa de versão e precisam ser trocadas.
 
 - Validado em 24/09/2026 por um cliente Godot real a partir do GitHub
   Actions (workflow `Online server probe`): TLS, WebSocket, handshake do
   protocolo 10, entrada na sala, snapshots e estado público da rodada.
 - Ainda falta uma partida completa com jogadores humanos pela internet.
-- O botão JOGAR ONLINE conecta nesse endereço.
+- O botão JOGAR ONLINE conecta nesse endereço e abre o LOBBY ONLINE: criar
+  sala (recebe um código de 6 caracteres) ou entrar com o código de um
+  amigo. A partida começa quando todos na sala marcam PRONTO (mínimo 4).
 - CRIAR PARTIDA LOCAL e ENTRAR EM PARTIDA LAN não mudam.
 
 ## Onde o jogo lê a URL
@@ -67,8 +70,10 @@ não tem contas, autenticação, matchmaking nem pagamento nesta fase.
   godot --headless --path . -- --mode=client --probe=true --url=wss://DOMINIO
   ```
 
-  Critério de sucesso: `PROBE_OK result=joined ... snapshots=N round_state=...`
-  (entrou e recebeu tráfego de jogo) ou `result=refused detail=room_unavailable`
-  (sala cheia, mas o servidor fala o protocolo). O workflow `Online server
+  Critério de sucesso: `PROBE_OK result=joined ... snapshots=N round_state=... room=lobby`
+  (criou uma sala própria, recebeu tráfego de jogo e saiu; a sala vazia é
+  destruída pelo servidor em 30 s) ou `result=refused detail=...` com
+  `room_full`, `round_in_progress`, `name_taken` ou `server_full` (o servidor
+  fala o protocolo). O workflow `Online server
   probe` faz isso sob demanda (Actions → Run workflow) a partir de uma rede
   aberta.
