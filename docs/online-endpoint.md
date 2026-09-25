@@ -75,5 +75,15 @@ não tem contas, autenticação, matchmaking nem pagamento nesta fase.
   destruída pelo servidor em 30 s) ou `result=refused detail=...` com
   `room_full`, `round_in_progress`, `name_taken` ou `server_full` (o servidor
   fala o protocolo). O workflow `Online server
-  probe` faz isso sob demanda (Actions → Run workflow) a partir de uma rede
+  probe` faz isso sob demanda (Actions → Run workflow; `attempts=15` espera
+  até ~10 min por um deploy novo) a partir de uma rede
   aberta.
+
+## Por que a sonda não roda no push da `main`
+
+Se o Railway estiver com "Wait for CI", ele só publica um commit quando
+todos os checks dele passam. Uma sonda no push da `main` só passaria depois
+do deploy, então bloquearia o próprio deploy. É a causa provável de a
+produção ter ficado no protocolo 10 após o merge da fase 9 (não confirmada
+no painel do Railway). Para conferir um deploy, rode
+a sonda sob demanda depois do merge.

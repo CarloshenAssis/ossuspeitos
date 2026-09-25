@@ -6,12 +6,16 @@ name: Online server probe
 # jogador na sala pode ver a sonda entrar e sair. Não é gate de PR comum:
 # roda sob demanda, quando o endpoint online muda e quando o protocolo muda.
 #
-# O servidor online roda a `main` (o Railway republica a `main` sozinho):
-#   - num PR que muda o protocolo, a produção ainda fala o protocolo da
-#     `main`; a recusa `protocol_version` é então o resultado esperado e
-#     registrado (não há como o servidor antigo aceitar o cliente novo);
-#   - num push na `main`, a sonda repete por até ~10 min até o servidor
-#     republicado aceitar o protocolo novo (prova do deploy automático).
+# O servidor online roda a `main` (o Railway republica a `main`). Esta sonda
+# NUNCA roda no push da `main`: se o Railway esperar o CI do commit ("Wait
+# for CI"), uma sonda que só passa depois do deploy bloquearia o próprio
+# deploy. Para conferir um deploy novo, rode sob demanda com `attempts`
+# (repete a cada 40 s até o servidor aceitar o protocolo do código).
+#
+# Num PR, a produção roda a `main` já publicada, que pode estar atrás do PR
+# (protocolo novo) ou atrás da própria `main` (deploy em andamento): a recusa
+# `protocol_version` é registrada como aviso, não falha. Qualquer outra falha
+# (TLS, conexão, handshake) continua falhando.
 
 on:
   workflow_dispatch:
@@ -20,15 +24,14 @@ on:
         description: "Endereço wss:// do servidor (vazio = configuração do projeto)"
         required: false
         default: ""
+      attempts:
+        description: "Tentativas, uma a cada 40 s (ex.: 15 para esperar um deploy)"
+        required: false
+        default: "1"
   pull_request:
     paths:
       - project.godot
       - client/online_endpoint.gd
-      - shared/network_config.gd
-      - .github/workflows/online-probe.yml
-  push:
-    branches: [main]
-    paths:
       - shared/network_config.gd
       - .github/workflows/online-probe.yml
 
@@ -56,6 +59,7 @@ jobs:
       - name: Probe the online server with a real Godot client
         env:
           INPUT_URL: ${{ github.event.inputs.url }}
+          INPUT_ATTEMPTS: ${{ github.event.inputs.attempts }}
         run: |
           set -o pipefail
           url="$INPUT_URL"
@@ -75,7 +79,9 @@ jobs:
           fi
           echo "PROBE_EXPECTED_PROTOCOL code=$protocol base=$base_protocol event=$GITHUB_EVENT_NAME"
           attempts=1
-          [[ "$GITHUB_EVENT_NAME" == push ]] && attempts=15
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$INPUT_ATTEMPTS" =~ ^[0-9]+$ && "$INPUT_ATTEMPTS" -ge 1 && "$INPUT_ATTEMPTS" -le 20 ]]; then
+            attempts="$INPUT_ATTEMPTS"
+          fi
           for attempt in $(seq 1 "$attempts"); do
             timeout 60 godot --headless --path . -- --mode=client --probe=true \
               --client-id="sonda-ci-${GITHUB_RUN_ID: -6}" --url="$url" 2>&1 | tee probe.log || true
@@ -83,10 +89,10 @@ jobs:
               echo "PROBE_RESULT ok attempt=$attempt protocol=$protocol"
               exit 0
             fi
-            if [[ "$GITHUB_EVENT_NAME" == pull_request && "$base_protocol" != "$protocol" ]] \
+            if [[ "$GITHUB_EVENT_NAME" == pull_request ]] \
                 && grep -q 'PROBE_FAILED .* reason=join_rejected:protocol_version' probe.log; then
-              echo "::notice::Produção ainda fala o protocolo $base_protocol (main); este PR usa o $protocol. Recusa de versão esperada; a sonda roda de novo no push da main."
-              echo "PROBE_RESULT expected_version_refusal production=$base_protocol code=$protocol"
+              echo "::notice::A produção fala outro protocolo (main=$base_protocol, PR=$protocol): deploy anterior ainda no ar ou protocolo novo neste PR. Recusa de versão legível, servidor vivo; confira o deploy com a sonda sob demanda."
+              echo "PROBE_RESULT version_refusal code=$protocol base=$base_protocol"
               exit 0
             fi
             echo "PROBE_RESULT retry attempt=$attempt/$attempts"
