@@ -73,7 +73,7 @@ func _ready() -> void:
 		_player = AudioStreamPlayer.new()
 		add_child(_player)
 	_show_panel("main", false)
-	print("MENU_READY name=%s online=%s source=%s" % [fields["name"].text, "configured" if bool(online["ok"]) else str(online["reason"]), online["source"]])
+	print("MENU_READY name=%s online=%s source=%s local_play=%s" % [fields["name"].text, "configured" if bool(online["ok"]) else str(online["reason"]), online["source"], str(MenuSettings.supports_local_play())])
 
 # --- Construção ---------------------------------------------------------------------
 
@@ -176,6 +176,10 @@ func _build_main() -> VBoxContainer:
 	_button("online", "JOGAR ONLINE", box, online_primary, func(): _submit_online() if bool(online["ok"]) else _show_panel("online"))
 	_button("host", "CRIAR PARTIDA LOCAL", box, not online_primary, func(): _open_with_name("host"))
 	_button("join", "ENTRAR EM PARTIDA LAN", box, false, func(): _open_with_name("join"))
+	if not MenuSettings.supports_local_play():
+		# Navegador: só online (botões ocultos não podem ser acionados).
+		for id in ["host", "join"]:
+			(buttons[id] as Button).visible = false
 	var row := _row()
 	_button("howto", "COMO JOGAR", row, false, func(): _show_panel("howto"))
 	_button("settings", "CONFIGURAÇÕES", row, false, func(): _show_panel("settings"))

@@ -35,7 +35,9 @@ static var returns := 0
 # --- Validação ----------------------------------------------------------------
 
 static func default_player_name() -> String:
-	return "jogador-%04d" % (OS.get_process_id() % 10000)
+	# Navegador não tem PID: número aleatório (cada aba com um nome distinto).
+	var suffix := randi() % 10000 if OS.has_feature("web") else OS.get_process_id() % 10000
+	return "jogador-%04d" % suffix
 
 ## "" quando válido, senão a mensagem mostrada ao jogador.
 ## Mesma regra do servidor (`RoundRules.label_problem`), com a mensagem do menu.

@@ -100,3 +100,9 @@ static func supports_display_settings() -> bool:
 
 static func supports_quit() -> bool:
 	return not OS.has_feature("web")
+
+## Criar partida local (processo de servidor) e entrar por LAN (`ws://` a
+## partir de uma página `https`) não existem no navegador: a build Web só
+## joga online.
+static func supports_local_play() -> bool:
+	return not OS.has_feature("web")
