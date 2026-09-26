@@ -1,4 +1,4 @@
-name: Godot Web demo build
+name: Godot Web build (demo + playtest)
 
 on:
   workflow_dispatch:
@@ -156,34 +156,83 @@ jobs:
           GODOT_BIN="$(command -v godot)" ./tests/network_smoke_test.sh 2>&1 \
             | tee "$RUNNER_TEMP/godot-web-logs/network-smoke.log"
 
-      - name: Export Web demo
+      - name: Export Web demo (offline)
         run: |
           set -o pipefail
           godot --headless --path . --export-release "Web Demo" build/web/index.html 2>&1 \
             | tee "$RUNNER_TEMP/godot-web-logs/export.log"
           touch build/web/.nojekyll
 
-      - name: Verify Web artifact
+      # Fase 9: cliente completo no navegador (menu, salas online, partida).
+      - name: Export Web playtest (full client)
         run: |
-          if [[ ! -s build/web/index.html ]]; then
-            echo "Missing non-empty Web entry point: build/web/index.html" >&2
-            exit 1
-          fi
-          for extension in wasm pck js; do
-            count="$(find build/web -maxdepth 1 -type f -name "*.$extension" -size +0c | wc -l)"
-            echo "WEB_ARTIFACT_CHECK extension=$extension count=$count"
-            if [[ "$count" -lt 1 ]]; then
-              echo "Missing non-empty *.$extension Web artifact" >&2
+          set -o pipefail
+          mkdir -p build/web-playtest
+          godot --headless --path . --export-release "Web Playtest" build/web-playtest/index.html 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/export-playtest.log"
+
+      - name: Verify Web artifacts
+        run: |
+          for dir in build/web build/web-playtest; do
+            if [[ ! -s "$dir/index.html" ]]; then
+              echo "Missing non-empty Web entry point: $dir/index.html" >&2
               exit 1
             fi
+            for extension in wasm pck js; do
+              count="$(find "$dir" -maxdepth 1 -type f -name "*.$extension" -size +0c | wc -l)"
+              echo "WEB_ARTIFACT_CHECK dir=$dir extension=$extension count=$count"
+              if [[ "$count" -lt 1 ]]; then
+                echo "Missing non-empty *.$extension Web artifact in $dir" >&2
+                exit 1
+              fi
+            done
           done
           test -f build/web/.nojekyll
+          # O cliente Web completo não leva scripts de teste nem coordenadores
+          # (o índice de UIDs cita os caminhos; os scripts em si não vão).
+          if strings build/web-playtest/index.pck | grep -qE 'tests/[a-z_]+\.gd\.remap'; then
+            echo "Web playtest package contains test scripts" >&2
+            exit 1
+          fi
+
+      - name: Install Chromium for the browser test
+        run: npx --yes playwright@1.56.1 install --with-deps chromium
+
+      # Chromium headless: menu Web (sem criar partida local/LAN, URL de
+      # servidor da query ignorada fora de localhost) e uma rodada completa
+      # numa sala de um servidor local, com o navegador como 4º jogador.
+      - name: Run Web playtest in Chromium
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/godot-web-logs/web-playtest
+        run: |
+          set -o pipefail
+          npm install --no-save --no-package-lock playwright@1.56.1 >/dev/null
+          GODOT_BIN="$(command -v godot)" WEB_DIR=build/web-playtest ./tests/web_playtest_test.sh 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/web-playtest.log"
+
+      # Site: raiz com os dois caminhos; demo offline em /demo/, cliente
+      # completo em /playtest/.
+      - name: Assemble site
+        run: |
+          mkdir -p build/site
+          cp web/site/index.html build/site/index.html
+          cp -r build/web build/site/demo
+          cp -r build/web-playtest build/site/playtest
+          touch build/site/.nojekyll
+          find build/site -maxdepth 2 -name index.html | sort
 
       - name: Upload Web demo
         uses: actions/upload-artifact@v4
         with:
           name: armed-mystery-web-demo
           path: build/web
+          if-no-files-found: error
+
+      - name: Upload Web playtest
+        uses: actions/upload-artifact@v4
+        with:
+          name: armed-mystery-web-playtest
+          path: build/web-playtest
           if-no-files-found: error
 
       - name: Configure GitHub Pages
@@ -194,7 +243,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         uses: actions/upload-pages-artifact@v3
         with:
-          path: build/web
+          path: build/site
 
       - name: Upload failure logs
         if: failure()

@@ -301,25 +301,47 @@ cliente real continua enviando apenas comandos de entrada ao servidor. A demo
 continua mostrando somente **OFFLINE / SEM SERVIDOR** e nunca simula papéis,
 eliminação autoritativa, espectador ou revelação final.
 
-## Build Web como artifact
+## Jogar no navegador (GitHub Pages)
 
-Em **Actions → Godot Web demo build**, selecione **Run workflow**. O job instala
-Godot 4.4.1 e os templates oficiais, valida o projeto e a demo, exporta o preset
-`Web Demo` e publica o artifact `armed-mystery-web-demo`.
+O site publicado no GitHub Pages tem três endereços:
 
-Pull requests executam todas as validações e geram o artifact para inspeção, mas
-nunca publicam o site. A publicação no environment `github-pages` ocorre somente
-em uma execução manual ou após push na branch `main`, e apenas se parser, testes
-determinísticos, teste multiplayer, exportação e verificações passarem.
+- **Raiz**: página inicial com os dois links e as instruções.
+- **`/playtest/`**: o jogo completo no navegador. É o mesmo menu do PC:
+  **JOGAR ONLINE** conecta ao servidor online (padrão
+  `wss://ossuspeitos-production.up.railway.app`), abre o lobby online e
+  mostra as salas com PRONTO.
+  - No navegador não existem **Criar partida local** nem **Entrar em partida
+    LAN**: a página não abre processos nem conexões `ws://` inseguras.
+- **`/demo/`**: a demonstração **OFFLINE / SEM SERVIDOR** de sempre. Ela anda
+  pela mansão e nunca conecta.
 
-Baixe e extraia o artifact. Sirva a pasta extraída por HTTP — não abra
-`index.html` diretamente com `file://`:
+O workflow **Godot Web build (demo + playtest)**:
+
+1. Valida o projeto e a demo.
+2. Exporta os presets `Web Demo` e `Web Playtest`.
+3. Roda o cliente completo no **Chromium headless** (Playwright,
+   `tests/web_playtest_test.sh`):
+   - menu pronto, sem as opções local/LAN;
+   - URL de servidor vinda da query ignorada fora de `localhost`;
+   - uma rodada completa numa sala de um servidor local, com o navegador
+     como 4º jogador.
+4. Monta o site.
+
+Pull requests só geram os artifacts `armed-mystery-web-demo` e
+`armed-mystery-web-playtest`. O site é publicado apenas após push na `main`
+ou numa execução manual, e só se tudo passar.
+
+Teste local do export:
 
 ```bash
-python3 -m http.server 8000 --directory caminho/para/armed-mystery-web-demo
+godot4 --headless --path . --export-release "Web Playtest" build/web-playtest/index.html
+GODOT_BIN=$(command -v godot4) ./tests/web_playtest_test.sh
+python3 -m http.server 8000 --directory build/web-playtest   # abrir http://localhost:8000/
 ```
 
-Abra `http://localhost:8000/`, clique na arena para capturar o mouse e use WASD.
+Num servidor local, a página servida em `localhost` aceita
+`?online-url=ws://127.0.0.1:PORTA`. Qualquer outra origem ignora esse
+parâmetro.
 O preset não usa threads Web, portanto essa visualização local não exige os
 headers COOP/COEP. A validação visual final deve confirmar o banner offline, a
 arena, a câmera em primeira pessoa e quatro cápsulas coloridas em movimento.

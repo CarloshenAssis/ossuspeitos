@@ -99,3 +99,48 @@ jobs:
             [[ "$attempt" -lt "$attempts" ]] && sleep 40
           done
           exit 1
+
+  # Fase 9 (PR2): o cliente Web completo no Chromium headless contra o
+  # servidor online (padrão do projeto): JOGAR ONLINE, CRIAR SALA e fecha a
+  # aba. A sala vazia é destruída pelo servidor em 30 s. Só sob demanda.
+  web-probe:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Godot with export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: true
+
+      - name: Export Web playtest
+        run: |
+          godot --headless --path . --editor --quit > /dev/null 2>&1 || true
+          mkdir -p build/web-playtest
+          godot --headless --path . --export-release "Web Playtest" build/web-playtest/index.html
+
+      - name: Install Chromium
+        run: |
+          npx --yes playwright@1.56.1 install --with-deps chromium
+          npm install --no-save --no-package-lock playwright@1.56.1 >/dev/null
+
+      - name: Create a room from the browser on the online server
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/web-probe"
+          WEB_SHOTS="$RUNNER_TEMP/web-probe" timeout 120 node tests/web_playtest_browser.mjs build/web-playtest external 2>&1 \
+            | tee "$RUNNER_TEMP/web-probe/web-probe.log"
+          grep -q 'WEB_TEST_OK scenario=external' "$RUNNER_TEMP/web-probe/web-probe.log"
+
+      - name: Upload screenshots and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-probe
+          path: ${{ runner.temp }}/web-probe
+          if-no-files-found: warn

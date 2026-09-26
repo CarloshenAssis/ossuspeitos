@@ -1006,3 +1006,36 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
     passa a falar o protocolo 11 e a build Windows do protocolo 10 deixa de
     entrar (recusa clara de versão).
   - É preciso distribuir uma build nova.
+
+## Fase 9 — PR2: cliente Web completo no GitHub Pages
+
+- **Dois exports Web**
+  - `Web Demo` (feature `visual_demo`): a demo offline de sempre, em `/demo/`.
+  - `Web Playtest` (feature `web_playtest`): o jogo completo (menu, salas
+    online, partida), em `/playtest/`.
+  - A raiz é uma página estática (`web/site/index.html`) com os dois links e
+    os passos para os amigos.
+- **O navegador só joga online**
+  - "Criar partida local" (abre um processo de servidor) e "Entrar em
+    partida LAN" (`ws://` a partir de `https`) ficam ocultos na Web
+    (`MenuSettings.supports_local_play()`). Botões ocultos não podem ser
+    acionados, nem por automação.
+  - O endereço vem de `project.godot`, como no PC: `wss://` do Railway.
+- **Argumentos pela URL**
+  - A Web não tem linha de comando. `NetworkConfig.user_arguments()` lê a
+    query string, mas só de uma lista fechada: automação do menu (para o
+    teste no navegador) e código de sala.
+  - `online-url` só vale se a página estiver em `localhost`/`127.0.0.1` e a
+    URL também for loopback (teste local). No Pages ele é ignorado, então um
+    link não aponta o jogo para outro servidor.
+- **Teste no Chromium headless (Playwright)**
+  - A página é servida localmente e o console do jogo é lido.
+  - Cenários: menu offline, parâmetro injetado ignorado, e uma rodada
+    completa numa sala de um servidor local com 3 clientes nativos e o
+    navegador (WebGL por SwiftShader).
+- **Publicação**
+  - Só em push na `main` ou numa execução manual, e só com tudo verde. Pull
+    requests geram apenas os artifacts.
+- **Sem threads**
+  - `variant/thread_support=false`: o Pages não envia os cabeçalhos
+    COOP/COEP que o SharedArrayBuffer exige.

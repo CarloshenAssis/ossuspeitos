@@ -31,6 +31,7 @@ func _process(_delta: float) -> bool:
 		_test_flow_model()
 		_test_name_rules()
 		_test_endpoint_rules()
+		_test_web_query_arguments()
 		_test_settings_persistence()
 		menu = _new_menu({})
 		return false
@@ -426,3 +427,19 @@ func _test_online_rooms() -> void:
 	rooms_menu.press("room_leave")
 	_expect(requests.size() == 1 and requests[0]["kind"] == "leave", "leave asks to go back")
 	rooms_menu.queue_free()
+
+## Fase 9 (PR2): argumentos da página Web vêm só de uma lista fechada.
+func _test_web_query_arguments() -> void:
+	var parsed := NetworkConfig.web_query_arguments("?menu-auto=online&menu-room=join&room-code=k7m-2qx&menu-name=Ana%20Clara", "ossuspeitos.github.io")
+	_expect(parsed.get("menu-auto") == "online" and parsed.get("room-code") == "k7m-2qx" and parsed.get("menu-name") == "Ana Clara", "allowed web query keys are read (%s)" % str(parsed))
+	var hostile := NetworkConfig.web_query_arguments("?online-url=wss%3A%2F%2Fevil.example&mode=server&rooms-test=true&combat-test=true", "ossuspeitos.github.io")
+	_expect(hostile.is_empty(), "server URL, modes and test flags ignored on the public page (%s)" % str(hostile))
+	var remote_local := NetworkConfig.web_query_arguments("?online-url=ws%3A%2F%2F127.0.0.1%3A9080", "ossuspeitos.github.io")
+	_expect(not remote_local.has("online-url"), "loopback URL ignored when the page is not local")
+	var local_page := NetworkConfig.web_query_arguments("?online-url=ws%3A%2F%2F127.0.0.1%3A9080", "localhost")
+	_expect(local_page.get("online-url") == "ws://127.0.0.1:9080", "loopback URL accepted on a local page")
+	var local_evil := NetworkConfig.web_query_arguments("?online-url=wss%3A%2F%2Fevil.example", "localhost")
+	_expect(not local_evil.has("online-url"), "non-loopback URL ignored even on a local page")
+	var long_value := NetworkConfig.web_query_arguments("?menu-name=" + "A".repeat(80), "localhost")
+	_expect(long_value.is_empty(), "oversized values ignored")
+	_expect(MenuSettings.supports_local_play(), "desktop keeps local and LAN play")

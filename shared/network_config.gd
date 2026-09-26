@@ -52,6 +52,45 @@ static func user_arguments() -> Dictionary:
 			continue
 		var parts := argument.trim_prefix("--").split("=", true, 1)
 		values[parts[0]] = parts[1] if parts.size() == 2 else "true"
+	if OS.has_feature("web"):
+		values.merge(web_query_arguments(_web_query_string(), _web_hostname()))
+	return values
+
+## Chaves que a página Web aceita na URL (`?menu-auto=online&...`): só
+## automação do menu (teste no navegador) e o código de convite. Nunca o
+## endereço do servidor nem modos de teste: um link não pode apontar o jogo
+## para outro servidor.
+const WEB_QUERY_KEYS := ["menu-auto", "menu-room", "room-code", "menu-name",
+	"menu-room-ready-min-players", "menu-room-leave-after-result"]
+
+const LOOPBACK_HOSTS := ["localhost", "127.0.0.1"]
+
+static func _web_query_string() -> String:
+	var value: Variant = JavaScriptBridge.eval("window.location.search", true)
+	return str(value) if value != null else ""
+
+static func _web_hostname() -> String:
+	var value: Variant = JavaScriptBridge.eval("window.location.hostname", true)
+	return str(value) if value != null else ""
+
+## Query string -> argumentos permitidos (valores curtos). Puro, para teste
+## fora do navegador. `online-url` só vale numa página servida pelo próprio
+## computador e apontando para ele (teste local no navegador); no GitHub
+## Pages é ignorado.
+static func web_query_arguments(query: String, page_host: String = "") -> Dictionary:
+	var values := {}
+	for pair in query.trim_prefix("?").split("&", false):
+		var parts := pair.split("=", true, 1)
+		var key := parts[0].uri_decode()
+		var value := parts[1].uri_decode() if parts.size() == 2 else "true"
+		if value.length() > 40:
+			continue
+		if key == "online-url":
+			if page_host in LOOPBACK_HOSTS and (value.begins_with("ws://127.0.0.1:") or value.begins_with("ws://localhost:")):
+				values[key] = value
+			continue
+		if key in WEB_QUERY_KEYS:
+			values[key] = value
 	return values
 
 static func integer_argument(arguments: Dictionary, key: String, fallback: int) -> int:
