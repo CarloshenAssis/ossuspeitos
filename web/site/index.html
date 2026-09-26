@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Armed Mystery — playtest</title>
+<style>
+  :root { --bg: #0f0b09; --card: #1a1310; --gold: #c9a15a; --cream: #efe4cf; --muted: #a8998a; --wine: #5c1d24; --line: #6b5433; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+         background: radial-gradient(circle at 70% 30%, #2a1d14, var(--bg) 70%); color: var(--cream);
+         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { width: min(520px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 28px; }
+  h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(30px, 8vw, 44px); letter-spacing: 1px; }
+  .tag { color: var(--gold); margin: 6px 0 22px; }
+  a.button { display: block; text-align: center; text-decoration: none; padding: 14px; border-radius: 6px; margin: 10px 0;
+             border: 1px solid var(--line); color: var(--cream); font-weight: 600; letter-spacing: .5px; }
+  a.primary { background: var(--wine); border-color: #8a3a42; }
+  a.button:focus-visible, a.button:hover { outline: 2px solid var(--gold); outline-offset: 2px; }
+  ol { color: var(--muted); padding-left: 20px; line-height: 1.5; }
+  small { color: var(--muted); display: block; margin-top: 16px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<main>
+  <h1>ARMED MYSTERY</h1>
+  <p class="tag">Alguém nesta mansão não é quem diz ser.</p>
+  <a class="button primary" href="playtest/">JOGAR ONLINE NO NAVEGADOR</a>
+  <a class="button" href="demo/">DEMO OFFLINE (andar pela mansão)</a>
+  <ol>
+    <li>Abra “Jogar online”, escreva seu nome e clique em <b>JOGAR ONLINE</b>.</li>
+    <li>Uma pessoa clica em <b>CRIAR SALA</b> e manda o código aos amigos.</li>
+    <li>Os outros digitam o código e clicam em <b>ENTRAR EM SALA</b>.</li>
+    <li>Com 4 a 8 pessoas, todos clicam em <b>PRONTO</b>: a partida começa em 10 s.</li>
+  </ol>
+  <small>Build de teste com arte provisória. Precisa de um navegador de computador com WebGL 2
+    (Chrome, Edge ou Firefox), teclado e mouse. Online, todos precisam da mesma versão:
+    recarregue a página se aparecer “Versão incompatível”.</small>
+</main>
+</body>
+</html>
