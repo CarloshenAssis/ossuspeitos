@@ -87,3 +87,12 @@ do deploy, então bloquearia o próprio deploy. É a causa provável de a
 produção ter ficado no protocolo 10 após o merge da fase 9 (não confirmada
 no painel do Railway). Para conferir um deploy, rode
 a sonda sob demanda depois do merge.
+
+## Navegador (GitHub Pages)
+
+O cliente Web completo (`/playtest/` no Pages) usa o mesmo endereço padrão
+do projeto. A página não aceita outro servidor pela URL; só aceita um
+servidor local quando ela própria está em `localhost`. Para conferir o
+servidor online a partir de um navegador real, rode o workflow
+`Online server probe` sob demanda: o job `web-probe` cria uma sala pelo
+Chromium headless e sai.

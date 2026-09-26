@@ -135,3 +135,13 @@ por cena.
 | R7 | Adversário | `rooms_adversarial_test.sh` | RPCs de sala antes do handshake, tipos e tamanhos hostis, `room_id`/`host`/`ready` injetados, criar/entrar duas vezes, RPCs de autoridade forjadas, rajada de PRONTO; força bruta cai no limite; o servidor segue saudável |
 | R8 | Menu | `menu_flow_test.sh` online-rooms, `menu_test.gd` | JOGAR ONLINE → LOBBY ONLINE → CRIAR/ENTRAR → sala → PRONTO → partida → resultado → SAIR DA SALA, só pelos botões reais |
 | R9 | Produção | `container_test.sh` | Modo dedicado com salas: 8 numa sala, 9º recusado com `room_full`, sonda cria sala e sai, protocolo 11 |
+
+## Fase 9 (PR2) — cliente Web completo
+
+| ID | Requisito | Onde | Resultado esperado |
+| --- | --- | --- | --- |
+| W1 | Menu no navegador | `web_playtest_test.sh` offline | Menu pronto no Chromium headless; JOGAR ONLINE com o endereço do projeto; sem Criar partida local e sem LAN; nada conecta sozinho |
+| W2 | URL de servidor pela query | `menu_test.gd`, `web_playtest_test.sh` offline-injection | `online-url` só vale numa página em localhost apontando para loopback; modos e flags de teste nunca vêm da URL |
+| W3 | Rodada completa no navegador | `web_playtest_test.sh` room | Entra pelo código (minúsculas e hífen), PRONTO, papel privado, partida em WebGL, resultado na sala, SAIR DA SALA |
+| W4 | Pacote Web sem testes | job `build-web-demo` | Nenhum script de `tests/` no `.pck` do playtest |
+| W5 | Servidor online pelo navegador | `online-probe.yml` job `web-probe` (sob demanda) | JOGAR ONLINE + CRIAR SALA no Railway; a sala vazia some em 30 s |
