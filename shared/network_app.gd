@@ -486,6 +486,16 @@ func _process(_delta: float) -> void:
 		net_stats_last_msec = Time.get_ticks_msec()
 		print("NET_STATS id=%s %s" % [client_label, net_stats.summary(prediction, arena_view.interpolator if arena_view != null else null)])
 
+## Nova janela de medida de quadro lento; uma janela ainda aberta (troca de
+## tela antes de 30 quadros, comum com renderização por software) é
+## registrada com o que mediu até ali.
+func _restart_hitch_window() -> void:
+	if metrics_hitch_frames > 0 and metrics_hitch_frames < METRICS_HITCH_FRAMES:
+		metrics.record("render_hitch", metrics_hitch_max_ms)
+	metrics_hitch_frames = METRICS_HITCH_FRAMES
+	metrics_hitch_max_ms = 0.0
+	metrics_hitch_last_usec = Time.get_ticks_usec()
+
 ## Relógio de parede entre quadros (o `delta` do motor pode ser suavizado):
 ## a primeira medida vai da troca de tela até o primeiro quadro desenhado.
 func _track_render_hitch() -> void:
@@ -2524,6 +2534,11 @@ func _on_room_error(reason: String) -> void:
 		desktop_menu.show_room_error(clean)
 		return
 	if NetworkConfig.bool_argument(arguments, "probe"):
+		# Fase 10: sonda de limpeza — entra pelo código da sala de uma sonda
+		# anterior e espera "sala não encontrada" (a sala vazia foi removida).
+		if clean == str(arguments.get("probe-expect-room-error", "")):
+			_finish_probe("expected_error", clean)
+			return
 		# Sala cheia, em rodada, nome em uso ou servidor lotado ainda provam um
 		# servidor vivo com o mesmo protocolo.
 		if clean in ["room_full", "round_in_progress", "name_taken", "server_full"]:
@@ -2554,9 +2569,7 @@ func _prewarm_arena() -> void:
 	arena_prewarm_frames = ARENA_PREWARM_FRAMES
 	print("CLIENT_ARENA_PREWARM id=%s frames=%d" % [client_label, ARENA_PREWARM_FRAMES])
 	if metrics.enabled:
-		metrics_hitch_frames = METRICS_HITCH_FRAMES
-		metrics_hitch_max_ms = 0.0
-		metrics_hitch_last_usec = Time.get_ticks_usec()
+		_restart_hitch_window()
 
 func _advance_arena_prewarm() -> void:
 	arena_prewarm_frames -= 1
@@ -2589,9 +2602,7 @@ func _set_game_view(visible_game: bool) -> void:
 	# Troca de tela: mede o quadro mais lento dos próximos quadros (primeira
 	# renderização da mansão ou do menu).
 	if metrics.enabled:
-		metrics_hitch_frames = METRICS_HITCH_FRAMES
-		metrics_hitch_max_ms = 0.0
-		metrics_hitch_last_usec = Time.get_ticks_usec()
+		_restart_hitch_window()
 
 func _on_menu_room_create(player_name: String) -> void:
 	if not online_rooms or joined:

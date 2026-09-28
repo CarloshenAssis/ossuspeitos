@@ -145,3 +145,17 @@ por cena.
 | W3 | Rodada completa no navegador | `web_playtest_test.sh` room | Entra pelo código (minúsculas e hífen), PRONTO, papel privado, partida em WebGL, resultado na sala, SAIR DA SALA |
 | W4 | Pacote Web sem testes | job `build-web-demo` | Nenhum script de `tests/` no `.pck` do playtest |
 | W5 | Servidor online pelo navegador | `online-probe.yml` job `web-probe` (sob demanda) | JOGAR ONLINE + CRIAR SALA no Railway; a sala vazia some em 30 s |
+
+## Fase 10 — estabilização do playtest online
+
+| Id | Caso | Teste | Esperado |
+|----|------|-------|----------|
+| F1 | Medição das transições | `transition_metrics_test.gd`, `rooms_network_test.sh` | Relógio injetado; linhas `TRANSITION` só com medida/ms/classe/rodada/sessão; rede e servidor abaixo de 750 ms (medido: máx. 35 ms) |
+| F2 | Primeiro quadro da partida | `transition_visual_session.sh` (manual, xvfb) | Mansão pré-aquecida no lobby; primeira troca para a partida abaixo de 500 ms (medido ~120 ms; sem pré-aquecimento ~1,5 s) |
+| F3 | Reset de rodada | `rooms_network_test.sh` (coordenador), `round_reset_bodies_test.gd` | Rodada 2: todos no ponto inicial com época nova, sem corpos, sem espectador, itens de volta |
+| F4 | Aviso de nova rodada | `match_hud_test.gd`, `round_hud_test.gd`, `hud_presentation_test.gd`, `web_playtest_test.sh` room | Aparece ao começar vindo da contagem; fora da mira e do resultado; sem papel; não aparece para quem entra no meio |
+| F5 | Estados da sala | `menu_test.gd` | AGUARDANDO JOGADORES, LOBBY DA SALA, TODOS PRONTOS, RODADA EM ANDAMENTO, RESULTADO, DE VOLTA AO LOBBY |
+| F6 | Resiliência de sala | `rooms_resilience_test.sh` | 9º recusado, código com espaços, entradas simultâneas, aba fechada no lobby, anfitrião e jogador caem na rodada, reentrada recusada no meio e aceita depois, saída no resultado, sala vazia removida, servidor saudável |
+| F7 | Mensagens de erro | `player_messages_test.gd`, `adverse_cases_test.sh` | Português com ação; sem endereço, porta, protocolo, RPC ou classe |
+| F8 | Mutações | `phase10_mutation_test.sh` | no_teleport, no_round_banner, cross_room_leak e slow_room_transition são pegas |
+| F9 | Produção | `online-probe.yml` (sob demanda) | TLS + WebSocket + protocolo 11; sala da sonda removida depois da carência |

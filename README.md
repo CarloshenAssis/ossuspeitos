@@ -315,6 +315,23 @@ O site publicado no GitHub Pages tem três endereços:
 - **`/demo/`**: a demonstração **OFFLINE / SEM SERVIDOR** de sempre. Ela anda
   pela mansão e nunca conecta.
 
+### Playtest online com amigos (link: `https://carloshenassis.github.io/ossuspeitos/playtest/`)
+
+1. Abra o link num navegador de computador (Chrome, Edge ou Firefox).
+2. Escreva seu nome e clique em **JOGAR ONLINE**.
+3. Uma pessoa clica em **CRIAR SALA** e manda o código (6 letras/números) aos
+   amigos; os outros digitam o código (maiúsculas, hífen ou espaços não
+   importam) e clicam em **ENTRAR EM SALA**.
+4. Com **pelo menos 4 jogadores** (até 8), todos clicam em **PRONTO**; a
+   partida começa depois de 10 s de contagem.
+
+No fim de cada rodada todos voltam ao lobby da sala com o resultado e marcam
+PRONTO de novo. Cada rodada começa com todos de volta ao ponto inicial (aviso
+"NOVA RODADA — voltando aos pontos iniciais"); isso é regra do jogo. O código é
+temporário: a sala fecha quando todos saem. Quem cai no meio da rodada volta
+pelo mesmo código quando a sala retornar ao lobby. `/demo/` continua sendo só
+a demonstração offline.
+
 O workflow **Godot Web build (demo + playtest)**:
 
 1. Valida o projeto e a demo.
