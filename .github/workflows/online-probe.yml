@@ -87,6 +87,21 @@ jobs:
               --client-id="sonda-ci-${GITHUB_RUN_ID: -6}" --url="$url" 2>&1 | tee probe.log || true
             if grep -qE "PROBE_OK .* result=(joined detail=peer_id=[0-9]+ snapshots=[0-9]+ round_state=[A-Z]+( room=[a-z]+)?|refused detail=(room_unavailable|name_taken|room_full|round_in_progress|server_full)) protocol=$protocol" probe.log; then
               echo "PROBE_RESULT ok attempt=$attempt protocol=$protocol"
+              # Fase 10 (sob demanda): a sala da sonda, vazia, some depois da
+              # carência do servidor (30 s): entrar pelo código dá "sala não
+              # encontrada". Nenhuma partida é iniciada.
+              code="$(sed -n 's/.*ROOM_JOINED id=[^ ]* code=\([A-Z0-9]*\).*/\1/p' probe.log | head -n1)"
+              if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && -n "$code" ]]; then
+                sleep 40
+                timeout 60 godot --headless --path . -- --mode=client --probe=true \
+                  --client-id="sonda-limpeza-${GITHUB_RUN_ID: -6}" --url="$url" \
+                  --room-action=join --room-code="$code" --probe-expect-room-error=room_not_found 2>&1 | tee cleanup.log || true
+                if ! grep -qE "PROBE_OK .* result=expected_error detail=room_not_found protocol=$protocol" cleanup.log; then
+                  echo "PROBE_RESULT cleanup_failed code_room_still_present_or_error"
+                  exit 1
+                fi
+                echo "PROBE_RESULT cleanup_ok empty_room_removed=true"
+              fi
               exit 0
             fi
             if [[ "$GITHUB_EVENT_NAME" == pull_request ]] \

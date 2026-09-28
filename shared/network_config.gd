@@ -45,6 +45,20 @@ static func effective_protocol_version(arguments: Dictionary) -> int:
 		return integer_argument(arguments, "test-protocol-version", PROTOCOL_VERSION)
 	return PROTOCOL_VERSION
 
+## Fase 10: mutação de teste (prova que os testes detectam a falha). Só um
+## binário de desenvolvimento não exportado aceita; na build é sempre "".
+##   no_teleport          nova rodada sem volta ao ponto inicial;
+##   no_round_banner      nova rodada sem o aviso na tela;
+##   cross_room_leak      estado de uma sala enviado também a outra sala;
+##   slow_room_transition estado da sala publicado 1,5 s atrasado.
+const TEST_MUTATIONS := ["no_teleport", "no_round_banner", "cross_room_leak", "slow_room_transition"]
+
+static func test_mutation(arguments: Dictionary) -> String:
+	var value := str(arguments.get("test-mutation", ""))
+	if value.is_empty() or value not in TEST_MUTATIONS or not OS.is_debug_build() or OS.has_feature("template"):
+		return ""
+	return value
+
 static func user_arguments() -> Dictionary:
 	var values := {}
 	for argument in OS.get_cmdline_user_args():
@@ -61,7 +75,7 @@ static func user_arguments() -> Dictionary:
 ## endereço do servidor nem modos de teste: um link não pode apontar o jogo
 ## para outro servidor.
 const WEB_QUERY_KEYS := ["menu-auto", "menu-room", "room-code", "menu-name",
-	"menu-room-ready-min-players", "menu-room-leave-after-result"]
+	"menu-room-ready-min-players", "menu-room-leave-after-result", "transition-metrics"]
 
 const LOOPBACK_HOSTS := ["localhost", "127.0.0.1"]
 

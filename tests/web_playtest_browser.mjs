@@ -70,7 +70,7 @@ async function main() {
     const [serverPort, code] = rest;
     const typed = `${code.slice(0, 3)}-${code.slice(3)}`.toLowerCase();
     query = `?online-url=${encodeURIComponent(`ws://127.0.0.1:${serverPort}`)}&menu-auto=online&menu-room=join&room-code=${typed}`
-      + '&menu-name=Navegador&menu-room-ready-min-players=4&menu-room-leave-after-result=true';
+      + '&menu-name=Navegador&menu-room-ready-min-players=4&menu-room-leave-after-result=true&transition-metrics=true';
   } else if (scenario === 'external') {
     query = '?menu-auto=online&menu-room=create&menu-name=SondaWeb';
   } else if (scenario === 'offline-injection') {
@@ -93,12 +93,18 @@ async function main() {
       await page.waitForTimeout(500);
       await page.screenshot({ path: path.join(process.env.WEB_SHOTS || '.', 'web_room.png') });
       await waitFor(/^CLIENT_VIEW id=Navegador game=true/, 60000);
+      // Fase 10: mansão pré-aquecida no lobby e aviso de nova rodada na tela.
+      const viewAt = lines.findIndex((l) => /^CLIENT_VIEW id=Navegador game=true/.test(l));
+      const prewarmAt = lines.findIndex((l) => /^CLIENT_ARENA_PREWARM_DONE id=Navegador/.test(l));
+      if (prewarmAt < 0 || prewarmAt > viewAt) throw new Error('arena not prewarmed before the match');
+      await waitFor(/^HUD_NEW_ROUND_BANNER round_id=1/, 10000);
       await page.waitForTimeout(1500);
       await page.screenshot({ path: path.join(process.env.WEB_SHOTS || '.', 'web_match.png') });
       await waitFor(/^CLIENT_ROOM_STATE .* phase=lobby round_id=1 .*result=true/, 90000);
       await page.waitForTimeout(300);
       await page.screenshot({ path: path.join(process.env.WEB_SHOTS || '.', 'web_result.png') });
       await waitFor(/^MENU_RETURNED reason=left/, 30000);
+      for (const l of lines.filter((x) => /^TRANSITION /.test(x))) console.log(`WEB_${l}`);
     } else if (scenario === 'external') {
       const joined = await waitFor(/^ROOM_JOINED id=SondaWeb code=/, 45000);
       console.log(`WEB_EXTERNAL_ROOM ${joined}`);

@@ -1039,3 +1039,31 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
 - **Sem threads**
   - `variant/thread_support=false`: o Pages não envia os cabeçalhos
     COOP/COEP que o SharedArrayBuffer exige.
+
+## Fase 10 — estabilização para o playtest online
+
+- **Medir antes de mexer**
+  - O atraso de ~1 s relatado foi medido antes de qualquer mudança.
+  - Ferramenta: `TransitionMetrics` (`--transition-metrics=true`, ou `?transition-metrics=true` na Web).
+  - Cada medida vira uma linha `TRANSITION` com: medida, ms, classe (`ux`, `network`, `server`, `render`, `unknown`), rodada e sessão aleatória. Nunca leva código de sala, nome, papel, IP ou payload.
+- **Resultado (loopback, 4 clientes)**
+  - Rede e servidor ficaram abaixo de 35 ms: criar/entrar, PRONTO, contagem → partida, primeiro snapshot, eliminação → corpo, ENDED → revelação, tick.
+  - Contagem (10 s) e resultado (8 s) são espera de UX.
+  - Com cliente gráfico e cache de shader frio, o primeiro quadro da mansão travava ~1,4–1,5 s (`render_hitch`). Essa é a causa concreta. Rede, previsão, interpolação, tick e protocolo ficaram inalterados.
+- **Correção: pré-aquecimento da mansão**
+  - Ao entrar na sala, a mansão é desenhada por 8 quadros atrás do menu, parada. O menu fica numa camada acima.
+  - A compilação passa para o lobby. O primeiro quadro da partida caiu para ~120 ms (xvfb/llvmpipe).
+  - Regressão: `tests/transition_visual_session.sh`, manual por exigir xvfb. O navegador do CI confere a ordem (pré-aquecimento antes da partida).
+- **Nova rodada visível**
+  - O retorno ao ponto inicial é regra do jogo e continua instantâneo, sem interpolação.
+  - O HUD mostra "NOVA RODADA — voltando aos pontos iniciais" por 3,5 s no topo: fora da mira, some no resultado e na faixa de eliminado, sem papel.
+  - A sala mostra um título por fase.
+- **Mensagens ao jogador**
+  - Ficam em `PlayerMessages` e `RoomRules.ERRORS`: português simples, sempre com uma ação.
+  - Não levam endereço, porta, número de protocolo, RPC ou classe. O protocolo vai só para o log (`JOIN_REJECTED_DETAIL`).
+- **Mutações de teste**
+  - `--test-mutation` só vale em binário de desenvolvimento.
+  - `tests/phase10_mutation_test.sh` prova que cada falha é pega: reset sem teleporte, tela sem aviso, estado vazando entre salas, transição de sala atrasada.
+- **Sonda de produção**
+  - Sob demanda, depois de criar a sala da sonda, a sonda espera 40 s e tenta entrar pelo mesmo código.
+  - Precisa receber `room_not_found`, o que prova que a sala vazia foi removida. Nenhuma partida é iniciada.

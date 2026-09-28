@@ -80,6 +80,8 @@ func _drive_room(room: MatchRoom, now: int) -> void:
 		active_since[key] = now
 		steps_done[key] = 0
 		print("ROOMS_TEST_ROUND_ACTIVE room=%d round_id=%d participants=%d" % [room.room_id, ra.round_id, ra.participants.size()])
+		_check_round_reset(room)
+		_disturb_round(room)
 	var step := int(steps_done[key])
 	if now - int(active_since[key]) < step_gap_msec * (step + 1):
 		return
@@ -121,6 +123,52 @@ func _drive_room(room: MatchRoom, now: int) -> void:
 	print("ROOMS_TEST_ELIMINATED room=%d round_id=%d peer=%d" % [room.room_id, ra.round_id, target])
 	# O mesmo sinal que o combate emite: corpo e aviso público só nesta sala.
 	room.combat.player_eliminated.emit(target, instigator)
+
+## Fase 10: começo de rodada = todos os participantes (vivos ou eliminados
+## na rodada anterior) no ponto inicial oficial com época nova, sem corpos,
+## sem espectador e com todos os itens de volta ao chão.
+var last_epoch_by_peer: Dictionary = {}
+
+func _check_round_reset(room: MatchRoom) -> void:
+	var ra := room.round_authority
+	var off_spawn := 0
+	var stale_epoch := 0
+	for raw_peer in ra.participants.keys():
+		var peer := int(raw_peer)
+		var state: Dictionary = room.world.states.get(peer, {})
+		if state.is_empty():
+			continue
+		var spawn: Vector3 = MovementRules.SPAWN_POINTS[int(state["spawn_index"])]
+		var position: Vector3 = state["position"]
+		if Vector2(position.x - spawn.x, position.z - spawn.z).length() > 0.05:
+			off_spawn += 1
+		if last_epoch_by_peer.has(peer) and int(state["epoch"]) <= int(last_epoch_by_peer[peer]):
+			stale_epoch += 1
+		last_epoch_by_peer[peer] = int(state["epoch"])
+		if not ra.get_spectator_state(peer).is_empty():
+			_fail("spectator_after_reset room=%d peer=%d" % [room.room_id, peer])
+			return
+	var unavailable := 0
+	for pickup in room.combat.public_pickups():
+		if not bool(pickup["available"]) or int(pickup["round_id"]) != ra.round_id:
+			unavailable += 1
+	print("ROOMS_TEST_RESET room=%d round_id=%d off_spawn=%d stale_epoch=%d bodies=%d pickups_missing=%d" % [
+		room.room_id, ra.round_id, off_spawn, stale_epoch, room.bodies.size(), unavailable])
+	if off_spawn > 0 or stale_epoch > 0 or room.bodies.size() > 0 or unavailable > 0:
+		_fail("round_reset room=%d round_id=%d off_spawn=%d stale_epoch=%d bodies=%d pickups_missing=%d" % [
+			room.room_id, ra.round_id, off_spawn, stale_epoch, room.bodies.size(), unavailable])
+
+## Tira todos do ponto inicial (como se tivessem andado: vão para o ponto de
+## outro jogador) e some com um item, para a próxima rodada provar o reset.
+func _disturb_round(room: MatchRoom) -> void:
+	var count := MovementRules.SPAWN_POINTS.size()
+	for raw_peer in room.round_authority.participants.keys():
+		var state: Dictionary = room.world.states.get(int(raw_peer), {})
+		if not state.is_empty():
+			state["position"] = MovementRules.SPAWN_POINTS[(int(state["spawn_index"]) + 1) % count]
+	for item in room.combat.inventory.ground_items.values():
+		item["available"] = false
+		break
 
 func _completed_for(room_id: int) -> int:
 	var total := 0

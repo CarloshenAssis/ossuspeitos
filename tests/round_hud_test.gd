@@ -31,6 +31,7 @@ func _initialize() -> void:
 	_test_reveal_only_for_the_same_round()
 	_test_combat_notices_come_from_official_events()
 	_test_pickup_prompt_matches_server_rules()
+	_test_new_round_banner_only_in_active()
 	if failures > 0:
 		push_error("ROUND_HUD_TEST_FAILED failures=%d checks=%d" % [failures, checks])
 		quit(1)
@@ -267,6 +268,19 @@ func _roster_with_dead(dead: Array) -> Array:
 func _no_private_panels(model: Dictionary) -> bool:
 	return (model["role"] as Dictionary).is_empty() and (model["health"] as Dictionary).is_empty() and (model["weapon"] as Dictionary).is_empty()
 
+
+## Fase 10: o aviso de nova rodada só existe em ACTIVE, é texto fixo e nunca
+## traz papel; fora de ACTIVE o pedido de aviso é ignorado.
+func _test_new_round_banner_only_in_active() -> void:
+	var active := RoundHud.view_model(_public(RoundState.ACTIVE, {"participants": 4, "alive": 4}), Role.ASSASSIN, 1, 7, _roster(true, true), {}, {}, {}, true)
+	_expect(str(active["banner"]) == "NOVA RODADA — voltando aos pontos iniciais", "ACTIVE start carries the new-round banner")
+	_expect("\n".join(RoundHud.model_lines(active)).contains(RoundHud.NEW_ROUND_BANNER), "banner is on screen text")
+	_expect(not _mentions_any_role(str(active["banner"])), "banner has no role")
+	var quiet := RoundHud.view_model(_public(RoundState.ACTIVE, {"participants": 4, "alive": 4}), Role.ASSASSIN, 1, 7, _roster(true, true))
+	_expect(str(quiet["banner"]).is_empty(), "no banner unless asked")
+	for state in [RoundState.WAITING, RoundState.COUNTDOWN, RoundState.ENDED]:
+		var other := RoundHud.view_model(_public(state, {"connected": 4}), Role.NONE, 1, 7, _roster(true, true), {}, {}, {}, true)
+		_expect(str(other["banner"]).is_empty(), "no banner in state %d" % state)
 
 func _public(state: int, extra: Dictionary) -> Dictionary:
 	var payload := {

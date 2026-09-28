@@ -40,6 +40,11 @@ const NOTICE_MSEC := 1800
 const FEED_MSEC := 5000
 const FEED_MAX := 3
 const FEED_TOP_OFFSET := 44.0
+## Fase 10: aviso da nova rodada. Todos voltam ao ponto inicial oficial no
+## começo de cada rodada (regra do jogo); o aviso explica o salto. Texto fixo,
+## sem papel; faixa no topo, fora da mira e fora da tela de resultado.
+const NEW_ROUND_BANNER := "NOVA RODADA — voltando aos pontos iniciais"
+const NEW_ROUND_BANNER_MSEC := 3500
 ## Recusas do servidor que viram aviso. As demais (cadência, dados técnicos,
 ## rodada encerrada) ficam em silêncio: não são erro do jogador.
 const REJECTION_TEXT := {
@@ -78,6 +83,10 @@ var _feed: Array = []
 var _nearby_pickup := ""
 var _last_health := -1
 var _last_health_round := 0
+var _banner_round := 0
+## Mutação de teste (binário de desenvolvimento): sem aviso de nova rodada.
+var _mutation_no_banner := NetworkConfig.test_mutation(NetworkConfig.user_arguments()) == "no_round_banner"
+var _banner_until := 0
 var model: Dictionary = {}
 
 var _status_panel: PanelContainer
@@ -114,6 +123,8 @@ var _ended_reason: Label
 var _ended_rows: VBoxContainer
 var _ended_footer: Label
 var _damage_vignette: Control
+var _banner_panel: PanelContainer
+var _banner_label: Label
 
 func _ready() -> void:
 	layer = 5
@@ -129,6 +140,17 @@ func apply_round_state(payload: Dictionary, role: int, round_id: int, own_peer_i
 		_notices.clear()
 		_feed.clear()
 		_nearby_pickup = ""
+	# Rodada nova começando (vinda da contagem): aviso do retorno ao ponto
+	# inicial. Quem entra no meio da rodada não teve salto e não vê o aviso.
+	var new_state := int(payload.get("state", RoundState.WAITING))
+	var new_round := int(payload.get("round_id", 0))
+	if new_state == RoundState.ACTIVE and new_round > 0 and new_round != _banner_round \
+			and not _public.is_empty() and not _mutation_no_banner and int(_public.get("state", RoundState.WAITING)) != RoundState.ACTIVE:
+		_banner_round = new_round
+		_banner_until = Time.get_ticks_msec() + NEW_ROUND_BANNER_MSEC
+		print("HUD_NEW_ROUND_BANNER round_id=%d" % new_round)
+	elif new_state != RoundState.ACTIVE:
+		_banner_until = 0
 	_public = payload
 	_role = role
 	_round_id = round_id
@@ -211,6 +233,8 @@ func _process(_delta: float) -> void:
 			if int(list[index]["until"]) <= now:
 				(list as Array).remove_at(index)
 				expired = true
+	if _banner_panel != null and _banner_panel.visible and now >= _banner_until:
+		expired = true
 	if expired:
 		_render()
 	# Recarga sem prazo oficial: faixa que corre enquanto `reloading` for true,
@@ -279,7 +303,8 @@ static func pickup_prompt(pickup_type: String, combat: Dictionary) -> Dictionary
 ## Tudo que o HUD mostra, derivado só dos dados recebidos. Estático e sem nó,
 ## portanto verificável sem renderização.
 static func view_model(public_state: Dictionary, role: int, role_round_id: int, own_peer_id: int,
-		roster: Array, spectator: Dictionary = {}, reveal: Dictionary = {}, combat: Dictionary = {}) -> Dictionary:
+		roster: Array, spectator: Dictionary = {}, reveal: Dictionary = {}, combat: Dictionary = {},
+		new_round_banner: bool = false) -> Dictionary:
 	var state := int(public_state.get("state", RoundState.WAITING))
 	if not RoundState.is_valid(state):
 		state = RoundState.WAITING
@@ -289,7 +314,7 @@ static func view_model(public_state: Dictionary, role: int, role_round_id: int, 
 	var min_players := int(public_state.get("min_players", RoundRules.MIN_PLAYERS))
 	var entry := own_entry(roster, own_peer_id)
 	var result := {"mode": MODE_LOBBY, "state": state, "status": "", "status_detail": "",
-		"role": {}, "health": {}, "weapon": {}, "spectator": {}, "ended": {}}
+		"role": {}, "health": {}, "weapon": {}, "spectator": {}, "ended": {}, "banner": ""}
 
 	if state == RoundState.WAITING:
 		result["status"] = "AGUARDANDO JOGADORES"
@@ -308,6 +333,8 @@ static func view_model(public_state: Dictionary, role: int, role_round_id: int, 
 		return result
 
 	# ACTIVE
+	if new_round_banner:
+		result["banner"] = NEW_ROUND_BANNER
 	var participants := int(public_state.get("participants", 0))
 	var alive_count := int(public_state.get("alive", 0))
 	result["status"] = "EM PARTIDA"
@@ -406,6 +433,8 @@ static func compose_lines(public_state: Dictionary, role: int, own_peer_id: int,
 
 static func model_lines(view: Dictionary) -> Array:
 	var lines: Array = [str(view.get("status", ""))]
+	if not str(view.get("banner", "")).is_empty():
+		lines.append(str(view["banner"]))
 	if not str(view.get("status_detail", "")).is_empty():
 		lines.append(str(view["status_detail"]))
 	var role: Dictionary = view.get("role", {})
@@ -464,10 +493,14 @@ static func own_entry(roster: Array, own_peer_id: int) -> Dictionary:
 # --- Desenho ----------------------------------------------------------------------
 
 func _render() -> void:
-	model = view_model(_public, _role, _round_id, _own_peer_id, _roster, _spectator, _reveal, _combat)
+	model = view_model(_public, _role, _round_id, _own_peer_id, _roster, _spectator, _reveal, _combat,
+		Time.get_ticks_msec() < _banner_until)
 	if _status_panel == null:
 		return
 	var mode := str(model["mode"])
+	_banner_label.text = str(model["banner"])
+	# Nunca por cima da tela de resultado nem da faixa de eliminado.
+	_banner_panel.visible = not _banner_label.text.is_empty() and mode != MODE_ENDED and mode != MODE_SPECTATOR
 	_status_title.text = str(model["status"])
 	_status_detail.text = str(model["status_detail"])
 	_status_detail.visible = not _status_detail.text.is_empty()
@@ -756,6 +789,15 @@ func _build() -> void:
 	_eliminated_band.add_child(band)
 	root.add_child(_eliminated_band)
 	_anchor(_eliminated_band, Control.PRESET_CENTER_TOP)
+
+	# Nova rodada: faixa curta no topo (o centro fica livre para a mira).
+	_banner_panel = HudStyle.panel(Color(0.063, 0.071, 0.086, 0.85), HudStyle.BONE, 1)
+	_banner_label = HudStyle.label("", 17)
+	_banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_banner_panel.add_child(_banner_label)
+	_banner_panel.visible = false
+	root.add_child(_banner_panel)
+	_anchor(_banner_panel, Control.PRESET_CENTER_TOP)
 
 	_observe_panel = HudStyle.panel(Color(0.063, 0.071, 0.086, 0.85))
 	var observe_row := HBoxContainer.new()
