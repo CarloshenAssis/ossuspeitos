@@ -139,9 +139,21 @@ var rooms_next_housekeeping_msec := 0
 ## Capacidade de conexões em salas online além dos membros das salas.
 const HALL_EXTRA_CAPACITY := 16
 
+## Fase 10: medição das transições (desligada por padrão).
+var metrics := TransitionMetrics.new()
+var metrics_hitch_frames := 0
+var metrics_hitch_max_ms := 0.0
+var metrics_connect_recorded := false
+var metrics_hitch_last_usec := 0
+var metrics_tick_max_usec := 0
+var metrics_tick_next_msec := 0
+const METRICS_HITCH_FRAMES := 30
+const METRICS_TICK_WINDOW_MSEC := 5000
+
 func _ready() -> void:
 	GameControls.ensure()
 	arguments = NetworkConfig.user_arguments()
+	metrics = TransitionMetrics.from_arguments(arguments)
 	mode = str(arguments.get("mode", ""))
 	if mode.is_empty() and OS.has_feature("visual_demo"):
 		mode = "demo"
@@ -446,6 +458,10 @@ func _process(_delta: float) -> void:
 		return
 	if mode != "client":
 		return
+	if arena_prewarm_frames > 0:
+		_advance_arena_prewarm()
+	if metrics_hitch_frames > 0:
+		_track_render_hitch()
 	# O prazo é de conexão: depois do encerramento combinado com o servidor
 	# (`joined` volta a falso ao desconectar), ele não se aplica mais.
 	if not joined and not returning_to_menu and not shutdown_prepare_received \
@@ -460,6 +476,16 @@ func _process(_delta: float) -> void:
 	if net_stats_interval_msec > 0 and joined and Time.get_ticks_msec() - net_stats_last_msec >= net_stats_interval_msec:
 		net_stats_last_msec = Time.get_ticks_msec()
 		print("NET_STATS id=%s %s" % [client_label, net_stats.summary(prediction, arena_view.interpolator if arena_view != null else null)])
+
+## Relógio de parede entre quadros (o `delta` do motor pode ser suavizado):
+## a primeira medida vai da troca de tela até o primeiro quadro desenhado.
+func _track_render_hitch() -> void:
+	var now := Time.get_ticks_usec()
+	metrics_hitch_max_ms = maxf(metrics_hitch_max_ms, float(now - metrics_hitch_last_usec) / 1000.0)
+	metrics_hitch_last_usec = now
+	metrics_hitch_frames -= 1
+	if metrics_hitch_frames == 0:
+		metrics.record("render_hitch", metrics_hitch_max_ms)
 
 ## Teste (binário de desenvolvimento): encerramento coordenado N ms depois da
 ## primeira entrada, para provar que o fim combinado não vira mensagem de erro.
@@ -502,9 +528,17 @@ func _physics_process(_delta: float) -> void:
 	if rooms_enabled:
 		_rooms_housekeeping(now_msec)
 	# Cada sala avança isolada, com seus campos de trabalho.
+	var tick_started_usec := Time.get_ticks_usec() if metrics.enabled else 0
 	for room in _active_rooms():
 		_use_room(room)
 		_tick_room(now_msec)
+	if metrics.enabled:
+		metrics_tick_max_usec = maxi(metrics_tick_max_usec, Time.get_ticks_usec() - tick_started_usec)
+		if now_msec >= metrics_tick_next_msec:
+			if metrics_tick_next_msec > 0:
+				metrics.record("server_tick", float(metrics_tick_max_usec) / 1000.0)
+			metrics_tick_max_usec = 0
+			metrics_tick_next_msec = now_msec + METRICS_TICK_WINDOW_MSEC
 
 func _tick_room(now_msec: int) -> void:
 	authoritative_world.step(_command_gate, _run_command_action, _on_command_rejected)
@@ -842,13 +876,20 @@ func room_set_ready(value: Variant) -> void:
 	if not _enter_sender_room(sender):
 		_room_refuse(sender, "ready", "not_in_room")
 		return
+	var ready_started_usec := Time.get_ticks_usec()
+	var state_before := round_authority.state
 	var reason := current_room.set_ready(sender, bool(value), Time.get_ticks_msec())
 	if not reason.is_empty():
 		_room_refuse(sender, "ready", reason)
 		return
+	if metrics.enabled and state_before == RoundState.WAITING and round_authority.state == RoundState.COUNTDOWN:
+		call_deferred("_record_server_ready_to_countdown", ready_started_usec)
 	print("ROOM_READY room=%d peer_id=%d ready=%s ready_count=%d players=%d" % [
 		current_room.room_id, sender, str(bool(value)), round_authority.ready_count(), lobby.size()])
 	_publish_room_state()
+
+func _record_server_ready_to_countdown(started_usec: int) -> void:
+	metrics.record("server_ready_to_countdown", float(Time.get_ticks_usec() - started_usec) / 1000.0)
 
 ## Checagens comuns de criar/entrar: servidor com salas, handshake feito e
 ## ainda fora de qualquer sala.
@@ -968,6 +1009,7 @@ func join_accepted(peer_id: int) -> void:
 		if interactive_session and desktop_menu != null and arena_view == null:
 			_create_client_presentation()
 			_set_game_view(false)
+			_prewarm_arena()
 	elif interactive_session and desktop_menu != null:
 		desktop_menu.enter(MenuFlow.State.CONNECTED, "", menu_attempt)
 		desktop_menu.queue_free()
@@ -1371,6 +1413,7 @@ func world_snapshot(payload: Dictionary) -> void:
 		if int(state["peer_id"]) == own_id and not ack.is_empty():
 			prediction.reconcile(ack, state)
 			awaiting_epoch_sync = false
+			metrics.end("play_first_snapshot")
 	if arena_view != null:
 		arena_view.apply_snapshot(states, tick)
 		_update_pickup_prompt()
@@ -1792,6 +1835,7 @@ func round_public_state(payload: Dictionary) -> void:
 	var announced_round := int(payload.get("round_id", 0))
 	if state == RoundState.ENDED and local_result_round_id != announced_round:
 		local_result_round_id = announced_round
+		metrics.begin("ended_to_reveal")
 		print("CLIENT_ROUND_RESULT id=%s round_id=%d team=%s reason=%s" % [
 			client_label, announced_round,
 			Role.team_to_label(int(payload.get("winning_team", Role.TEAM_NONE))),
@@ -1860,6 +1904,7 @@ func round_final_reveal(payload: Dictionary) -> void:
 			or typeof(payload.get("reason")) != TYPE_STRING:
 		return
 	local_final_reveal = payload.duplicate(true)
+	metrics.end("ended_to_reveal")
 	print("ROUND_REVEAL_OK players=%d" % players.size())
 	print("ROUND_REVEAL_PRIVACY_OK")
 	if spectator_reveal_test_mode and not shutdown_prepare_received: spectator_reveal_received.rpc_id(1)
@@ -2139,6 +2184,7 @@ func combat_public_elimination(peer_id: int) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1: return
 	if online_rooms: _note_peer(peer_id, "elimination")
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "elimination", peer_id)
+	metrics.begin("elimination_to_body")
 	if arena_view != null:
 		arena_view.show_elimination(peer_id)
 	if round_hud != null: round_hud.call("apply_elimination", peer_id)
@@ -2251,6 +2297,7 @@ func _accept_body(dto: Dictionary) -> void:
 	if arena_view != null:
 		arena_view.add_body(dto)
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "body", dto)
+	metrics.end("elimination_to_body")
 	print("CLIENT_BODY_SHOWN id=%s round_id=%d bodies=%d" % [client_label, int(dto["round_id"]), local_bodies.size()])
 
 func _clear_local_bodies() -> void:
@@ -2284,6 +2331,9 @@ var room_seen_labels: Dictionary = {}
 
 func _on_room_welcome(payload: Dictionary) -> void:
 	online_rooms = true
+	if metrics.enabled and not metrics_connect_recorded:
+		metrics_connect_recorded = true
+		metrics.record("connect", float(Time.get_ticks_msec() - started_at_msec))
 	print("HALL_WELCOME id=%s rooms=%s" % [client_label, str(payload.get("rooms", false) == true)])
 	if interactive_session and desktop_menu != null:
 		desktop_menu.enter(MenuFlow.State.ONLINE, "", menu_attempt)
@@ -2297,8 +2347,10 @@ func _on_room_welcome(payload: Dictionary) -> void:
 	if NetworkConfig.bool_argument(arguments, "probe") and action.is_empty():
 		action = "create"
 	if action == "create":
+		metrics.begin("room_create")
 		room_create.rpc_id(1, client_label)
 	elif action == "join":
+		metrics.begin("room_join")
 		room_join.rpc_id(1, str(arguments.get("room-code", "")), client_label)
 
 ## Automação do menu de sala (testes): usa os botões reais.
@@ -2324,6 +2376,7 @@ func _on_room_state(payload: Dictionary) -> void:
 		_note_peer(int(entry["peer_id"]), "room_state")
 		room_seen_labels[str(entry["label"])] = true
 	labels.sort()
+	_record_room_transitions(previous_phase, dto)
 	if room_seen_code.is_empty():
 		room_seen_code = str(dto["code"])
 		print("ROOM_JOINED id=%s code=%s" % [client_label, room_seen_code])
@@ -2369,6 +2422,38 @@ func _run_room_menu_automation(dto: Dictionary) -> void:
 	menu_room_ready_round = int(dto["round_id"])
 	desktop_menu.call_deferred("press", "room_ready")
 
+## Fase 10: tempos das transições da sala, vistos por este cliente.
+func _record_room_transitions(previous_phase: String, dto: Dictionary) -> void:
+	if not metrics.enabled:
+		return
+	metrics.round_id = int(dto["round_id"])
+	var phase := str(dto["phase"])
+	if room_seen_code.is_empty():
+		metrics.end("room_create")
+		metrics.end("room_join")
+	if metrics.has("ready_ack"):
+		for entry in dto["players"]:
+			if int(entry["peer_id"]) == multiplayer.get_unique_id() and bool(entry["ready"]):
+				metrics.end("ready_ack")
+	if phase == RoomRules.PHASE_COUNTDOWN and previous_phase != RoomRules.PHASE_COUNTDOWN:
+		var now := metrics.now_usec()
+		metrics.begin("countdown", now)
+		# Fim previsto pela contagem que o servidor mandou: o que passar disso
+		# até a tela da partida é atraso de entrega/aplicação.
+		metrics.begin("countdown_to_play", now + int(dto["countdown_msec"]) * 1000)
+	elif phase != RoomRules.PHASE_COUNTDOWN and previous_phase == RoomRules.PHASE_COUNTDOWN:
+		if phase == RoomRules.PHASE_PLAYING:
+			metrics.end("countdown")
+			metrics.end("countdown_to_play")
+			metrics.begin("play_first_snapshot")
+		else:
+			metrics.cancel("countdown")
+			metrics.cancel("countdown_to_play")
+	if phase == RoomRules.PHASE_RESULTS and previous_phase != RoomRules.PHASE_RESULTS:
+		metrics.begin("results_to_lobby")
+	elif phase == RoomRules.PHASE_LOBBY and previous_phase == RoomRules.PHASE_RESULTS:
+		metrics.end("results_to_lobby")
+
 ## Testes: marca PRONTO sozinho a cada volta ao lobby, até N rodadas.
 func _maybe_auto_ready(dto: Dictionary) -> void:
 	var rounds := NetworkConfig.integer_argument(arguments, "auto-ready-rounds", 0)
@@ -2385,6 +2470,7 @@ func _maybe_auto_ready(dto: Dictionary) -> void:
 	room_auto_ready_round = int(dto["round_id"])
 	room_auto_ready_count += 1
 	print("ROOM_AUTO_READY id=%s round_id=%d count=%d" % [client_label, int(dto["round_id"]), room_auto_ready_count])
+	metrics.begin("ready_ack")
 	room_set_ready.rpc_id(1, true)
 
 ## Teste de isolamento (salas online): cada peer_id que aparece em qualquer
@@ -2402,6 +2488,12 @@ func _note_peer(raw_peer_id: Variant, via: String) -> void:
 func _on_room_error(reason: String) -> void:
 	var clean := reason if RoomRules.ERRORS.has(reason) else "unknown"
 	print("ROOM_ERROR id=%s reason=%s" % [client_label, clean])
+	# Pedido recusado: fecha a medida pendente como erro (sem o motivo, que
+	# fica só na linha ROOM_ERROR acima).
+	for kind in ["room_create", "room_join", "ready_ack"]:
+		if metrics.has(kind):
+			metrics.end(kind, -1, "error")
+			break
 	if interactive_session and desktop_menu != null:
 		desktop_menu.show_room_error(clean)
 		return
@@ -2417,9 +2509,48 @@ func _on_room_error(reason: String) -> void:
 	if NetworkConfig.bool_argument(arguments, "exit-on-room-error"):
 		get_tree().quit(0)
 
+## Fase 10: a primeira vez que a mansão aparece, o driver de vídeo compila os
+## shaders dela; medido (`render_hitch`, cache frio, xvfb/llvmpipe) em ~1,4 s
+## de tela parada logo no começo da partida. Ao entrar na sala, a mansão é
+## desenhada por alguns quadros atrás do menu (que fica por cima, camada
+## própria), parada (sem processo nem entrada), e volta a ficar oculta: a
+## compilação acontece no lobby, onde ninguém está jogando.
+const ARENA_PREWARM_FRAMES := 8
+const MENU_LAYER_OVER_ARENA := 10
+var arena_prewarm_frames := 0
+
+func _prewarm_arena() -> void:
+	if arena_view == null or desktop_menu == null:
+		return
+	desktop_menu.layer = MENU_LAYER_OVER_ARENA
+	arena_view.process_mode = Node.PROCESS_MODE_DISABLED
+	arena_view.visible = true
+	arena_prewarm_frames = ARENA_PREWARM_FRAMES
+	print("CLIENT_ARENA_PREWARM id=%s frames=%d" % [client_label, ARENA_PREWARM_FRAMES])
+	if metrics.enabled:
+		metrics_hitch_frames = METRICS_HITCH_FRAMES
+		metrics_hitch_max_ms = 0.0
+		metrics_hitch_last_usec = Time.get_ticks_usec()
+
+func _advance_arena_prewarm() -> void:
+	arena_prewarm_frames -= 1
+	if arena_prewarm_frames > 0:
+		return
+	_end_arena_prewarm()
+	if arena_view != null:
+		arena_view.visible = str(local_room_state.get("phase", "")) == RoomRules.PHASE_PLAYING
+	print("CLIENT_ARENA_PREWARM_DONE id=%s" % client_label)
+
+func _end_arena_prewarm() -> void:
+	arena_prewarm_frames = 0
+	if arena_view != null:
+		arena_view.process_mode = Node.PROCESS_MODE_INHERIT
+
 ## Lobby da sala (menu) ou partida (mansão + HUD). O mouse só fica preso na
 ## partida; no lobby, a mansão fica oculta e não reage a cliques.
 func _set_game_view(visible_game: bool) -> void:
+	if arena_prewarm_frames > 0:
+		_end_arena_prewarm()
 	if arena_view != null:
 		arena_view.visible = visible_game
 	if round_hud != null:
@@ -2429,12 +2560,19 @@ func _set_game_view(visible_game: bool) -> void:
 	if not visible_game:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	print("CLIENT_VIEW id=%s game=%s" % [client_label, str(visible_game)])
+	# Troca de tela: mede o quadro mais lento dos próximos quadros (primeira
+	# renderização da mansão ou do menu).
+	if metrics.enabled:
+		metrics_hitch_frames = METRICS_HITCH_FRAMES
+		metrics_hitch_max_ms = 0.0
+		metrics_hitch_last_usec = Time.get_ticks_usec()
 
 func _on_menu_room_create(player_name: String) -> void:
 	if not online_rooms or joined:
 		return
 	client_label = player_name
 	arguments["client-id"] = player_name
+	metrics.begin("room_create")
 	room_create.rpc_id(1, player_name)
 
 func _on_menu_room_join(code: String, player_name: String) -> void:
@@ -2442,10 +2580,13 @@ func _on_menu_room_join(code: String, player_name: String) -> void:
 		return
 	client_label = player_name
 	arguments["client-id"] = player_name
+	metrics.begin("room_join")
 	room_join.rpc_id(1, code, player_name)
 
 func _on_menu_room_ready(value: bool) -> void:
 	if online_rooms and joined:
+		if value:
+			metrics.begin("ready_ack")
 		room_set_ready.rpc_id(1, value)
 
 func _on_menu_online_leave() -> void:

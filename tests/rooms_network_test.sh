@@ -105,8 +105,8 @@ fi
 URL="ws://127.0.0.1:$PORT"
 start_client() {
   local name="$1"; shift
-  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=client --client-id="$name" --url="$URL" "$@" \
-    >"$TMP_DIR/$name.log" 2>&1 &
+  "$GODOT_BIN" --headless --path "$ROOT" -- --mode=client --client-id="$name" --url="$URL" \
+    --transition-metrics=true "$@" >"$TMP_DIR/$name.log" 2>&1 &
   PIDS+=("$!")
   PROCESS_NAMES+=("$name")
   LAST_PID="$!"
@@ -122,7 +122,7 @@ code_of() {
 "$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 --port="$PORT" \
   --rooms=true --rooms-test=true --countdown-seconds=2 --round-end-delay-seconds=2 \
   --rooms-target-rounds=2 --rooms-expect-peers=10 --rooms-step-gap-msec=2500 \
-  >"$TMP_DIR/server.log" 2>&1 &
+  --transition-metrics=true >"$TMP_DIR/server.log" 2>&1 &
 SERVER_PID="$!"
 PIDS+=("$SERVER_PID")
 PROCESS_NAMES+=("server")
@@ -289,6 +289,31 @@ for n in B1 B2 B3 B4 C2 C3; do
   assert_no_grep "$n-no-role-names" 'ASSASSIN|DETECTIVE|VICTIM' "$log"
 done
 assert_grep "b4-sees-three-ready" 'CLIENT_ROOM_STATE id=B4 .*players=4 ready=3 ' "$TMP_DIR/B4.log"
+
+# --- Fase 10: medição das transições -------------------------------------------
+# Cada linha TRANSITION tem só medida, duração, classe, rodada e sessão
+# aleatória: nenhum código de sala, nome, papel ou peer.
+for n in A1 A2 A3 A4; do
+  log="$TMP_DIR/$n.log"
+  for kind in ready_ack countdown countdown_to_play play_first_snapshot ended_to_reveal results_to_lobby; do
+    assert_grep "$n-metric-$kind" "TRANSITION kind=$kind ms=[0-9.]+ class=[a-z]+ round=[12] session=[0-9a-f]{6}$" "$log"
+  done
+done
+assert_grep "a1-metric-create" 'TRANSITION kind=room_create ' "$TMP_DIR/A1.log"
+assert_grep "a2-metric-join" 'TRANSITION kind=room_join ' "$TMP_DIR/A2.log"
+assert_grep "e-invalid-metric-error" 'TRANSITION kind=error ' "$TMP_DIR/E-invalid.log"
+assert_grep "server-metric-ready" 'TRANSITION kind=server_ready_to_countdown ' "$S"
+assert_equal "metric-lines-strict" "$(grep -h 'TRANSITION ' "$TMP_DIR"/*.log | grep -cvE '^TRANSITION kind=[a-z_]+ ms=[0-9]+\.[0-9] class=(ux|network|server|render|unknown) round=[0-9]+ session=[0-9a-f]{6}$' || true)" "0"
+assert_no_grep "metric-no-codes" "TRANSITION .*($CODE_A|$CODE_B|$CODE_C|ASSASSIN|DETECTIVE|VICTIM|peer)" "$TMP_DIR"/*.log
+# Limite das transições de sala (pedido -> resposta e trabalho do servidor).
+# Medido neste teste: máx. 35 ms em loopback (p95 ~14 ms); 750 ms dá folga
+# de 20x para máquinas de CI lentas e ainda pega uma transição atrasada de
+# propósito (mutação slow_room_transition, +1,5 s).
+if python3 "$ROOT/tests/transition_report.py" --max-network-ms 750 "$TMP_DIR"/*.log; then
+  check_ok "transitions-within-limit"
+else
+  check_failed "transitions-within-limit" "slow room transition"
+fi
 
 if [[ "$FAILED" -gt 0 ]]; then
   echo "ROOMS_NETWORK_TEST_FAILED failures=$FAILED" >&2

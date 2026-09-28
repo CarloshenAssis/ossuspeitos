@@ -61,7 +61,7 @@ static func user_arguments() -> Dictionary:
 ## endereço do servidor nem modos de teste: um link não pode apontar o jogo
 ## para outro servidor.
 const WEB_QUERY_KEYS := ["menu-auto", "menu-room", "room-code", "menu-name",
-	"menu-room-ready-min-players", "menu-room-leave-after-result"]
+	"menu-room-ready-min-players", "menu-room-leave-after-result", "transition-metrics"]
 
 const LOOPBACK_HOSTS := ["localhost", "127.0.0.1"]
 
