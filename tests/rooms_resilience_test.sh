@@ -198,7 +198,14 @@ assert_grep "survivor-saw-result" 'CLIENT_ROOM_STATE id=R2 .*phase=lobby round_i
 assert_grep "empty-room-removed" 'ROOM_DESTROYED room=1 reason=empty members=0 rooms=0' "$S"
 assert_no_grep "coordinator-no-failure" 'ROOMS_TEST_FAILED' "$S"
 assert_no_grep "no-script-errors" 'SCRIPT ERROR|Parse Error' "$TMP_DIR"/*.log
-assert_no_grep "server-no-send-errors" 'ERROR: .*(Condition|Invalid|put_packet)' "$S"
+# Cinco processos fechados ao mesmo tempo: o socket de um deles pode ainda
+# estar OPEN quando o estado da sala sai para os demais e fechar no meio do
+# envio. O motor registra "ready_state != STATE_OPEN" (sem efeito: o peer já
+# saiu). Mesma tolerância limitada do container_test; qualquer outro ERROR
+# do servidor falha.
+send_races="$(grep -c 'ready_state != STATE_OPEN' "$S" || true)"
+if [[ "$send_races" -le 5 ]]; then check_ok "server-send-races-bounded count=$send_races"; else check_failed "server-send-races-bounded" "count=$send_races"; fi
+assert_no_grep "server-no-other-errors" '^ERROR: ' <(grep -v 'ready_state != STATE_OPEN' "$S")
 
 if [[ "$FAILED" -gt 0 ]]; then
   echo "ROOMS_RESILIENCE_TEST_FAILED failures=$FAILED" >&2
