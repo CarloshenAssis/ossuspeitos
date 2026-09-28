@@ -14,6 +14,8 @@ const DEFAULT_MAX_ROOMS := 12
 const MAX_ROOMS_LIMIT := 64
 ## Sala vazia é destruída depois desta carência.
 const EMPTY_ROOM_GRACE_MSEC := 30000
+## Só um teste (binário de desenvolvimento) encurta a carência.
+var empty_grace_msec := EMPTY_ROOM_GRACE_MSEC
 ## Lobby de sala sem nenhuma atividade (entrada, saída, PRONTO) expira.
 const LOBBY_IDLE_MSEC := 30 * 60 * 1000
 ## Conexão que fez o handshake mas não entrou em sala sai depois disto.
@@ -86,7 +88,7 @@ func destroy(room: MatchRoom) -> Array:
 func due_for_removal(now_msec: int) -> Array:
 	var result: Array = []
 	for room in rooms.values():
-		var reason: String = (room as MatchRoom).destroy_reason(now_msec, EMPTY_ROOM_GRACE_MSEC, LOBBY_IDLE_MSEC)
+		var reason: String = (room as MatchRoom).destroy_reason(now_msec, empty_grace_msec, LOBBY_IDLE_MSEC)
 		if not reason.is_empty():
 			result.append({"room": room, "reason": reason})
 	return result

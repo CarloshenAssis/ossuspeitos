@@ -162,7 +162,7 @@ case_menu_errors() {
   assert_grep no-server-returned 'MENU_RETURNED reason=(connection_failed|timeout)' "$CASE_DIR/no-server.log"
   assert_grep no-server-message-shown 'MENU_SHOWING_MESSAGE after_return=true' "$CASE_DIR/no-server.log"
   assert_equal no-server-single-attempt "$(grep -c 'CLIENT_CONNECTING' "$CASE_DIR/no-server.log")" 1
-  grep -q 'Não foi possível conectar\|Tempo esgotado' "$ROOT/shared/network_app.gd" && ok portuguese-message-source
+  grep -q 'Não foi possível conectar\|Servidor indisponível' "$ROOT/client/player_messages.gd" && ok portuguese-message-source
 }
 
 # --- 3 e 9. Versão incompatível, depois queda do servidor com jogadores no menu ------
@@ -209,7 +209,9 @@ case_protocol_mismatch() {
   assert_equal client-9-exit "$status" 0
   assert_grep client-9-announces-9 'CLIENT_PROTOCOL id=antigo version=9' "$CASE_DIR/client-9.log"
   assert_grep client-9-refused 'JOIN_REJECTED id=antigo reason=protocol_version' "$CASE_DIR/client-9.log"
-  assert_grep client-9-clear-message 'JOIN_REJECTED_MESSAGE id=antigo text=Versão incompatível do jogo \(este build usa o protocolo 9\)' "$CASE_DIR/client-9.log"
+  assert_grep client-9-clear-message 'JOIN_REJECTED_MESSAGE id=antigo text=Versão incompatível do jogo\. Atualize a página' "$CASE_DIR/client-9.log"
+  assert_no_grep client-9-message-no-protocol 'JOIN_REJECTED_MESSAGE .*protocolo' "$CASE_DIR/client-9.log"
+  assert_grep client-9-debug-detail 'JOIN_REJECTED_DETAIL id=antigo protocol=9' "$CASE_DIR/client-9.log"
   assert_grep client-9-back-to-menu 'MENU_RETURNED reason=join_rejected' "$CASE_DIR/client-9.log"
   assert_no_grep client-9-no-entry 'JOIN_ACCEPTED|CLIENT_ROUND_STATE|CLIENT_ROSTER|CLIENT_BODY_SHOWN|CLIENT_PRIVATE_ROLE' "$CASE_DIR/client-9.log"
   assert_grep server-current-mismatch "JOIN_PROTOCOL_MISMATCH peer_id=[0-9]+ client=9 server=$current" "$CASE_DIR/server-current.log"
@@ -225,7 +227,8 @@ case_protocol_mismatch() {
   assert_equal client-current-exit "$status" 0
   assert_grep client-current-announces "CLIENT_PROTOCOL id=novo version=$current" "$CASE_DIR/client-current.log"
   assert_grep client-current-refused 'JOIN_REJECTED id=novo reason=protocol_version' "$CASE_DIR/client-current.log"
-  assert_grep client-current-clear-message "JOIN_REJECTED_MESSAGE id=novo text=Versão incompatível do jogo \\(este build usa o protocolo $current\\)" "$CASE_DIR/client-current.log"
+  assert_grep client-current-clear-message "JOIN_REJECTED_MESSAGE id=novo text=Versão incompatível do jogo\\. Atualize a página" "$CASE_DIR/client-current.log"
+  assert_grep client-current-debug-detail "JOIN_REJECTED_DETAIL id=novo protocol=$current" "$CASE_DIR/client-current.log"
   assert_no_grep client-current-no-entry 'JOIN_ACCEPTED|CLIENT_ROUND_STATE|CLIENT_ROSTER|CLIENT_BODY_SHOWN' "$CASE_DIR/client-current.log"
   assert_grep server-9-mismatch "JOIN_PROTOCOL_MISMATCH peer_id=[0-9]+ client=$current server=9" "$CASE_DIR/server-9.log"
   assert_no_grep server-9-no-partial-entry 'CLIENT_JOINED|PLAYER_SPAWNED|ROUND_STATE' "$CASE_DIR/server-9.log"

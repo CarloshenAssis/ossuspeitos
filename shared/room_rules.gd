@@ -29,21 +29,21 @@ const RESULTS_SECONDS := 8.0
 const ERRORS := {
 	"invalid_code": "Código inválido. Confira as 6 letras e números.",
 	"room_not_found": "Nenhuma sala com esse código. Confira o código com quem criou a sala.",
-	"room_full": "A sala está cheia (8 jogadores).",
+	"room_full": "A sala está cheia (8 jogadores). Peça o código de outra sala ou crie uma nova.",
 	"round_in_progress": "Partida em andamento nesta sala. Tente de novo quando ela voltar ao lobby.",
 	"name_taken": "Já existe alguém com esse nome nesta sala. Escolha outro nome.",
 	"invalid_name": "Nome inválido. Use até 20 letras, números, espaço, - ou _.",
 	"server_full": "O servidor está lotado no momento. Tente mais tarde.",
-	"already_in_room": "Você já está em uma sala.",
-	"not_in_room": "Você não está em uma sala.",
+	"already_in_room": "Você já está em uma sala. Saia dela para entrar em outra.",
+	"not_in_room": "Você não está em uma sala. Crie uma sala ou entre por código.",
 	"too_many_attempts": "Tentativas demais. Conecte de novo para tentar outra vez.",
-	"room_expired": "A sala expirou por inatividade.",
-	"not_ready_phase": "Só dá para marcar pronto no lobby da sala.",
-	"rooms_unavailable": "Este servidor não tem salas online.",
+	"room_expired": "A sala fechou por inatividade. Crie uma nova sala ou entre com outro código.",
+	"not_ready_phase": "Só dá para marcar PRONTO no lobby da sala. Espere a rodada acabar.",
+	"rooms_unavailable": "Este servidor não tem salas online. Use JOGAR ONLINE com o servidor oficial.",
 }
 
 static func error_message(reason: String) -> String:
-	return str(ERRORS.get(reason, "Não foi possível completar a ação na sala."))
+	return str(ERRORS.get(reason, "Não foi possível completar a ação na sala. Tente de novo."))
 
 ## Código em forma canônica, ou "" se inválido. Aceita minúsculas, espaços e
 ## hífens digitados; recusa qualquer outro tipo ou símbolo.

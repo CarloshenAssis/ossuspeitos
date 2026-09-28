@@ -429,6 +429,13 @@ jobs:
             | tee "$RUNNER_TEMP/godot-rooms-logs/transition-metrics.log"
           grep -q 'TRANSITION_METRICS_TEST_OK' "$RUNNER_TEMP/godot-rooms-logs/transition-metrics.log"
 
+      - name: Validate player-facing error messages (phase 10)
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/player_messages_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-rooms-logs/player-messages.log"
+          grep -q 'PLAYER_MESSAGES_TEST_OK' "$RUNNER_TEMP/godot-rooms-logs/player-messages.log"
+
       # 3 salas em paralelo (uma joga 2 rodadas, outra fica no lobby, outra
       # troca de anfitrião), isolamento por peer visto em cada cliente.
       - name: Run private rooms network test
@@ -442,6 +449,15 @@ jobs:
           set -o pipefail
           TEST_LOG_DIR="$RUNNER_TEMP/godot-rooms-logs/adversarial" GODOT_BIN="$(command -v godot)" \
             ./tests/rooms_adversarial_test.sh 2>&1 | tee "$RUNNER_TEMP/godot-rooms-logs/rooms-adversarial.log"
+
+      # Fase 10: sala cheia, código com espaços, entradas simultâneas, saída no
+      # lobby, queda do anfitrião e de um jogador na rodada, reentrada, saída no
+      # resultado, limpeza da sala vazia e servidor saudável depois.
+      - name: Run rooms resilience test
+        run: |
+          set -o pipefail
+          TEST_LOG_DIR="$RUNNER_TEMP/godot-rooms-logs/resilience" GODOT_BIN="$(command -v godot)" \
+            ./tests/rooms_resilience_test.sh 2>&1 | tee "$RUNNER_TEMP/godot-rooms-logs/rooms-resilience.log"
 
       # Fase 10: cada mutação (reset sem volta ao ponto inicial, tela sem o
       # aviso de nova rodada, estado de outra sala, transição atrasada) tem

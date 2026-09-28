@@ -140,6 +140,9 @@ var rooms_next_housekeeping_msec := 0
 const HALL_EXTRA_CAPACITY := 16
 
 var test_mutation := ""
+## Sessão no servidor online (mensagens de erro sem endereço digitado).
+var online_session := false
+var room_fatal_error := ""
 ## Fase 10: medição das transições (desligada por padrão).
 var metrics := TransitionMetrics.new()
 var metrics_hitch_frames := 0
@@ -273,6 +276,8 @@ func _start_round_authority() -> void:
 ## Salas online: registro vazio; as salas nascem por `room_create`.
 func _start_room_registry() -> void:
 	room_registry = RoomRegistry.new()
+	if arguments.has("test-empty-room-grace-msec") and OS.is_debug_build() and not OS.has_feature("template"):
+		room_registry.empty_grace_msec = maxi(0, NetworkConfig.integer_argument(arguments, "test-empty-room-grace-msec", RoomRegistry.EMPTY_ROOM_GRACE_MSEC))
 	if dedicated:
 		room_registry.max_rooms = int(dedicated_config.get("max_rooms", RoomRegistry.DEFAULT_MAX_ROOMS))
 	else:
@@ -472,7 +477,7 @@ func _process(_delta: float) -> void:
 			and Time.get_ticks_msec() - started_at_msec > _connect_timeout_msec():
 		if interactive_session:
 			print("CLIENT_TIMEOUT id=%s" % client_label)
-			_return_to_menu("Tempo esgotado ao conectar em %s." % str(arguments.get("url", "")), "timeout")
+			_return_to_menu(PlayerMessages.connection("timeout", online_session), "timeout")
 			return
 		fail("CLIENT_TIMEOUT id=%s" % client_label)
 	if probe_joined_msec > 0:
@@ -693,7 +698,7 @@ func _on_connection_failed() -> void:
 	joined = false
 	if interactive_session:
 		print("CLIENT_CONNECTION_FAILED id=%s" % client_label)
-		_return_to_menu("Não foi possível conectar a %s. Confira endereço, porta e se a partida foi criada." % str(arguments.get("url", "")), "connection_failed")
+		_return_to_menu(PlayerMessages.connection("connection_failed", online_session), "connection_failed")
 		return
 	fail("CLIENT_CONNECTION_FAILED id=%s" % client_label)
 
@@ -702,7 +707,10 @@ func _on_server_disconnected() -> void:
 	joined = false
 	if interactive_session:
 		print("CLIENT_SERVER_DISCONNECTED id=%s" % client_label)
-		_return_to_menu("O servidor encerrou a partida." if shutdown_prepare_received else "Conexão com o servidor perdida. A partida pode ter sido fechada pelo anfitrião.", "server_disconnected")
+		var text := PlayerMessages.connection("server_disconnected", online_session, shutdown_prepare_received)
+		if not room_fatal_error.is_empty() and not shutdown_prepare_received:
+			text = RoomRules.error_message(room_fatal_error)
+		_return_to_menu(text, "server_disconnected")
 		return
 	if shutdown_prepare_received:
 		print("CLIENT_SHUTDOWN_COMPLETE id=%s" % client_label)
@@ -1051,13 +1059,10 @@ func join_accepted(peer_id: int) -> void:
 func join_rejected(reason: String) -> void:
 	if interactive_session:
 		print("JOIN_REJECTED id=%s reason=%s" % [client_label, reason])
-		var messages := {
-			"protocol_version": "Versão incompatível do jogo (este build usa o protocolo %d). Use o mesmo build do anfitrião." % NetworkConfig.effective_protocol_version(arguments),
-			"room_unavailable": "A sala está cheia (8 jogadores). Tente mais tarde ou crie outra partida.",
-			"name_taken": "Já existe alguém com esse nome nesta sala. Escolha outro nome.",
-			"invalid_client": "Nome recusado pelo servidor.",
-		}
-		var message := str(messages.get(reason, "Entrada recusada pelo servidor."))
+		# Detalhe técnico (versão do protocolo) só no log de depuração.
+		if reason == "protocol_version":
+			print("JOIN_REJECTED_DETAIL id=%s protocol=%d" % [client_label, NetworkConfig.effective_protocol_version(arguments)])
+		var message := PlayerMessages.join_rejected(reason)
 		print("JOIN_REJECTED_MESSAGE id=%s text=%s" % [client_label, message])
 		_return_to_menu(message, "join_rejected")
 		return
@@ -2505,6 +2510,10 @@ func _note_peer(raw_peer_id: Variant, via: String) -> void:
 func _on_room_error(reason: String) -> void:
 	var clean := reason if RoomRules.ERRORS.has(reason) else "unknown"
 	print("ROOM_ERROR id=%s reason=%s" % [client_label, clean])
+	# Erros seguidos de desconexão pelo servidor: a volta ao menu mostra este
+	# motivo, não "a conexão caiu".
+	if clean in ["room_expired", "too_many_attempts"]:
+		room_fatal_error = clean
 	# Pedido recusado: fecha a medida pendente como erro (sem o motivo, que
 	# fica só na linha ROOM_ERROR acima).
 	for kind in ["room_create", "room_join", "ready_ack"]:
@@ -2761,6 +2770,7 @@ func _on_menu_online(player_name: String, url: String, attempt: int = 0) -> void
 		return
 	menu_attempt = attempt
 	desktop_menu.enter(MenuFlow.State.CONNECTING, "Conectando ao servidor online…", attempt)
+	online_session = true
 	_start_interactive_client(player_name, url)
 
 ## Cancelar: antes do servidor local ficar pronto, só o encerra; conectando,
