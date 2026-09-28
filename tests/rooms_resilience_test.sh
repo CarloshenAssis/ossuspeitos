@@ -112,7 +112,9 @@ wait_for_marker 'SERVER_READY' "$S" "$SERVER_PID"
 ) &
 WATCHDOG_PID=$!
 
-READY=(--auto-ready-rounds=1 --auto-ready-min-players=7)
+# PRONTO automático só com os 8 na sala (o 8º pode conectar por último);
+# depois que ele sai, os 7 prontos bastam.
+READY=(--auto-ready-rounds=1 --auto-ready-min-players=8)
 start_client R1 R1 --room-action=create "${READY[@]}"
 wait_for_marker 'ROOM_JOINED id=R1 code=' "$TMP_DIR/R1.log" "${PID_OF[R1]}"
 CODE="$(sed -n 's/.*ROOM_JOINED id=R1 code=\([A-Z0-9]*\).*/\1/p' "$TMP_DIR/R1.log" | head -n1)"
