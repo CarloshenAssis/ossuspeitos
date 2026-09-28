@@ -139,6 +139,7 @@ var rooms_next_housekeeping_msec := 0
 ## Capacidade de conexões em salas online além dos membros das salas.
 const HALL_EXTRA_CAPACITY := 16
 
+var test_mutation := ""
 ## Fase 10: medição das transições (desligada por padrão).
 var metrics := TransitionMetrics.new()
 var metrics_hitch_frames := 0
@@ -154,6 +155,9 @@ func _ready() -> void:
 	GameControls.ensure()
 	arguments = NetworkConfig.user_arguments()
 	metrics = TransitionMetrics.from_arguments(arguments)
+	test_mutation = NetworkConfig.test_mutation(arguments)
+	if not test_mutation.is_empty():
+		print("TEST_MUTATION name=%s" % test_mutation)
 	mode = str(arguments.get("mode", ""))
 	if mode.is_empty() and OS.has_feature("visual_demo"):
 		mode = "demo"
@@ -953,8 +957,19 @@ func _publish_room_state() -> void:
 	if not rooms_enabled or current_room == null or shutting_down or not multiplayer.is_server():
 		return
 	var payload := current_room.public_state(Time.get_ticks_msec())
+	if test_mutation == "slow_room_transition":
+		var late_members := _open_members()
+		get_tree().create_timer(1.5).timeout.connect(func():
+			for late_peer in late_members:
+				if hall_peers.has(late_peer): room_state.rpc_id(int(late_peer), payload))
+		return
 	for peer_id in _open_members():
 		room_state.rpc_id(int(peer_id), payload)
+	if test_mutation == "cross_room_leak":
+		for raw_room in room_registry.rooms.values():
+			if raw_room != current_room:
+				for other_peer in (raw_room as MatchRoom).lobby.peer_ids():
+					room_state.rpc_id(int(other_peer), payload)
 
 func _destroy_room(room: MatchRoom, reason: String) -> Array:
 	_unwire_room(room)
@@ -1698,6 +1713,8 @@ func _on_round_roles_ready(round_id: int, participant_ids: Array) -> void:
 	for raw_peer_id in _open_members():
 		round_bodies_state.rpc_id(int(raw_peer_id), {"round_id": round_id, "bodies": []})
 	for raw_peer_id in participant_ids:
+		if test_mutation == "no_teleport":
+			break
 		authoritative_world.reset_to_spawn(int(raw_peer_id))
 	# Somente a contagem agregada vai para o log: nunca a associação peer/papel.
 	var counts := round_authority.role_counts()

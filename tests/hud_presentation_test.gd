@@ -126,6 +126,10 @@ func _test_layout_keeps_the_center_free() -> void:
 	var center := viewport_rect.size * 0.5
 	_center_free = Rect2(center - Vector2(150, 120), Vector2(300, 240))
 	_hud.apply_roster(ROSTER_ALIVE)
+	# Vindo da contagem: começa com o aviso de nova rodada na tela (o teste de
+	# modelo acima já usou a rodada 2; esquece o aviso dado).
+	_hud._banner_round = 0
+	_hud.apply_round_state(_public(RoundState.COUNTDOWN, 2), Role.NONE, 0, OWN)
 	_hud.apply_round_state(_public(RoundState.ACTIVE, 2), Role.DETECTIVE, 2, OWN)
 	_hud.apply_combat_state(_combat(2, 32, "common_pistol", 0, 6, true))
 	var crosshair_center := _arena.crosshair.get_global_rect().get_center()
@@ -135,9 +139,12 @@ func _test_layout_keeps_the_center_free() -> void:
 	_hud.show_rejection("reload", "reserve_empty")
 	_hud.apply_elimination(7)
 	var alive_panels := {"status": _hud._status_panel, "role": _hud._role_panel, "health": _hud._health_panel, "weapon": _hud._weapon_panel, "region": _arena.region_chip,
-		"feedback": _hud._feedback_column, "feed": _hud._feed_box}
+		"feedback": _hud._feedback_column, "feed": _hud._feed_box, "new_round_banner": _hud._banner_panel}
 	_expect(_hud._feedback_column.visible and _hud._feed_box.visible, "feedback column and feed are on screen for the layout check")
 	_check_panels(alive_panels, viewport_rect)
+	var banner_rect := _hud._banner_panel.get_global_rect()
+	for other in ["status", "region", "feed"]:
+		_expect(not banner_rect.intersects((alive_panels[other] as Control).get_global_rect()), "new-round banner does not cover %s" % other)
 	# Conteúdo menor encolhe o painel (um Control não encolhe sozinho).
 	_hud.apply_combat_state(_combat(2, 32, "", 0, 0, false))
 	var tall := _hud._weapon_panel.size

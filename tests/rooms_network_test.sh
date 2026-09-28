@@ -122,7 +122,7 @@ code_of() {
 "$GODOT_BIN" --headless --path "$ROOT" -- --mode=server --bind=127.0.0.1 --port="$PORT" \
   --rooms=true --rooms-test=true --countdown-seconds=2 --round-end-delay-seconds=2 \
   --rooms-target-rounds=2 --rooms-expect-peers=10 --rooms-step-gap-msec=2500 \
-  --transition-metrics=true >"$TMP_DIR/server.log" 2>&1 &
+  --transition-metrics=true ${SERVER_EXTRA_ARGS:-} >"$TMP_DIR/server.log" 2>&1 &
 SERVER_PID="$!"
 PIDS+=("$SERVER_PID")
 PROCESS_NAMES+=("server")
@@ -219,6 +219,9 @@ assert_grep "room-a-round-1-active" 'ROUND_STATE state=ACTIVE round_id=1 players
 assert_grep "room-a-round-2-active" 'ROUND_STATE state=ACTIVE round_id=2 players=4 participants=4 room=1' "$S"
 assert_no_grep "room-a-no-third-round" 'ROUND_STATE state=(COUNTDOWN|ACTIVE) round_id=3 .*room=1' "$S"
 assert_grep "room-a-round-1-done" 'ROOMS_TEST_ROUND_DONE room=1 round_id=1 completed=1 ready=0 players=4 result=true' "$S"
+# Fase 10: rodada 2 começa com todos de volta ao ponto inicial (o
+# coordenador tirou todos de lá e sumiu com um item na rodada 1).
+assert_grep "room-a-round-2-reset" 'ROOMS_TEST_RESET room=1 round_id=2 off_spawn=0 stale_epoch=0 bodies=0 pickups_missing=0' "$S"
 assert_grep "room-a-round-2-done" 'ROOMS_TEST_ROUND_DONE room=1 round_id=2 completed=2 ready=0 players=4 result=true' "$S"
 assert_no_grep "room-b-never-counts-down" 'ROUND_STATE state=(COUNTDOWN|ACTIVE|ENDED).*room=2' "$S"
 assert_no_grep "room-c-never-counts-down" 'ROUND_STATE state=(COUNTDOWN|ACTIVE|ENDED).*room=3' "$S"

@@ -376,23 +376,9 @@ func _render_room() -> void:
 		room_players.add_child(row)
 	var total := players.size()
 	var ready_count := int(room_view.get("ready_count", 0))
-	var min_players := int(room_view.get("min_players", RoundRules.MIN_PLAYERS))
 	var phase := str(room_view.get("phase", RoomRules.PHASE_LOBBY))
-	var status := ""
-	match phase:
-		RoomRules.PHASE_COUNTDOWN:
-			status = "Todos prontos! A partida começa em %d s…" % int(ceil(float(room_view.get("countdown_msec", 0)) / 1000.0))
-		RoomRules.PHASE_PLAYING:
-			status = "Partida em andamento."
-		RoomRules.PHASE_RESULTS:
-			status = "Rodada encerrada. Voltando ao lobby da sala…"
-		_:
-			status = "%d de %d jogadores prontos." % [ready_count, total]
-			if total < min_players:
-				status += " Mínimo de %d jogadores para começar." % min_players
-			elif ready_count < total:
-				status += " A partida começa quando todos marcarem PRONTO."
-	room_status.text = status
+	var status_lines := room_status_lines(room_view)
+	room_status.text = "\n".join(PackedStringArray(status_lines))
 	var result: Dictionary = room_view.get("result", {})
 	room_result.visible = not result.is_empty()
 	if not result.is_empty():
@@ -401,6 +387,28 @@ func _render_room() -> void:
 	ready_button.text = "CANCELAR PRONTO" if own_ready() else "PRONTO"
 	ready_button.disabled = phase not in [RoomRules.PHASE_LOBBY, RoomRules.PHASE_COUNTDOWN]
 	print("MENU_ROOM phase=%s players=%d ready=%d own_ready=%s" % [phase, total, ready_count, str(own_ready())])
+	print("MENU_ROOM_STATUS title=%s" % str(status_lines[0]).replace(" ", "_"))
+
+## Fase 10: estado da sala sempre explícito (título + o que fazer). Puro:
+## só o DTO público da sala, sem papel.
+static func room_status_lines(view: Dictionary) -> Array:
+	var players: Array = view.get("players", [])
+	var total := players.size()
+	var ready_count := int(view.get("ready_count", 0))
+	var min_players := int(view.get("min_players", RoundRules.MIN_PLAYERS))
+	match str(view.get("phase", RoomRules.PHASE_LOBBY)):
+		RoomRules.PHASE_COUNTDOWN:
+			return ["TODOS PRONTOS", "A partida começa em %d s…" % int(ceil(float(view.get("countdown_msec", 0)) / 1000.0))]
+		RoomRules.PHASE_PLAYING:
+			return ["RODADA EM ANDAMENTO", "Aguarde o fim da rodada."]
+		RoomRules.PHASE_RESULTS:
+			return ["RESULTADO", "Voltando ao lobby da sala…"]
+	if total < min_players:
+		return ["AGUARDANDO JOGADORES", "%d de %d no mínimo. Envie o código da sala aos amigos." % [total, min_players]]
+	var detail := "%d de %d prontos. A partida começa quando todos marcarem PRONTO." % [ready_count, total]
+	if not (view.get("result", {}) as Dictionary).is_empty():
+		return ["DE VOLTA AO LOBBY", detail + " Todos voltam ao ponto inicial na próxima rodada."]
+	return ["LOBBY DA SALA", detail]
 
 static func _result_text(result: Dictionary) -> String:
 	var winner := "Inocentes venceram" if str(result["winner"]) == "INNOCENTS" else "O assassino venceu"

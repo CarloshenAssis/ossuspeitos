@@ -399,7 +399,7 @@ func _test_online_rooms() -> void:
 			{"peer_id": 6, "label": "Beto", "appearance": "moss", "ready": true, "host": false}]})
 	rooms_menu.show_room(dto, 5)
 	_expect(rooms_menu.panel_name == "room" and rooms_menu.room_title.text == "Sala K7M-2QX", "room shows the display code")
-	_expect(rooms_menu.room_status.text.begins_with("1 de 2 jogadores prontos. Mínimo de 4"), "room shows ready count and the minimum (%s)" % rooms_menu.room_status.text)
+	_expect(rooms_menu.room_status.text == "AGUARDANDO JOGADORES\n2 de 4 no mínimo. Envie o código da sala aos amigos.", "room below the minimum says it is waiting for players (%s)" % rooms_menu.room_status.text)
 	var texts: Array = []
 	for row in rooms_menu.room_players.get_children():
 		for child in row.get_children():
@@ -417,16 +417,44 @@ func _test_online_rooms() -> void:
 	dto["phase"] = "playing"
 	rooms_menu.show_room(dto, 5)
 	_expect((rooms_menu.buttons["room_ready"] as Button).disabled, "ready locked during the round")
+	_expect(rooms_menu.room_status.text.begins_with("RODADA EM ANDAMENTO"), "playing phase is explicit")
 	dto["phase"] = "lobby"
 	dto["result"] = {"round_id": 1, "winner": "ASSASSIN", "reason": "innocents_down", "players": [{"label": "Beto", "role": "ASSASSIN"}]}
 	rooms_menu.show_room(RoomRules.sanitize_room_state(dto), 5)
 	_expect(rooms_menu.room_result.visible and rooms_menu.room_result.text.begins_with("RESULTADO DA RODADA 1: O assassino venceu"), "round result shown back in the room")
+	_expect(rooms_menu.room_status.text.begins_with("AGUARDANDO JOGADORES"), "back with 2 players: still waiting for players")
+	_test_room_status_lines()
 	requests.clear()
 	rooms_menu.press("room_copy")
 	_expect(rooms_menu.room_copy_feedback.visible and rooms_menu.room_copy_feedback.text.contains("K7M-2QX"), "copy shows the code (clipboard or fallback)")
 	rooms_menu.press("room_leave")
 	_expect(requests.size() == 1 and requests[0]["kind"] == "leave", "leave asks to go back")
 	rooms_menu.queue_free()
+
+## Fase 10: cada fase da sala tem um título explícito e o próximo passo.
+func _test_room_status_lines() -> void:
+	var players: Array = []
+	for index in 4:
+		players.append({"peer_id": 5 + index, "label": "P%d" % index, "appearance": "ember", "ready": index < 3, "host": index == 0})
+	var view := {"phase": "lobby", "countdown_msec": 0, "min_players": 4, "ready_count": 3, "result": {}, "players": players}
+	var lobby := DesktopMenu.room_status_lines(view)
+	_expect(lobby[0] == "LOBBY DA SALA" and str(lobby[1]).begins_with("3 de 4 prontos."), "lobby with enough players (%s)" % str(lobby))
+	view["phase"] = "countdown"
+	view["countdown_msec"] = 9200
+	_expect(DesktopMenu.room_status_lines(view) == ["TODOS PRONTOS", "A partida começa em 10 s…"], "countdown says everyone is ready")
+	view["phase"] = "playing"
+	_expect(DesktopMenu.room_status_lines(view)[0] == "RODADA EM ANDAMENTO", "playing")
+	view["phase"] = "results"
+	_expect(DesktopMenu.room_status_lines(view) == ["RESULTADO", "Voltando ao lobby da sala…"], "results")
+	view["phase"] = "lobby"
+	view["ready_count"] = 0
+	view["result"] = {"round_id": 1}
+	var back := DesktopMenu.room_status_lines(view)
+	_expect(back[0] == "DE VOLTA AO LOBBY" and str(back[1]).contains("0 de 4 prontos") and str(back[1]).contains("ponto inicial"), "back to lobby asks for PRONTO again (%s)" % str(back))
+	for phase in ["lobby", "countdown", "playing", "results"]:
+		view["phase"] = phase
+		var text := " ".join(PackedStringArray(DesktopMenu.room_status_lines(view)))
+		_expect(not text.contains("Assassino") and not text.contains("Detetive") and not text.contains("ASSASSIN"), "status of %s has no role" % phase)
 
 ## Fase 9 (PR2): argumentos da página Web vêm só de uma lista fechada.
 func _test_web_query_arguments() -> void:

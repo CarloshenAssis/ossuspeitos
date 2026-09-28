@@ -31,6 +31,7 @@ func _process(_delta: float) -> bool:
 	_test_eliminated_then_spectator()
 	_test_ended_then_new_round()
 	_test_notices_expire()
+	_test_late_join_has_no_banner()
 	if failures > 0:
 		push_error("MATCH_HUD_TEST_FAILED failures=%d checks=%d" % [failures, checks])
 		quit(1)
@@ -104,6 +105,34 @@ func _test_ended_then_new_round() -> void:
 	_expect(not _hud._feed_box.visible and not _hud._notice_box.visible and not _hud._prompt_panel.visible, "round 2 shows no old notice, feed or prompt")
 	_expect(_hud._weapon_title.text == "SEM ARMA" and not _hud._ammo_pips.visible and not _hud._reload_track.visible, "round 2 weapon panel starts empty")
 	_expect(_hud._role_label.text.contains("VÍTIMA"), "round 2 shows only the new private role")
+	# Fase 10: o salto de volta ao ponto inicial é explicado na tela.
+	_expect(_hud._banner_panel.visible and _hud._banner_label.text == RoundHud.NEW_ROUND_BANNER, "round 2 start shows the new-round banner")
+	_expect(not _mentions_role(_hud._banner_label.text), "banner carries no role")
+	_expect(_hud._banner_panel.get_parent() == _hud._status_panel.get_parent() and _hud._banner_panel.anchor_top == 0.0 and _hud._banner_panel.anchor_bottom == 0.0, "banner sits at the top, away from the crosshair")
+	_hud.apply_round_state(_pub(RoundState.ACTIVE, 2), Role.VICTIM, 2, OWN)
+	_expect(_hud._banner_panel.visible, "repeated ACTIVE of the same round keeps (not restarts) the banner")
+	_hud._banner_until = 0
+	_hud._process(0.0)
+	_expect(not _hud._banner_panel.visible, "banner goes away after a few seconds")
+	# ENDED logo depois: o resultado nunca fica atrás do aviso.
+	_hud.apply_round_state(_pub(RoundState.COUNTDOWN, 2), Role.NONE, 0, OWN)
+	_hud.apply_round_state(_pub(RoundState.ACTIVE, 3), Role.VICTIM, 3, OWN)
+	_expect(_hud._banner_panel.visible, "round 3 start shows the banner again")
+	var ended_3 := _pub(RoundState.ENDED, 3)
+	ended_3["winning_team"] = Role.TEAM_ASSASSIN
+	ended_3["winner_reason"] = RoundRules.REASON_INNOCENTS_DOWN
+	_hud.apply_round_state(ended_3, Role.VICTIM, 3, OWN)
+	_expect(_hud._ended_screen.visible and not _hud._banner_panel.visible, "ENDED hides the banner")
+	_hud.apply_round_state(_pub(RoundState.ACTIVE, 4), Role.VICTIM, 4, OWN)
+
+## Quem entra no meio da rodada não saltou para o ponto inicial: sem aviso.
+func _test_late_join_has_no_banner() -> void:
+	var late := RoundHud.new()
+	root.add_child(late)
+	late.apply_roster(ROSTER)
+	late.apply_round_state(_pub(RoundState.ACTIVE, 5), Role.NONE, 0, OWN)
+	_expect(not late._banner_panel.visible, "late join mid-round shows no new-round banner")
+	late.queue_free()
 
 func _test_notices_expire() -> void:
 	_hud.show_rejection("reload", "reserve_empty")

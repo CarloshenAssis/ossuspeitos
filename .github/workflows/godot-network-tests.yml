@@ -422,6 +422,13 @@ jobs:
             | tee "$RUNNER_TEMP/godot-rooms-logs/rooms.log"
           grep -q 'ROOMS_TEST_OK' "$RUNNER_TEMP/godot-rooms-logs/rooms.log"
 
+      - name: Validate transition metrics (phase 10)
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/transition_metrics_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-rooms-logs/transition-metrics.log"
+          grep -q 'TRANSITION_METRICS_TEST_OK' "$RUNNER_TEMP/godot-rooms-logs/transition-metrics.log"
+
       # 3 salas em paralelo (uma joga 2 rodadas, outra fica no lobby, outra
       # troca de anfitrião), isolamento por peer visto em cada cliente.
       - name: Run private rooms network test
@@ -435,6 +442,15 @@ jobs:
           set -o pipefail
           TEST_LOG_DIR="$RUNNER_TEMP/godot-rooms-logs/adversarial" GODOT_BIN="$(command -v godot)" \
             ./tests/rooms_adversarial_test.sh 2>&1 | tee "$RUNNER_TEMP/godot-rooms-logs/rooms-adversarial.log"
+
+      # Fase 10: cada mutação (reset sem volta ao ponto inicial, tela sem o
+      # aviso de nova rodada, estado de outra sala, transição atrasada) tem
+      # de ser pega pelo teste correspondente.
+      - name: Run phase 10 mutation test
+        run: |
+          set -o pipefail
+          TEST_LOG_DIR="$RUNNER_TEMP/godot-rooms-logs/mutations" GODOT_BIN="$(command -v godot)" \
+            ./tests/phase10_mutation_test.sh 2>&1 | tee "$RUNNER_TEMP/godot-rooms-logs/mutations.log"
 
       - name: Upload failure logs
         if: failure()
