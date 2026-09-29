@@ -2,6 +2,8 @@ class_name WeaponRules
 extends RefCounted
 
 const MAX_DAMAGE := 1_000_000.0
+## Alcance da pistola comum (o mesmo da definição oficial do servidor).
+const COMMON_RANGE_METERS := 20.0
 const MAX_CAPACITY := 10_000
 const MAX_FIRE_INTERVAL_MSEC := 3_600_000
 const MAX_RANGE_METERS := 100_000.0

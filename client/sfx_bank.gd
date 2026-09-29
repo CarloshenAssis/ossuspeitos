@@ -11,7 +11,11 @@ const MIX_RATE := 22050
 const NOISE_SEED := 20260924
 
 const NAMES := ["shot", "dry_fire", "hit", "hurt", "pickup_ok", "pickup_deny",
-	"reload_start", "reload_end", "elimination", "ui_move", "ui_confirm", "ui_error"]
+	"reload_start", "reload_end", "elimination", "ui_move", "ui_confirm", "ui_error",
+	"step", "impact_wall", "impact_body", "pickup_world", "body_fall"]
+## Fase 11: ajuste de volume por som (dB, relativo ao volume do canal).
+## Passos bem baixos; impacto e queda discretos.
+const VOLUME_OFFSET_DB := {"step": -14.0, "pickup_world": -8.0, "body_fall": -6.0}
 
 static var _cache: Dictionary = {}
 
@@ -56,6 +60,23 @@ static func _build_all() -> void:
 	_cache["elimination"] = _render(0.4, func(t: float) -> float:
 		var pitch := 420.0 - 240.0 * t / 0.4
 		return 0.22 * sin(TAU * pitch * t) * exp(-t * 6.0))
+	# Fase 11 — passo: batida surda e curta de sola em madeira (grave, sem
+	# chiado), para ouvir que alguém anda perto sem cansar.
+	_cache["step"] = _render(0.07, func(t: float) -> float:
+		return 0.45 * sin(TAU * 95.0 * t) * exp(-t * 60.0) + 0.1 * rng.randf_range(-1.0, 1.0) * exp(-t * 140.0))
+	# Impacto em parede/piso: estalo seco de lasca, mais curto que o disparo.
+	_cache["impact_wall"] = _render(0.08, func(t: float) -> float:
+		return 0.35 * rng.randf_range(-1.0, 1.0) * exp(-t * 85.0) + 0.15 * sin(TAU * 1300.0 * t) * exp(-t * 90.0))
+	# Impacto em jogador: baque abafado (grave), sem tom de "acerto" (esse é
+	# só de quem atirou e só com confirmação).
+	_cache["impact_body"] = _render(0.1, func(t: float) -> float:
+		return 0.4 * sin(TAU * 140.0 * t) * exp(-t * 45.0) + 0.12 * rng.randf_range(-1.0, 1.0) * exp(-t * 70.0))
+	# Coleta de outro jogador: clique metálico curto (sem as notas do próprio).
+	_cache["pickup_world"] = _render(0.06, func(t: float) -> float:
+		return 0.25 * sin(TAU * 1100.0 * t) * exp(-t * 80.0) + 0.1 * rng.randf_range(-1.0, 1.0) * exp(-t * 150.0))
+	# Corpo no chão: baque grave e longo.
+	_cache["body_fall"] = _render(0.22, func(t: float) -> float:
+		return 0.5 * sin(TAU * 60.0 * t) * exp(-t * 16.0) + 0.15 * rng.randf_range(-1.0, 1.0) * exp(-t * 35.0))
 	# Menu (fase 7): toques baixos e curtos, como madeira e metal da mansão.
 	# Navegar: batida de madeira bem discreta.
 	_cache["ui_move"] = _render(0.05, func(t: float) -> float:

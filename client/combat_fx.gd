@@ -27,6 +27,7 @@ const WORLD_VOLUME_DB := -4.0
 const WORLD_MAX_DISTANCE := 40.0
 
 const WALL_IMPACT := Color(0.85, 0.8, 0.7)
+const FLOOR_IMPACT := Color(0.55, 0.47, 0.38)
 const PLAYER_IMPACT := Color(0.7, 0.22, 0.2)
 const SMOKE := Color(0.35, 0.36, 0.4)
 
@@ -43,7 +44,8 @@ func _ready() -> void:
 		player.volume_db = UI_VOLUME_DB
 		add_child(player)
 		_ui_players.append(player)
-	for index in 6:
+	# Passos de vários jogadores e disparos ao mesmo tempo: mais vozes.
+	for index in 10:
 		var player := AudioStreamPlayer3D.new()
 		player.volume_db = WORLD_VOLUME_DB
 		player.max_distance = WORLD_MAX_DISTANCE
@@ -59,14 +61,16 @@ func play_ui(sound_name: String) -> void:
 	var player: AudioStreamPlayer = _ui_players[_next_ui]
 	_next_ui = (_next_ui + 1) % _ui_players.size()
 	player.stream = SfxBank.stream(sound_name)
+	player.volume_db = UI_VOLUME_DB + float(SfxBank.VOLUME_OFFSET_DB.get(sound_name, 0.0))
 	player.play()
 
 ## Som de um evento público no mundo, na posição oficial do evento.
-func play_world(sound_name: String, position: Vector3) -> void:
+func play_world(sound_name: String, position: Vector3, volume_offset_db: float = 0.0) -> void:
 	_log(sound_name + "@world", position)
 	var player: AudioStreamPlayer3D = _world_players[_next_world]
 	_next_world = (_next_world + 1) % _world_players.size()
 	player.stream = SfxBank.stream(sound_name)
+	player.volume_db = WORLD_VOLUME_DB + volume_offset_db + float(SfxBank.VOLUME_OFFSET_DB.get(sound_name, 0.0))
 	player.global_position = position
 	player.play()
 
@@ -87,15 +91,43 @@ func muzzle_flash(origin: Vector3, direction: Vector3) -> void:
 
 ## Marca de impacto no fim oficial do tiro. `hit_player` é público no evento de
 ## disparo; quem foi atingido não é.
-func impact(point: Vector3, hit_player: bool) -> void:
-	_log("impact_player" if hit_player else "impact_wall", point)
-	var puff := _blob(point, 0.06, PLAYER_IMPACT if hit_player else WALL_IMPACT, 0.4)
+## Fase 11: `surface` = "player", "wall" ou "floor" (`PublicCombatState`), ou
+## o booleano antigo `hit_player`. Cada superfície tem cor, forma e som
+## próprios; o de jogador nunca mostra vida nem quem foi atingido.
+func impact(point: Vector3, surface: Variant) -> void:
+	var kind := str(surface)
+	if typeof(surface) == TYPE_BOOL:
+		kind = "player" if bool(surface) else "wall"
+	match kind:
+		"player":
+			_log("impact_player", point)
+			_puff(point, 0.07, PLAYER_IMPACT, 0.4, IMPACT_GROWTH)
+			# Respingo escuro menor, sem sangue exagerado.
+			_puff(point, 0.035, PLAYER_IMPACT.darkened(0.4), 0.0, IMPACT_GROWTH * 1.4)
+			play_world("impact_body", point, -6.0)
+		"floor":
+			_log("impact_floor", point)
+			_puff(point + Vector3.UP * 0.03, 0.05, FLOOR_IMPACT, 0.0, IMPACT_GROWTH * 1.3, Vector3(1.6, 0.45, 1.6))
+			play_world("impact_wall", point, -10.0)
+		_:
+			_log("impact_wall", point)
+			_puff(point, 0.05, WALL_IMPACT, 0.4, IMPACT_GROWTH)
+			_puff(point, 0.02, Color(1.0, 0.8, 0.45), 1.2, 1.2)
+			play_world("impact_wall", point, -8.0)
+
+func _puff(point: Vector3, radius: float, color: Color, glow: float, growth: float, stretch: Vector3 = Vector3.ONE) -> void:
+	var puff := _blob(point, radius, color, glow)
+	puff.scale = stretch
 	(puff.material_override as StandardMaterial3D).albedo_color.a = IMPACT_ALPHA
 	var tween := puff.create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(puff, "scale", Vector3.ONE * IMPACT_GROWTH, IMPACT_SECONDS)
+	tween.tween_property(puff, "scale", stretch * growth, IMPACT_SECONDS)
 	tween.tween_property(puff.material_override, "albedo_color:a", 0.0, IMPACT_SECONDS)
 	_expire(puff, IMPACT_SECONDS)
+
+## Registro de um efeito feito fora daqui (traçador), para os testes.
+func log_event(kind: String, position: Vector3) -> void:
+	_log(kind, position)
 
 ## Anel curto onde um pickup deixou de estar disponível (estado público).
 func pickup_vanish(point: Vector3, color: Color) -> void:

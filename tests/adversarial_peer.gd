@@ -232,7 +232,8 @@ func world_snapshot(payload) -> void:
 	# outro jogador nunca aparecem. O ACK é só do próprio atacante.
 	if typeof(payload) != TYPE_DICTIONARY or typeof((payload as Dictionary).get("players")) != TYPE_ARRAY:
 		return
-	var allowed := ["peer_id", "position", "velocity", "yaw", "pitch", "spawn_index", "epoch"]
+	# Fase 11: `armed` (segura pistola) é público; o resto do estado de combate não.
+	var allowed := PublicCombatState.PLAYER_KEYS + PublicCombatState.PLAYER_OPTIONAL
 	for player in (payload as Dictionary)["players"]:
 		for key in (player as Dictionary).keys():
 			if str(key) not in allowed:

@@ -20,11 +20,14 @@ var health: Dictionary = {}
 var _sequences: Dictionary = {}
 var _last_action_msec: Dictionary = {}
 var active_round_id := 0
+## Fase 11: número do disparo oficial na rodada (público, só para o cliente
+## não repetir efeito de um evento já mostrado).
+var shot_counter := 0
 
 func _init(rounds: RoundAuthority, authoritative_world: AuthoritativeWorld) -> void:
 	round_authority = rounds
 	world = authoritative_world
-	var definition := WeaponDefinition.new(COMMON_WEAPON_ID, 34, 6, 18, WeaponRules.COMMON_FIRE_INTERVAL_MSEC, 20.0, 1200, 0.0)
+	var definition := WeaponDefinition.new(COMMON_WEAPON_ID, 34, 6, 18, WeaponRules.COMMON_FIRE_INTERVAL_MSEC, WeaponRules.COMMON_RANGE_METERS, 1200, 0.0)
 	inventory = InventoryAuthority.new({COMMON_WEAPON_ID: definition})
 	combat_rules = CombatRules.new(inventory)
 
@@ -50,6 +53,7 @@ func begin_round(round_id: int, participant_ids: Array) -> void:
 
 func clear_round() -> void:
 	active_round_id = 0
+	shot_counter = 0
 	health.clear()
 	_sequences.clear()
 	_last_action_msec.clear()
@@ -124,7 +128,8 @@ func request_fire(peer_id: int, sequence: Variant, now_msec: int) -> Dictionary:
 		endpoint = shot["origin"] + shot["direction"] * float(hit["distance"])
 	if int(hit.get("peer_id", 0)) > 0:
 		_apply_damage(int(hit["peer_id"]), peer_id, int(shot["damage"]), now_msec)
-	var event := {"round_id": shot_round_id, "shooter_peer_id": peer_id,
+	shot_counter += 1
+	var event := {"round_id": shot_round_id, "shot_id": shot_counter, "shooter_peer_id": peer_id,
 		"origin": shot["origin"], "end": endpoint, "hit_player": int(hit.get("peer_id", 0)) > 0}
 	shot_resolved.emit(event)
 	private_state_changed.emit(peer_id, private_state(peer_id))
@@ -140,6 +145,14 @@ func private_state(peer_id: int) -> Dictionary:
 	return {"round_id": active_round_id, "health": int(health[peer_id]),
 		"weapon_id": str(held.get("weapon_id", "")), "magazine": int(held.get("magazine", 0)),
 		"reserve": int(held.get("reserve", 0)), "reloading": bool(held.get("reloading", false))}
+
+## Fase 11: aparência pública "segurando pistola". Só o que qualquer um vê no
+## mundo: arma na mão de um participante vivo numa rodada ativa. Nunca
+## munição, vida, papel ou inventário; morto, fora da rodada ou sem arma = false.
+func public_armed(peer_id: int) -> bool:
+	if not _is_active_round() or not round_authority.is_alive(peer_id) or not inventory.inventories.has(peer_id):
+		return false
+	return not str(inventory.get_inventory(peer_id).get("weapon_id", "")).is_empty()
 
 func public_pickups() -> Array:
 	return inventory.public_pickups()

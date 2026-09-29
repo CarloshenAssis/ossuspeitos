@@ -575,6 +575,18 @@ func _broadcast_snapshot() -> void:
 	if shutting_down or authoritative_world == null:
 		return
 	var players := authoritative_world.snapshot()
+	# Fase 11: aparência pública "segurando pistola", decidida só aqui (estado
+	# oficial da sala corrente). Nada de munição, vida, papel ou inventário.
+	for raw_player in players:
+		var player: Dictionary = raw_player
+		player["armed"] = combat_authority != null and combat_authority.public_armed(int(player["peer_id"]))
+	if test_mutation == "cross_room_armed" and rooms_enabled and room_registry != null:
+		for raw_room in room_registry.rooms.values():
+			if raw_room == current_room: continue
+			for other_peer in (raw_room as MatchRoom).lobby.peer_ids():
+				if _peer_socket_open(int(other_peer)):
+					world_snapshot.rpc_id(int(other_peer), {"tick": server_tick, "session": session_nonce,
+						"players": players, "ack": {}})
 	for peer_id in lobby.peer_ids():
 		# Conexão já fechando (o cliente caiu e o aviso de desconexão ainda não
 		# chegou): enviar só gera erro do engine no log a cada snapshot.
@@ -1430,11 +1442,13 @@ func world_snapshot(payload: Dictionary) -> void:
 	if probe_joined_msec > 0:
 		probe_snapshots += 1
 		_check_probe_traffic()
+	# Fase 11: só o formato público (allowlist); entrada com chave ou tipo
+	# estranho é descartada inteira.
 	var states: Array = []
 	for raw_state in payload["players"]:
-		if typeof(raw_state) == TYPE_DICTIONARY and typeof((raw_state as Dictionary).get("peer_id")) == TYPE_INT \
-				and typeof((raw_state as Dictionary).get("position")) == TYPE_VECTOR3:
-			states.append(raw_state)
+		var clean_state := PublicCombatState.sanitize_player(raw_state)
+		if not clean_state.is_empty():
+			states.append(clean_state)
 	var ack: Dictionary = payload.get("ack", {})
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "snapshot", payload)
 	var own_id := multiplayer.get_unique_id()
@@ -1830,6 +1844,9 @@ func round_public_state(payload: Dictionary) -> void:
 	var previous_state := int(local_round_public.get("state", RoundState.WAITING))
 	local_round_public = payload
 	var state := int(payload.get("state", RoundState.WAITING))
+	# Fase 11: efeitos de combate só da rodada oficial corrente.
+	if arena_view != null:
+		arena_view.set_round(int(payload.get("round_id", 0)) if state == RoundState.ACTIVE else 0)
 	if state == RoundState.ACTIVE and previous_state != RoundState.ACTIVE:
 		# A rodada abriu uma época nova no servidor: espera o próximo ACK.
 		awaiting_epoch_sync = true
@@ -2206,10 +2223,14 @@ func pickup_public_state(payload: Array) -> void:
 func combat_public_shot(payload: Dictionary) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1: return
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "shot", payload)
-	if int(payload.get("shooter_peer_id", 0)) == multiplayer.get_unique_id():
+	var event := PublicCombatState.sanitize_shot(payload)
+	if event.is_empty():
+		print("CLIENT_SHOT_REJECTED id=%s" % client_label)
+		return
+	if int(event["shooter_peer_id"]) == multiplayer.get_unique_id():
 		net_stats.action_resolved(NetSync.ACTION_FIRE, net_stats.oldest_action(NetSync.ACTION_FIRE))
 	if arena_view != null:
-		arena_view.show_shot(payload)
+		arena_view.show_shot(event)
 
 @rpc("authority", "call_remote", "reliable")
 func combat_public_elimination(peer_id: int) -> void:
@@ -2294,7 +2315,7 @@ func round_body_added(payload: Dictionary) -> void:
 	if dto.is_empty() or int(dto["round_id"]) != int(local_round_public.get("round_id", 0)):
 		print("CLIENT_BODY_IGNORED id=%s reason=%s" % [client_label, "invalid" if dto.is_empty() else "stale_round"])
 		return
-	_accept_body(dto)
+	_accept_body(dto, true)
 
 ## Estado completo dos corpos (entrada no meio da rodada) ou limpeza (nova rodada).
 @rpc("authority", "call_remote", "reliable")
@@ -2319,7 +2340,7 @@ func round_bodies_state(payload: Dictionary) -> void:
 		if not dto.is_empty() and int(dto["round_id"]) == int(payload["round_id"]):
 			_accept_body(dto)
 
-func _accept_body(dto: Dictionary) -> void:
+func _accept_body(dto: Dictionary, animate: bool = false) -> void:
 	if online_rooms: _note_peer(dto.get("peer_id", 0), "body")
 	for existing in local_bodies.values():
 		if int(existing["body_id"]) == int(dto["body_id"]) or (int(existing["peer_id"]) == int(dto["peer_id"]) and int(existing["round_id"]) == int(dto["round_id"])):
@@ -2327,7 +2348,7 @@ func _accept_body(dto: Dictionary) -> void:
 			return
 	local_bodies[int(dto["body_id"])] = dto
 	if arena_view != null:
-		arena_view.add_body(dto)
+		arena_view.add_body(dto, animate)
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "body", dto)
 	metrics.end("elimination_to_body")
 	print("CLIENT_BODY_SHOWN id=%s round_id=%d bodies=%d" % [client_label, int(dto["round_id"]), local_bodies.size()])

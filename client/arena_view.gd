@@ -89,6 +89,33 @@ const PREDICTED_SHOT_TIMEOUT_MSEC := 2000
 ## Margem sobre a cadência oficial para antecipar o efeito (o servidor decide).
 const PREDICTED_SHOT_MARGIN_MSEC := 50
 
+## Fase 11: rodada oficial corrente (a rede informa). Evento de outra rodada
+## (callback antigo) não mostra nada.
+var current_round_id := 0
+## (rodada, número do tiro) já mostrados: evento repetido não repete efeito.
+var _seen_shots: Dictionary = {}
+const MAX_SEEN_SHOTS := 256
+## Acertos próprios anunciados no evento público e ainda sem confirmação: a
+## confirmação privada só vira marcador se houver um tiro próprio pendente.
+var _pending_hit_confirms := 0
+var hit_markers_shown := 0
+## `armed` anterior de cada jogador (som de coleta alheia sem repetir).
+var _armed_prev: Dictionary = {}
+## Passos do próprio jogador: distância apresentada acumulada.
+const OWN_STEP_DISTANCE := 1.15
+const OWN_STEP_TELEPORT := 1.5
+var _own_step_distance := 0.0
+var _own_step_last := Vector3.INF
+var own_footsteps := 0
+static var _mutation := ""
+static var _mutation_read := false
+
+static func test_mutation() -> String:
+	if not _mutation_read:
+		_mutation_read = true
+		_mutation = NetworkConfig.test_mutation(NetworkConfig.user_arguments())
+	return _mutation
+
 func _ready() -> void:
 	_ensure_input_actions()
 	_build_arena()
@@ -257,11 +284,22 @@ func _process(delta: float) -> void:
 		for part in avatar.get_children():
 			(part as Node3D).visible = show_model
 		if animator != null:
+			var alive := bool(_alive_flags.get(peer_id, true))
+			var armed := public_armed(peer_id) and alive and avatar.visible
+			if armed and not bool(_armed_prev.get(peer_id, false)) and not bool(sample["discontinuity"]):
+				# Coleta alheia (pública: o item some do chão): som discreto no local.
+				fx.play_world("pickup_world", avatar.global_position)
+			_armed_prev[peer_id] = armed
+			animator.armed = armed
+			animator.aim_pitch = float(sample["pitch"])
 			if character_animation and show_model and avatar.visible:
 				animator.update(avatar.position, avatar.rotation.y, delta)
-			elif animator.amplitude > 0.0 or animator.speed > 0.0:
+				for _step in animator.take_footsteps():
+					fx.play_world("step", avatar.global_position + Vector3.DOWN * MovementRules.PLAYER_HEIGHT)
+			elif animator.amplitude > 0.0 or animator.speed > 0.0 or animator.armed_blend > 0.0:
 				animator.rest()
 	_update_local_view(delta)
+	_track_own_steps()
 	_expire_predicted_shots()
 	_visual_time += delta
 	for pickup_id in pickup_nodes:
@@ -395,6 +433,37 @@ func camera_origin() -> Vector3:
 func camera_direction() -> Vector3:
 	return -camera.global_transform.basis.z.normalized() if camera != null else Vector3.FORWARD
 
+## Pistola na mão de outro jogador: só o `armed` oficial do snapshot.
+func public_armed(peer_id: int) -> bool:
+	if test_mutation() == "client_fake_armed":
+		return true
+	return bool((targets.get(peer_id, {}) as Dictionary).get("armed", false))
+
+## Pistola visível na mão do avatar de outro jogador (apresentação atual).
+func held_weapon_visible(peer_id: int) -> bool:
+	var animator: CharacterAnimator = animators.get(peer_id)
+	return animator != null and avatars.has(peer_id) and (avatars[peer_id] as Node3D).visible and animator.held_weapon_visible()
+
+## Passos do próprio jogador pela posição apresentada (nunca pelo input bruto):
+## salto grande (reset de rodada, correção) zera a conta sem tocar.
+func _track_own_steps() -> void:
+	if not gameplay_visuals or spectator_target_peer_id != 0 or player_rig == null:
+		_own_step_last = Vector3.INF
+		_own_step_distance = 0.0
+		return
+	var position := player_rig.position
+	if _own_step_last != Vector3.INF:
+		var moved := Vector2(position.x - _own_step_last.x, position.z - _own_step_last.z).length()
+		if moved > OWN_STEP_TELEPORT:
+			_own_step_distance = 0.0
+		else:
+			_own_step_distance += moved
+			if _own_step_distance >= OWN_STEP_DISTANCE:
+				_own_step_distance = 0.0
+				own_footsteps += 1
+				fx.play_ui("step")
+	_own_step_last = position
+
 var _combat_has_weapon := false
 
 const RELOAD_POSE := Vector3(-0.45, 0.25, 0.2)
@@ -518,7 +587,10 @@ func set_gameplay_visuals(active: bool) -> void:
 
 func _refresh_gameplay_visuals() -> void:
 	if crosshair != null: crosshair.visible = gameplay_visuals
-	if weapon_model != null: weapon_model.visible = gameplay_visuals and _combat_has_weapon
+	if weapon_model != null:
+		weapon_model.visible = gameplay_visuals and _combat_has_weapon
+		if test_mutation() == "dead_weapon_visible" and not str(_combat_prev.get("weapon_id", "")).is_empty():
+			weapon_model.visible = true
 
 func apply_pickups(entries: Array) -> void:
 	pickup_states.clear()
@@ -555,22 +627,39 @@ func nearest_available_pickup() -> String:
 			nearest = pickup_id
 	return nearest
 
-func show_shot(payload: Dictionary) -> void:
-	if not payload.has("origin") or not payload.has("end"): return
-	var tracer := MeshInstance3D.new()
+## Rodada oficial corrente: troca de rodada esquece tiros vistos e acertos
+## pendentes (nada da rodada anterior aparece depois).
+func set_round(round_id: int) -> void:
+	if round_id == current_round_id:
+		return
+	current_round_id = round_id
+	_seen_shots.clear()
+	_pending_hit_confirms = 0
+
+## Evento público de disparo já sanitizado (`PublicCombatState.sanitize_shot`).
+## Devolve false quando o evento não mostra nada (repetido ou de outra rodada).
+func show_shot(payload: Dictionary) -> bool:
+	if not payload.has("origin") or not payload.has("end"): return false
+	var round_id := int(payload.get("round_id", 0))
+	if current_round_id > 0 and round_id > 0 and round_id != current_round_id:
+		return false
+	var shot_id := int(payload.get("shot_id", 0))
+	if shot_id > 0:
+		var key := "%d:%d" % [round_id, shot_id]
+		if _seen_shots.has(key):
+			return false
+		_seen_shots[key] = true
+		if _seen_shots.size() > MAX_SEEN_SHOTS:
+			_seen_shots.erase(_seen_shots.keys()[0])
 	var start: Vector3 = payload["origin"]
 	var finish: Vector3 = payload["end"]
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.025, 0.025, start.distance_to(finish))
-	tracer.mesh = mesh
-	tracer.position = (start + finish) * 0.5
-	tracer.look_at(finish, Vector3.UP)
-	add_child(tracer)
-	var timer := get_tree().create_timer(0.08)
-	timer.timeout.connect(tracer.queue_free)
+	var shooter := int(payload.get("shooter_peer_id", 0))
+	var own := shooter == local_peer_id and local_peer_id != 0
 	# Quem atirou vem no evento público; o alvo não. O próprio disparo tem som
-	# e recuo na primeira pessoa; o dos outros tem clarão e som na origem.
-	if int(payload.get("shooter_peer_id", 0)) == local_peer_id and local_peer_id != 0:
+	# e recuo na primeira pessoa; o dos outros tem clarão na boca da pistola da
+	# mão (ou na origem oficial), recuo do braço e som no local.
+	var tracer_start := start
+	if own:
 		# Disparo já antecipado no clique: o oficial confirma sem repetir som e
 		# recuo. Sem antecipação, o efeito sai agora.
 		if predicted_shots.is_empty():
@@ -578,13 +667,44 @@ func show_shot(payload: Dictionary) -> void:
 			_recoil()
 		else:
 			predicted_shots.pop_front()
+		if bool(payload.get("hit_player", false)):
+			_pending_hit_confirms += 1
 	else:
-		fx.muzzle_flash(start, finish - start)
+		var animator: CharacterAnimator = animators.get(shooter)
+		if animator != null and held_weapon_visible(shooter):
+			var muzzle := animator.muzzle_position()
+			if muzzle != Vector3.INF:
+				tracer_start = muzzle
+			animator.kick()
+		fx.muzzle_flash(tracer_start, finish - tracer_start)
 		fx.play_world("shot", start)
+	_tracer(tracer_start, finish)
 	# Impacto colado na própria câmera (é você quem foi atingido) viraria uma
 	# mancha no centro da tela; aí basta o retorno de dano do estado privado.
-	if finish.distance_to(camera_origin()) > IMPACT_CAMERA_CLEARANCE:
-		fx.impact(finish, bool(payload.get("hit_player", false)))
+	var surface := PublicCombatState.impact_surface(payload, WeaponRules.COMMON_RANGE_METERS)
+	if surface != PublicCombatState.SURFACE_NONE and finish.distance_to(camera_origin()) > IMPACT_CAMERA_CLEARANCE:
+		fx.impact(finish, surface)
+	return true
+
+## Traçador curto (80 ms) do ponto de saída ao fim oficial.
+func _tracer(start: Vector3, finish: Vector3) -> void:
+	if start.distance_to(finish) < 0.05:
+		return
+	var tracer := MeshInstance3D.new()
+	tracer.name = "Tracer"
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.02, 0.02, start.distance_to(finish))
+	tracer.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(1.0, 0.9, 0.65, 0.55)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	tracer.material_override = material
+	add_child(tracer)
+	tracer.global_position = (start + finish) * 0.5
+	tracer.look_at(finish, Vector3.UP if absf((finish - start).normalized().y) < 0.99 else Vector3.RIGHT)
+	fx.log_event("tracer", start)
+	get_tree().create_timer(0.08).timeout.connect(tracer.queue_free)
 
 ## Efeito local imediato do próprio disparo (som e recuo), só quando o estado
 ## oficial conhecido permite atirar. Tracer, impacto, dano e hit marker
@@ -619,10 +739,19 @@ func _expire_predicted_shots() -> void:
 		predicted_shots.pop_front()
 		unconfirmed_predicted_shots += 1
 
-func show_hit_marker() -> void:
+## Confirmação privada de acerto: só vira marcador se um tiro próprio com
+## acerto oficial foi mostrado e ainda não foi confirmado (evento repetido não
+## repete marcador; recusa nunca chega aqui).
+func show_hit_marker() -> bool:
+	if _pending_hit_confirms <= 0 and test_mutation() != "duplicate_hit_marker":
+		return false
+	_pending_hit_confirms = maxi(0, _pending_hit_confirms - 1)
 	if crosshair != null and crosshair.visible:
 		crosshair.show_hit()
 		fx.play_ui("hit")
+		hit_markers_shown += 1
+		return true
+	return false
 
 func set_player_alive(peer_id: int, alive: bool) -> void:
 	_alive_flags[peer_id] = alive
@@ -711,7 +840,13 @@ static func _body_fits(center: Vector3, axis: Vector3) -> bool:
 
 ## Adiciona o corpo de um DTO oficial já validado. Repetido (mesmo corpo ou
 ## mesmo jogador na mesma rodada) não cria outro.
-func add_body(dto: Dictionary) -> bool:
+## `animate`: corpo de uma eliminação que acabou de acontecer (queda curta);
+## estado completo de quem entrou depois aparece já deitado.
+const BODY_FALL_SECONDS := 0.3
+const BODY_FALL_START_TILT := 0.75
+const BODY_FALL_START_HEIGHT := 0.4
+
+func add_body(dto: Dictionary, animate: bool = false) -> bool:
 	var body_id := int(dto.get("body_id", 0))
 	if body_id <= 0 or bodies.has(body_id):
 		return false
@@ -720,7 +855,29 @@ func add_body(dto: Dictionary) -> bool:
 			return false
 	var node := _build_body(dto)
 	bodies[body_id] = node
+	if animate:
+		_animate_fall(node)
 	return true
+
+## Queda curta antes da pose final (sem física, sem colisão): o corpo sai
+## inclinado e um pouco acima e assenta na pose oficial deitada.
+func _animate_fall(root: Node3D) -> void:
+	var fall := root.get_node_or_null("Fall") as Node3D
+	if fall == null or not is_inside_tree():
+		return
+	var final_rotation := fall.rotation
+	var final_position := fall.position
+	fall.rotation.x = final_rotation.x - BODY_FALL_START_TILT
+	fall.position.y = final_position.y + BODY_FALL_START_HEIGHT
+	var tween := fall.create_tween()
+	tween.set_parallel(true)
+	tween.set_ease(Tween.EASE_IN)
+	tween.set_trans(Tween.TRANS_QUAD)
+	tween.tween_property(fall, "rotation", final_rotation, BODY_FALL_SECONDS)
+	tween.tween_property(fall, "position", final_position, BODY_FALL_SECONDS)
+	var landing := root.global_position
+	tween.chain().tween_callback(func(): fx.play_world("body_fall", landing))
+	fx.log_event("body_fall_start", landing)
 
 ## Remove todos os corpos (ou os que não são da rodada `keep_round`).
 func clear_bodies(keep_round: int = -1) -> void:

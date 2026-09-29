@@ -51,7 +51,14 @@ static func effective_protocol_version(arguments: Dictionary) -> int:
 ##   no_round_banner      nova rodada sem o aviso na tela;
 ##   cross_room_leak      estado de uma sala enviado também a outra sala;
 ##   slow_room_transition estado da sala publicado 1,5 s atrasado.
-const TEST_MUTATIONS := ["no_teleport", "no_round_banner", "cross_room_leak", "slow_room_transition"]
+## Fase 11:
+##   client_fake_armed    cliente mostra pistola sem coleta oficial;
+##   duplicate_hit_marker marcador de acerto repetido por evento repetido;
+##   step_on_reset        passo toca no teleporte de reset;
+##   cross_room_armed     snapshot (com arma) de uma sala enviado a outra;
+##   dead_weapon_visible  pistola visível para morto/espectador.
+const TEST_MUTATIONS := ["no_teleport", "no_round_banner", "cross_room_leak", "slow_room_transition",
+	"client_fake_armed", "duplicate_hit_marker", "step_on_reset", "cross_room_armed", "dead_weapon_visible"]
 
 static func test_mutation(arguments: Dictionary) -> String:
 	var value := str(arguments.get("test-mutation", ""))
