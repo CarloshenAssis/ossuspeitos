@@ -142,6 +142,11 @@ const HALL_EXTRA_CAPACITY := 16
 var test_mutation := ""
 ## Fase 11: últimos valores públicos de `armed` registrados (servidor e cliente).
 var server_armed_logged: Dictionary = {}
+## Fase 11 (teste gráfico, só binário de desenvolvimento com janela): grava a
+## tela uma vez por situação, alguns quadros depois do evento oficial.
+var presence_capture_dir := ""
+var _presence_pending: Dictionary = {}
+var _presence_done: Dictionary = {}
 var client_armed_logged: Dictionary = {}
 ## Sessão no servidor online (mensagens de erro sem endereço digitado).
 var online_session := false
@@ -162,6 +167,10 @@ func _ready() -> void:
 	arguments = NetworkConfig.user_arguments()
 	metrics = TransitionMetrics.from_arguments(arguments)
 	test_mutation = NetworkConfig.test_mutation(arguments)
+	if arguments.has("presence-capture-dir") and OS.is_debug_build() and not OS.has_feature("template") \
+			and DisplayServer.get_name() != "headless":
+		presence_capture_dir = str(arguments["presence-capture-dir"])
+		DirAccess.make_dir_recursive_absolute(presence_capture_dir)
 	if not test_mutation.is_empty():
 		print("TEST_MUTATION name=%s" % test_mutation)
 	mode = str(arguments.get("mode", ""))
@@ -472,6 +481,8 @@ func _process(_delta: float) -> void:
 		return
 	if arena_prewarm_frames > 0:
 		_advance_arena_prewarm()
+	if not _presence_pending.is_empty():
+		_advance_presence_capture()
 	if metrics_hitch_frames > 0:
 		_track_render_hitch()
 	# O prazo é de conexão: depois do encerramento combinado com o servidor
@@ -501,6 +512,22 @@ func _restart_hitch_window() -> void:
 
 ## Relógio de parede entre quadros (o `delta` do motor pode ser suavizado):
 ## a primeira medida vai da troca de tela até o primeiro quadro desenhado.
+func _presence_capture(scene: String, frames: int = 2) -> void:
+	if presence_capture_dir.is_empty() or _presence_done.has(scene) or _presence_pending.has(scene):
+		return
+	_presence_pending[scene] = frames
+
+func _advance_presence_capture() -> void:
+	for scene in _presence_pending.keys():
+		_presence_pending[scene] = int(_presence_pending[scene]) - 1
+		if int(_presence_pending[scene]) > 0:
+			continue
+		_presence_pending.erase(scene)
+		_presence_done[scene] = true
+		var path := presence_capture_dir.path_join("%s_%s.png" % [client_label, scene])
+		get_viewport().get_texture().get_image().save_png(path)
+		print("PRESENCE_SESSION_CAPTURE id=%s scene=%s" % [client_label, scene])
+
 func _track_render_hitch() -> void:
 	var now := Time.get_ticks_usec()
 	metrics_hitch_max_ms = maxf(metrics_hitch_max_ms, float(now - metrics_hitch_last_usec) / 1000.0)
@@ -1460,6 +1487,8 @@ func world_snapshot(payload: Dictionary) -> void:
 			if bool(client_armed_logged.get(seen_peer, false)) != bool(clean_state["armed"]):
 				client_armed_logged[seen_peer] = bool(clean_state["armed"])
 				print("CLIENT_ARMED_SEEN id=%s peer=%d armed=%s" % [client_label, seen_peer, str(clean_state["armed"])])
+				if seen_peer != multiplayer.get_unique_id():
+					_presence_capture("other_armed" if bool(clean_state["armed"]) else "other_unarmed", 20)
 	var ack: Dictionary = payload.get("ack", {})
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "snapshot", payload)
 	var own_id := multiplayer.get_unique_id()
@@ -1855,6 +1884,8 @@ func round_public_state(payload: Dictionary) -> void:
 	var previous_state := int(local_round_public.get("state", RoundState.WAITING))
 	local_round_public = payload
 	var state := int(payload.get("state", RoundState.WAITING))
+	if state == RoundState.ACTIVE and int(payload.get("round_id", 0)) >= 2:
+		_presence_capture("reset", 20)
 	# Fase 11: efeitos de combate só da rodada oficial corrente.
 	if arena_view != null:
 		arena_view.set_round(int(payload.get("round_id", 0)) if state == RoundState.ACTIVE else 0)
@@ -1913,6 +1944,7 @@ func round_private_spectator_targets(payload: Dictionary) -> void:
 		return
 	var target_round_id := int(payload["round_id"])
 	var targets: Array = (payload["targets"] as Array).duplicate()
+	_presence_capture("spectator", 30)
 	if int(local_round_public.get("state", RoundState.WAITING)) != RoundState.ACTIVE \
 			or target_round_id != int(local_round_public.get("round_id", 0)):
 		return
@@ -2218,6 +2250,8 @@ func combat_private_state(payload: Dictionary) -> void:
 	if multiplayer.is_server() or multiplayer.get_remote_sender_id() != 1: return
 	local_combat_state = payload.duplicate(true)
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "private", payload)
+	if int(payload.get("health", 0)) > 0:
+		_presence_capture("own_armed" if not str(payload.get("weapon_id", "")).is_empty() else "own_unarmed", 20)
 	if arena_view != null:
 		arena_view.apply_combat_state(local_combat_state)
 	_update_round_hud()
@@ -2239,6 +2273,7 @@ func combat_public_shot(payload: Dictionary) -> void:
 		print("CLIENT_SHOT_REJECTED id=%s" % client_label)
 		return
 	print("CLIENT_SHOT_SEEN id=%s round=%d shot=%d hit=%s" % [client_label, int(event["round_id"]), int(event["shot_id"]), str(event["hit_player"])])
+	_presence_capture("shot_hit_player" if bool(event["hit_player"]) else "shot_wall", 1)
 	if int(event["shooter_peer_id"]) == multiplayer.get_unique_id():
 		net_stats.action_resolved(NetSync.ACTION_FIRE, net_stats.oldest_action(NetSync.ACTION_FIRE))
 	if arena_view != null:
@@ -2250,6 +2285,7 @@ func combat_public_elimination(peer_id: int) -> void:
 	if online_rooms: _note_peer(peer_id, "elimination")
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "elimination", peer_id)
 	metrics.begin("elimination_to_body")
+	_presence_capture("elimination", 6)
 	if arena_view != null:
 		arena_view.show_elimination(peer_id)
 	if round_hud != null: round_hud.call("apply_elimination", peer_id)
@@ -2364,6 +2400,7 @@ func _accept_body(dto: Dictionary, animate: bool = false) -> void:
 		arena_view.add_body(dto, animate)
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "body", dto)
 	metrics.end("elimination_to_body")
+	_presence_capture("body", 30)
 	print("CLIENT_BODY_SHOWN id=%s round_id=%d bodies=%d" % [client_label, int(dto["round_id"]), local_bodies.size()])
 
 func _clear_local_bodies() -> void:

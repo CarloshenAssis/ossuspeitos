@@ -53,8 +53,8 @@ const IDLE_ARM := 0.03
 ## Fase 11: pose armada (só apresentação). O braço da arma sobe para a frente
 ## e acompanha parte do pitch oficial, com limite; nada muda posição, colisão
 ## ou hitbox (o nó raiz continua na posição oficial).
-const ARMED_SHOULDER := -1.42
-const ARMED_ELBOW := -0.12
+const ARMED_SHOULDER := -1.3
+const ARMED_ELBOW := -0.22
 const ARMED_PITCH_SHARE := 0.6
 const ARMED_PITCH_LIMIT := 0.5
 const ARMED_BLEND_RATE := 14.0

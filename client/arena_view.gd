@@ -60,8 +60,10 @@ const CORRIDOR_COLOR := Color(0.56, 0.36, 0.34)
 ## nunca a simulação.
 var debug_overlay := false
 var show_ceilings := true
-const VIEWMODEL_OFFSET := Vector3(0.19, -0.16, -0.5)
-const VIEWMODEL_SCALE := 0.8
+## Fase 11: menor e mais no canto (a 16:9 a pistola anterior cobria o
+## centro-baixo da tela); o retículo fica sempre livre.
+const VIEWMODEL_OFFSET := Vector3(0.27, -0.25, -0.6)
+const VIEWMODEL_SCALE := 0.58
 ## Giro lento dos pickups disponíveis (só visual; a posição oficial não muda).
 const PICKUP_SPIN_SPEED := 0.9
 var _visual_time := 0.0
@@ -128,7 +130,7 @@ func _ready() -> void:
 	# nem o painel de munição. Só aparece com arma no inventário oficial.
 	weapon_model = ArenaModels.build_pistol()
 	weapon_model.scale = Vector3.ONE * VIEWMODEL_SCALE
-	weapon_model.rotation = Vector3(0.04, 0.06, 0.0)
+	weapon_model.rotation = Vector3(0.05, 0.1, 0.0)
 	weapon_model.visible = false
 	weapon_pivot = Node3D.new()
 	weapon_pivot.name = "WeaponPivot"
