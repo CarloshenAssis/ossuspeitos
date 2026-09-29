@@ -140,6 +140,9 @@ var rooms_next_housekeeping_msec := 0
 const HALL_EXTRA_CAPACITY := 16
 
 var test_mutation := ""
+## Fase 11: últimos valores públicos de `armed` registrados (servidor e cliente).
+var server_armed_logged: Dictionary = {}
+var client_armed_logged: Dictionary = {}
 ## Sessão no servidor online (mensagens de erro sem endereço digitado).
 var online_session := false
 var room_fatal_error := ""
@@ -580,6 +583,10 @@ func _broadcast_snapshot() -> void:
 	for raw_player in players:
 		var player: Dictionary = raw_player
 		player["armed"] = combat_authority != null and combat_authority.public_armed(int(player["peer_id"]))
+		var armed_key := "%s:%d" % [str(current_room.room_id) if rooms_enabled and current_room != null else "0", int(player["peer_id"])]
+		if bool(server_armed_logged.get(armed_key, false)) != bool(player["armed"]):
+			server_armed_logged[armed_key] = bool(player["armed"])
+			print("SERVER_PUBLIC_ARMED peer_id=%d armed=%s%s" % [int(player["peer_id"]), str(player["armed"]), _room_log_suffix()])
 	if test_mutation == "cross_room_armed" and rooms_enabled and room_registry != null:
 		for raw_room in room_registry.rooms.values():
 			if raw_room == current_room: continue
@@ -1449,6 +1456,10 @@ func world_snapshot(payload: Dictionary) -> void:
 		var clean_state := PublicCombatState.sanitize_player(raw_state)
 		if not clean_state.is_empty():
 			states.append(clean_state)
+			var seen_peer := int(clean_state["peer_id"])
+			if bool(client_armed_logged.get(seen_peer, false)) != bool(clean_state["armed"]):
+				client_armed_logged[seen_peer] = bool(clean_state["armed"])
+				print("CLIENT_ARMED_SEEN id=%s peer=%d armed=%s" % [client_label, seen_peer, str(clean_state["armed"])])
 	var ack: Dictionary = payload.get("ack", {})
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "snapshot", payload)
 	var own_id := multiplayer.get_unique_id()
@@ -2227,6 +2238,7 @@ func combat_public_shot(payload: Dictionary) -> void:
 	if event.is_empty():
 		print("CLIENT_SHOT_REJECTED id=%s" % client_label)
 		return
+	print("CLIENT_SHOT_SEEN id=%s round=%d shot=%d hit=%s" % [client_label, int(event["round_id"]), int(event["shot_id"]), str(event["hit_player"])])
 	if int(event["shooter_peer_id"]) == multiplayer.get_unique_id():
 		net_stats.action_resolved(NetSync.ACTION_FIRE, net_stats.oldest_action(NetSync.ACTION_FIRE))
 	if arena_view != null:
@@ -2272,6 +2284,7 @@ func _on_combat_private_state_changed(peer_id: int, state: Dictionary) -> void:
 
 func _on_shot_resolved(event: Dictionary) -> void:
 	if combat_network_test != null: combat_network_test.call("observe_server_shot", event)
+	print("SERVER_SHOT round=%d shot=%d%s" % [int(event["round_id"]), int(event.get("shot_id", 0)), _room_log_suffix()])
 	if multiplayer.is_server() and not shutting_down:
 		for peer_id in _open_members():
 			combat_public_shot.rpc_id(int(peer_id), event)

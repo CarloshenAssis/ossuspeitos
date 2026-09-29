@@ -293,6 +293,18 @@ for n in B1 B2 B3 B4 C2 C3; do
 done
 assert_grep "b4-sees-three-ready" 'CLIENT_ROOM_STATE id=B4 .*players=4 ready=3 ' "$TMP_DIR/B4.log"
 
+# --- Fase 11: arma pública só dentro da sala -----------------------------------
+armed_peer="$(sed -n 's/.*ROOMS_TEST_PICKUP room=1 round_id=1 peer=\([0-9]*\) accepted=true.*/\1/p' "$S" | head -n1)"
+[[ -n "$armed_peer" ]] && check_ok "room-a-official-pickup" || check_failed "room-a-official-pickup" "none"
+assert_grep "server-armed-in-room-a" "SERVER_PUBLIC_ARMED peer_id=$armed_peer armed=true room=1" "$S"
+assert_no_grep "server-armed-only-room-a" 'SERVER_PUBLIC_ARMED peer_id=[0-9]+ armed=true room=[23]' "$S"
+for n in A1 A2 A3 A4; do
+  assert_grep "$n-sees-armed" "CLIENT_ARMED_SEEN id=$n peer=$armed_peer armed=true" "$TMP_DIR/$n.log"
+done
+for n in B1 B2 B3 B4 C2 C3; do
+  assert_no_grep "$n-never-sees-armed" 'CLIENT_ARMED_SEEN .* armed=true' "$TMP_DIR/$n.log"
+done
+
 # --- Fase 10: medição das transições -------------------------------------------
 # Cada linha TRANSITION tem só medida, duração, classe, rodada e sessão
 # aleatória: nenhum código de sala, nome, papel ou peer.

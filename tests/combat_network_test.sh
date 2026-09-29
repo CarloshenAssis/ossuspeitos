@@ -106,6 +106,37 @@ assert_equal hit-confirmations "$(grep -h -c 'COMBAT_RPC_RECEIVED name=combat_hi
 assert_equal hit-confirm-only-one-client "$(grep -l 'COMBAT_RPC_RECEIVED name=combat_hit_confirmed' "$TMP_DIR"/client-*.log | wc -l | tr -d ' ')" 1
 COMPLETED="$(sed -n 's/.*COMBAT_CLIENT_TEST_OK id=client-\([0-9]*\).*/\1/p' "$TMP_DIR"/client-*.log | sort -u)"
 assert_equal all-completed-clients "$(wc -l <<<"$COMPLETED" | tr -d ' ')" "$CLIENTS"
+# --- Fase 11: arma pública e eventos de tiro --------------------------------
+# O servidor decide quem aparece armado (coleta oficial); todo cliente vê
+# exatamente essas mudanças e nunca um jogador armado que o servidor não armou.
+ARMED_PEERS="$(sed -n 's/.*SERVER_PUBLIC_ARMED peer_id=\([0-9]*\) armed=true.*/\1/p' "$TMP_DIR/server.log" | sort -u)"
+[[ -n "$ARMED_PEERS" ]] && ok server-armed-after-official-pickup || { echo "ASSERT_FAILED name=server-armed-after-official-pickup" >&2; false; }
+for id in $(seq 1 "$CLIENTS"); do
+  log="$TMP_DIR/client-$id.log"
+  for peer in $ARMED_PEERS; do
+    assert_grep "client-$id-sees-$peer-armed" "CLIENT_ARMED_SEEN id=client-$id peer=$peer armed=true" "$log"
+  done
+  SEEN_ARMED="$(sed -n 's/.*CLIENT_ARMED_SEEN id=[^ ]* peer=\([0-9]*\) armed=true.*/\1/p' "$log" | sort -u)"
+  assert_equal "client-$id-armed-only-official" "$SEEN_ARMED" "$ARMED_PEERS"
+  # Cada tiro oficial chega uma vez (sem repetição) e todos chegam.
+  shots="$(grep -c 'CLIENT_SHOT_SEEN' "$log" || true)"
+  unique_shots="$(sed -n 's/.*CLIENT_SHOT_SEEN id=[^ ]* round=\([0-9]*\) shot=\([0-9]*\).*/\1:\2/p' "$log" | sort -u | wc -l | tr -d ' ')"
+  assert_equal "client-$id-each-shot-once" "$shots" "$unique_shots"
+  assert_equal "client-$id-all-official-shots" "$unique_shots" "$(grep -c 'SERVER_SHOT round=' "$TMP_DIR/server.log")"
+done
+assert_no_grep no-zero-shot-id 'SERVER_SHOT round=[0-9]+ shot=0' "$TMP_DIR/server.log"
+# Quem morreu armado deixa de aparecer armado (eliminação oficial).
+if [[ "$EXTENDED" == true ]]; then
+  for peer in $ARMED_PEERS; do
+    if grep -qE "SERVER_PUBLIC_ARMED peer_id=$peer armed=false" "$TMP_DIR/server.log"; then
+      for id in $(seq 1 "$CLIENTS"); do
+        assert_grep "client-$id-sees-$peer-unarmed" "CLIENT_ARMED_SEEN id=client-$id peer=$peer armed=false" "$TMP_DIR/client-$id.log"
+      done
+    fi
+  done
+  # Rodada seguinte: ninguém começa armado (reset do inventário oficial).
+  assert_equal armed-reset-on-new-round "$(awk '/ROUND_STATE state=ACTIVE round_id=2/{r=1} r && /SERVER_PUBLIC_ARMED .*armed=true/{c++} END{print c+0}' "$TMP_DIR/server.log")" "$(awk '/ROUND_STATE state=ACTIVE round_id=2/{r=1} r && /PICKUP_ACCEPTED|COMBAT_ACTION_RESULT.*pickup.*accepted=true/{c++} END{print c+0}' "$TMP_DIR/server.log")"
+fi
 assert_no_grep no-role-leak 'peer_id=[0-9]+.*role=|ASSASSIN|DETECTIVE|VICTIM' "$TMP_DIR"/*.log
 assert_no_grep no-private-payload 'health.*weapon_id|magazine.*reserve' "$TMP_DIR"/client-*.log
 assert_no_grep no-timeout-or-unexpected-runtime-error 'COMBAT_TEST_STAGE_TIMEOUT|COMBAT_NETWORK_TEST_FAILURE|ready_state != STATE_OPEN|The InputMap action .* doesn.t exist|Trying to call an RPC via a multiplayer peer which is not connected|SCRIPT ERROR' "$TMP_DIR"/*.log

@@ -429,6 +429,13 @@ jobs:
             | tee "$RUNNER_TEMP/godot-rooms-logs/transition-metrics.log"
           grep -q 'TRANSITION_METRICS_TEST_OK' "$RUNNER_TEMP/godot-rooms-logs/transition-metrics.log"
 
+      - name: Validate presence and combat readability (phase 11)
+        run: |
+          set -o pipefail
+          godot --headless --path . --script tests/presence_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-rooms-logs/presence.log"
+          grep -q 'PRESENCE_TEST_OK' "$RUNNER_TEMP/godot-rooms-logs/presence.log"
+
       - name: Validate player-facing error messages (phase 10)
         run: |
           set -o pipefail
@@ -458,6 +465,12 @@ jobs:
           set -o pipefail
           TEST_LOG_DIR="$RUNNER_TEMP/godot-rooms-logs/resilience" GODOT_BIN="$(command -v godot)" \
             ./tests/rooms_resilience_test.sh 2>&1 | tee "$RUNNER_TEMP/godot-rooms-logs/rooms-resilience.log"
+
+      - name: Run phase 11 mutation test
+        run: |
+          set -o pipefail
+          TEST_LOG_DIR="$RUNNER_TEMP/godot-rooms-logs/mutations11" GODOT_BIN="$(command -v godot)" \
+            ./tests/phase11_mutation_test.sh 2>&1 | tee "$RUNNER_TEMP/godot-rooms-logs/mutations11.log"
 
       # Fase 10: cada mutação (reset sem volta ao ponto inicial, tela sem o
       # aviso de nova rodada, estado de outra sala, transição atrasada) tem

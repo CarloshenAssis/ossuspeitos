@@ -82,6 +82,7 @@ func _drive_room(room: MatchRoom, now: int) -> void:
 		print("ROOMS_TEST_ROUND_ACTIVE room=%d round_id=%d participants=%d" % [room.room_id, ra.round_id, ra.participants.size()])
 		_check_round_reset(room)
 		_disturb_round(room)
+		_official_pickup(room)
 	var step := int(steps_done[key])
 	if now - int(active_since[key]) < step_gap_msec * (step + 1):
 		return
@@ -169,6 +170,31 @@ func _disturb_round(room: MatchRoom) -> void:
 	for item in room.combat.inventory.ground_items.values():
 		item["available"] = false
 		break
+
+## Fase 11: uma coleta oficial (pela API de combate, com a posição oficial no
+## item) para a sala ter alguém publicamente armado; o teste confere que só os
+## clientes desta sala veem essa pistola.
+func _official_pickup(room: MatchRoom) -> void:
+	var participants := room.round_authority.participants.keys()
+	if participants.is_empty():
+		return
+	participants.sort()
+	var peer := int(participants[0])
+	# Um item ainda disponível (o `_disturb_round` acabou de sumir com o primeiro).
+	var index := -1
+	for candidate in MansionMap.PICKUPS.size():
+		var item: Dictionary = room.combat.inventory.ground_items.get(str(MansionMap.PICKUPS[candidate]["id"]), {})
+		if str(MansionMap.PICKUPS[candidate]["type"]) == "weapon" and bool(item.get("available", false)):
+			index = candidate
+			break
+	if index < 0:
+		_fail("official_pickup room=%d reason=no_weapon_left" % room.room_id)
+		return
+	room.world.states[peer]["position"] = ArenaRules.PICKUP_POSITIONS[index]
+	var result := room.combat.request_pickup(peer, str(MansionMap.PICKUPS[index]["id"]), 1, Time.get_ticks_msec())
+	print("ROOMS_TEST_PICKUP room=%d round_id=%d peer=%d accepted=%s" % [room.room_id, room.round_authority.round_id, peer, str(result.get("accepted", false))])
+	if not bool(result.get("accepted", false)):
+		_fail("official_pickup room=%d reason=%s" % [room.room_id, str(result.get("reason", ""))])
 
 func _completed_for(room_id: int) -> int:
 	var total := 0

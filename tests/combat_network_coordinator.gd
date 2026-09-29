@@ -299,7 +299,7 @@ func observe_client_event(kind: String, payload: Variant = null) -> void:
 		"shot":
 			public_shots += 1
 			print("COMBAT_RPC_RECEIVED name=combat_public_shot id=%s" % app.client_label)
-			if typeof(payload) != TYPE_DICTIONARY or not _keys_equal(payload, ["round_id", "shooter_peer_id", "origin", "end", "hit_player"]): privacy_leaks += 1
+			if typeof(payload) != TYPE_DICTIONARY or not _keys_equal(payload, ["round_id", "shot_id", "shooter_peer_id", "origin", "end", "hit_player"]): privacy_leaks += 1
 		"hit":
 			hit_confirms += 1
 			print("COMBAT_RPC_RECEIVED name=combat_hit_confirmed id=%s" % app.client_label)
