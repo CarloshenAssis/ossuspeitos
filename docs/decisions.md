@@ -1067,3 +1067,43 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
 - **Sonda de produção**
   - Sob demanda, depois de criar a sala da sonda, a sonda espera 40 s e tenta entrar pelo mesmo código.
   - Precisa receber `room_not_found`, o que prova que a sala vazia foi removida. Nenhuma partida é iniciada.
+
+## Fase 11 — presença dos personagens e leitura visual do combate
+
+- **Arma pública mínima**
+  - Cada entrada do snapshot por sala ganha `armed` (bool): "está segurando pistola".
+  - É calculado só no servidor (`CombatAuthority.public_armed`): arma no inventário + participante vivo + rodada ativa.
+  - Morte, saída, fim de rodada e reset desarmam.
+  - Munição, vida, papel, inventário, alvo e intenção nunca saem.
+- **Evento de disparo**
+  - O evento público ganha `shot_id`, número do tiro na rodada.
+  - O cliente mostra cada tiro uma vez e ignora evento de outra rodada.
+- **Allowlist no cliente**
+  - `PublicCombatState` define chaves e tipos exatos do estado público e do evento.
+  - Chave extra ou tipo errado descarta a entrada.
+  - Chaves novas faltando (servidor antigo) valem "desarmado / sem número".
+- **Protocolo continua 11**
+  - Nenhuma RPC foi criada, removida ou mudou de assinatura, e os índices do handshake são os mesmos.
+  - Um build 11 anterior com um servidor novo só não mostra a pistola alheia. Um cliente novo com um servidor anterior mostra todos desarmados.
+  - Nenhuma combinação quebra a partida ou revela dado privado, por isso não houve aumento de protocolo.
+- **Marcador de acerto**
+  - A confirmação privada só vira marcador se houver um tiro próprio com `hit_player` já mostrado e ainda não confirmado.
+  - Confirmação repetida ou solta não gera marcador.
+  - Corpo não recebe acerto: o raycast do servidor ignora mortos.
+- **Apresentação procedural (os GLBs não têm rig)**
+  - O braço do lado direito real, escolhido pela geometria e não pelo nome da malha, sobe para a frente.
+  - Ele acompanha até 0,5 rad do pitch oficial.
+  - A pistola low-poly vai presa ao cotovelo; o recuo é curto.
+  - Posição, colisão, hitbox e raycast não mudam.
+- **Passos e corpo**
+  - Passos vêm da fase da caminhada apresentada (pé no chão). Teleporte e época nova nunca viram passo.
+  - O corpo de uma eliminação ao vivo cai em 0,3 s até a pose deitada de antes, sem física e sem colisão.
+  - O estado completo, para quem entra depois, já vem deitado.
+- **Impactos**
+  - Parede, piso e jogador têm efeito e som diferentes.
+  - A superfície vem só do evento público: booleano do servidor e ponto final.
+- **Sons**
+  - Os sons novos (passo, impactos, coleta alheia, queda) são sintetizados no próprio jogo, sem arquivo nem licença de terceiros.
+  - Passos ficam bem baixos.
+- **Pistola própria**
+  - Menor e no canto inferior direito, com o retículo livre (verificado em 960×540, 1280×720 e 1920×1080).

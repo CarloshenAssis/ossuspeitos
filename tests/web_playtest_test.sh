@@ -79,6 +79,11 @@ assert_grep browser-got-role 'WEB_CONSOLE CLIENT_PRIVATE_ROLE_RECEIVED id=Navega
 assert_grep browser-saw-result 'WEB_CONSOLE CLIENT_ROOM_STATE .* phase=lobby round_id=1 .*result=true' "$W"
 assert_grep browser-left 'WEB_CONSOLE MENU_RETURNED reason=left' "$W"
 assert_grep browser-protocol 'WEB_CONSOLE CLIENT_PROTOCOL id=Navegador version=11' "$W"
+# Fase 11: o navegador vê a pistola da coleta oficial feita na sala (servidor)
+# e nenhuma entrada de estado público é recusada pela allowlist.
+armed_peer="$(sed -n 's/.*ROOMS_TEST_PICKUP room=1 round_id=1 peer=\([0-9]*\) accepted=true.*/\1/p' "$S" | head -n1)"
+assert_grep browser-sees-official-pistol "WEB_CONSOLE CLIENT_ARMED_SEEN id=Navegador peer=$armed_peer armed=true" "$W"
+if grep -q 'CLIENT_SHOT_REJECTED' "$W"; then bad no-rejected-public-events; else ok no-rejected-public-events; fi
 if grep -qE 'SCRIPT ERROR|WEB_PAGE_ERROR' "$TMP_DIR"/web-*.log; then bad no-web-script-errors; else ok no-web-script-errors; fi
 
 if [[ "$FAILED" -gt 0 ]]; then

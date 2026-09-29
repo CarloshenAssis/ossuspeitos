@@ -159,3 +159,21 @@ por cena.
 | F7 | Mensagens de erro | `player_messages_test.gd`, `adverse_cases_test.sh` | Português com ação; sem endereço, porta, protocolo, RPC ou classe |
 | F8 | Mutações | `phase10_mutation_test.sh` | no_teleport, no_round_banner, cross_room_leak e slow_room_transition são pegas |
 | F9 | Produção | `online-probe.yml` (sob demanda) | TLS + WebSocket + protocolo 11; sala da sonda removida depois da carência |
+
+## Fase 11 — presença dos personagens e leitura do combate
+
+| Id | Caso | Teste | Esperado |
+|----|------|-------|----------|
+| P1 | Arma pública (autoridade) | `presence_test.gd` | Só coleta oficial arma; recusa, munição, morte, desconexão, fim de rodada e reset desarmam; 20 itens de volta |
+| P2 | DTO público | `presence_test.gd`, `adversarial_peer.gd` | Allowlist e tipos exatos; papel, vida, munição, inventário e alvo nunca aparecem |
+| P3 | Arma na rede | `combat_network_test.sh` (4 e 8) | Todo cliente vê exatamente quem o servidor armou; morte e fim de rodada desarmam |
+| P4 | Isolamento | `rooms_network_test.sh` | Coleta na sala A: só A vê; B e C nunca veem ninguém armado |
+| P5 | Tiro uma vez | `presence_test.gd`, `combat_network_test.sh` | Cada tiro oficial um clarão, traçador, som e impacto; repetido ou de rodada antiga não mostra nada |
+| P6 | Marcador de acerto | `presence_test.gd` | Só com acerto próprio pendente; repetido, alheio, recusado ou em corpo não marca |
+| P7 | Superfícies | `presence_test.gd` | Parede, piso e jogador distintos (visual e som) |
+| P8 | Movimento | `presence_test.gd` | Parado não desliza nem dá passo; andar dá passos; reset não; posição oficial igual armado ou não; braço com pitch limitado |
+| P9 | Espectador | `presence_test.gd`, `presence_capture.gd` | Sem pistola própria e sem retículo |
+| P10 | 8 aparências | `presence_test.gd` | Pistola na mão direita, à frente, cano para onde o personagem olha |
+| P11 | Visual | `presence_capture.gd` (xvfb), `presence_visual_session.sh` (xvfb, 4 clientes, 2 com janela) | 10 cenas com PNG; pistola na tela e fora das paredes; retículo livre |
+| P12 | Web | `web_playtest_test.sh` room | O navegador vê a pistola da coleta oficial |
+| P13 | Mutações | `phase11_mutation_test.sh` | client_fake_armed, duplicate_hit_marker, step_on_reset, cross_room_armed e dead_weapon_visible pegas |
