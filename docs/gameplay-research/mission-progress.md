@@ -42,7 +42,7 @@ Ruling: melhorias gráficas usarão perfis opcionais medidos, mantendo baseline 
 - Task 5: complete (commits4ff857f..150b543 + correção28d18b6, review clean apósfixround1). SPEC05: nove suítes, spectator4 e gráfico aprovados; correção de prontidão validada coordinator37/netcode266/authority86 e combate4/8extended sequenciais aprovados. Revisões independentes de apresentação e harness PASS.
 - Task 6: complete (commits6ff4bed..9d158bf, review clean). SPEC06: perfis isolados/localizados, baseline preservado;35 suítes, smoke4 e sync aprovados. Benchmarkquietllvmpipe p95 baseline24.429ms/low12.006/high23.220. Captureverificouhighlegível após restringirfiltro a texturas; sombrasnãoadicionadas.
 - Task 7: complete (commits9d158bf..44a0364, review clean). SPEC07: telemetriaopcional limitada, nenhuma mudançaDTO/protocolo. Testes focados, sync local/rtt200, round, salas/adversarial/resiliência e combate4/8extended comtelemetria passaram. Overheadsyntético4peers +7.4%/+6.2%, padrãooff.
-- SPEC08: implementação3e40dba, fixround1 dos três achados revisado; cena96, integração4, campanha8x3 e lifecycle aprovados. Regressão global + revisão de branch final em andamento antes de fechar certificação.
+- Task 8: complete (commits44a0364..3e40dba + CI959dd3f, review clean apósfixround1). Cena96, integração4, campanha8x3/lifecycle PASS; revisão de branch completa PASS; regressão final37/37 GDScript e22/22 multiprocesso PASS. CI hospedado final é verificado separadamente no PR.
 
 ## Limitação operacional observada
 Após o reinício do ambiente, quatro servidores locais antigos do teste SPEC00 menu_flow permaneceram destacados (portas 33072/33075/33076/33077). Confirmados por cmdline, proprietário e logs; encerrados individualmente, sem atingir processos externos. A limpeza de descendentes do harness requer atenção na certificação final.
@@ -50,7 +50,7 @@ Após o reinício do ambiente, quatro servidores locais antigos do teste SPEC00 
 ## CI de checkpoint
 Run39689745482 (SPEC01–03): match-tests/menu-tests/rooms-tests passaram; network-tests falhou no cenário8extended. netcode-tests também passou na conclusão; resultado geral FAILURE pelo network-tests. Download do log detalhado redireciona para blob storage bloqueado neste ambiente; não considerar CI aprovado. Falha intermitente CONTEST também observada localmente; investigação de causalidade do harness em andamento, sem enfraquecer assertivas.
 
-Task5: fix round1/5 em revisão — reset imediato após health0, ownership CharacterRig e aplicação ao vivo reduce_motion. Novos regressivos passaram; gate combate4 depende da correção separada de prontidão de época identificada em combat-flake-research.md.
+Task5: fix round1/5 concluída, três achados resolvidos — reset imediato após health0, ownership CharacterRig e aplicação ao vivo reduce_motion. Novos regressivos passaram; gate combate4 depende da correção separada de prontidão de época identificada em combat-flake-research.md.
 
 Task5: minor (resolvido documentalmente): relatório externo dizia teste de strength0 direto; cobertura real é disable integrado. Redação corrigida para disabled presentation identity.
 
@@ -61,3 +61,6 @@ Ruling: o perfil high entregue manterá sombras de sala desligadas, com apenas q
 SPEC06 revisão PASS compliance/quality/evidence. O escurecimento persistiu sem sombras, logo a causa específica não foi atribuída a elas; high final preserva todas as luzes e aplica filtro apenas a materiais com albedo_texture. Captura final legível; GPUreal pendente.
 
 Regressão final em3e40dba:37/37 suítesGDScript PASS; semSCRIPT/Parse/ERROR. AvisosObjectDBpreexistentes nos fixtures arena_visuals/avatar_facing/combat_feedback preservados no relatório. Matrizmultiprocesso22variantes emexecução. Workflow novo independente gameplay-specs; existentes/publicação intactos.
+
+## Fechamento local
+Todas as oito tarefas implementadas e revisadas.37 suítes e22 variantes finais PASS; fingerprint3d6a92a21be423b9232910037039a0b5a9710cea1a1bb5ed1060a6b848f304f7 confirmado e zero processos próprios Godot vivos. Evidências/relatório final commitados; aguardando push/PR e checks hospedados finais, sem inferir exports por testes locais. Main permanece fora da integração.

@@ -95,3 +95,7 @@ precisam constar aqui antes de afirmar ausência de regressões.
 Código de integração original, sem importação de código, assets ou mídia de
 referência. Licenças/referências conceituais permanecem no
 [registro existente](license-register.md); nenhuma dependência nova ou código GPL.
+
+## Fechamento da regressão global
+
+Em3e40dba, com runtime idêntico após os commits de CI/documentação:37/37 suítes GDScript e22/22 cenários multiprocesso PASS; cena96, integração4, lifecycle e importação PASS. Revisão da branch sem achado importante. Três fixtures antigos avisam ObjectDB no encerramento; detalhes e limites preservados no [relatório final](final-report.md) e [evidência estruturada](evidence/final-test-summary.json). Exports/container e estado hospedado final devem ser conferidos nos checks do PR; não houve publicação.
