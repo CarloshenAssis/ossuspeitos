@@ -4,6 +4,7 @@ var failures := 0
 var checks := 0
 
 func _initialize() -> void:
+	_test_epoch_action_readiness()
 	_test_correlated_history()
 	_test_headless_input_policy()
 	_test_lane_validation()
@@ -88,3 +89,42 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		failures += 1
 		push_error(message)
+
+# Real NetworkApp and PlayerPrediction exercise the snapshot/action boundary.
+func _test_epoch_action_readiness() -> void:
+	var app = load("res://shared/network_app.gd").new()
+	app.mode = "client"
+	app.joined = true
+	app.client_connected = true
+	app.local_round_public = {"state": RoundState.ACTIVE, "round_id": 1}
+	app.local_combat_state = {"health": 100, "round_id": 1}
+	var pickup := {"kind": NetSync.ACTION_PICKUP, "id": 42, "pickup_id": "weapon_0"}
+	var player := {"position": Vector3(13.5, 1, 12), "velocity": Vector3.ZERO, "yaw": 0.0, "pitch": 0.0}
+	_expect(not app.queue_test_action(NetSync.ACTION_PICKUP, 42, "weapon_0"), "before first snapshot enqueue refuses so coordinator retries")
+	app.prediction.reconcile({"seq": 0, "epoch": 1}, player)
+	_expect(app.prediction.queued_action.is_empty(), "first snapshot clears pre-state actions")
+	app.awaiting_epoch_sync = false
+	_expect(app.queue_test_action(NetSync.ACTION_PICKUP, 42, "weapon_0"), "eligible retry accepted")
+	_expect(app.prediction.build_command(Vector2.ZERO)["action"] == pickup, "retry command carries exactly intended pickup")
+	_expect(app.prediction.build_command(Vector2.ZERO)["action"].is_empty(), "pickup emitted only once")
+	_expect(app.queue_test_action(NetSync.ACTION_FIRE, 7), "old epoch action queued")
+	app.awaiting_epoch_sync = true
+	_expect(not app.queue_test_action(NetSync.ACTION_PICKUP, 42, "weapon_0"), "new epoch refuses enqueue until snapshot")
+	app.prediction.reconcile({"seq": 0, "epoch": 2}, player)
+	_expect(app.prediction.queued_action.is_empty(), "new epoch clears old actions")
+	_expect(not app.queue_test_action(NetSync.ACTION_PICKUP, 42, "weapon_0"), "snapshot alone does not release app barrier")
+	app.awaiting_epoch_sync = false
+	_expect(app.queue_test_action(NetSync.ACTION_PICKUP, 42, "weapon_0"), "released epoch retry accepted")
+	var command: Dictionary = app.prediction.build_command(Vector2.ZERO)
+	_expect(command["action"] == pickup and command["epoch"] == 2, "new epoch command carries only retry pickup")
+	app.client_connected = false
+	_expect(not app.queue_test_action(NetSync.ACTION_FIRE, 8), "disconnected enqueue refused")
+	app.prediction.build_command(Vector2.ZERO)
+	app.client_connected = true
+	app.shutdown_prepare_received = true
+	_expect(not app.queue_test_action(NetSync.ACTION_FIRE, 8), "shutdown enqueue refused")
+	app.prediction.build_command(Vector2.ZERO)
+	app.shutdown_prepare_received = false
+	app.local_eliminated = true
+	_expect(not app.queue_test_action(NetSync.ACTION_FIRE, 8), "dead enqueue refused")
+	app.free()

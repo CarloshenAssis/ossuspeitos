@@ -1282,6 +1282,9 @@ func _queue_local_action(kind: String, pickup_id: String = "") -> bool:
 
 ## Teste: ação com identificador escolhido pelo coordenador, pelo mesmo fluxo.
 func queue_test_action(kind: String, id: int, pickup_id: String = "") -> bool:
+	# O coordenador repete após a sincronização; reconcile descarta ações antigas.
+	if not _commands_enabled():
+		return false
 	var action := {"kind": kind, "id": id}
 	if kind == NetSync.ACTION_PICKUP:
 		action["pickup_id"] = pickup_id
