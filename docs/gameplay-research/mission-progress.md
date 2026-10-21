@@ -4,7 +4,7 @@
 A missão vigente é [autonomous-mission.md](autonomous-mission.md), autorizada pelo usuário em 2026-10-21. Ela substitui as pausas entre SPECs do plano anterior: integração automática somente na branch de trabalho, nunca main. PR #30 permanece independente; esta branch descende do mesmo commit de auditoria cfe260b00a6c95f1aacb42c4c0764921213eb493, sem copiar/cherry-pick dos documentos.
 
 Branch: codex/gameplay-specs-01-08. Base de código: dd15ff2ab29d5e67fccedc41c431c30eb7e32c6d.
-SPEC00: aguardando todos os checks do PR30; Web, Windows e container passaram, network/netcode pendentes na primeira consulta.
+SPEC00: todos os nove checks exigidos do PR30 concluídos com SUCCESS em cfe260b00a6c95f1aacb42c4c0764921213eb493; deploy-pages SKIPPED. Conferido via GitHub em 2026-10-21 22:38 UTC. Sem merge do PR30.
 Proibido: merge main, deploy, alterar políticas/credenciais/publicação, copiar GPL/assets.
 Ambiente: Godot 4.4.1; logs externos /workspace/.ossuspeitos-state/mission-sdd/.
 
@@ -35,10 +35,10 @@ Ruling: preservar regras de dano/papéis atuais e não introduzir armas sociais,
 Ruling: melhorias gráficas usarão perfis opcionais medidos, mantendo baseline como default quando não houver GPU representativa — preservar desempenho/Compatibility e servidor headless — custo: certificação visual/performance real fica pendente.
 
 ## Progresso
-- SPEC01: pendente.
-- SPEC02: pendente.
-- SPEC03: pendente.
-- SPEC04: pendente.
+- Task 1: complete (commits ac4f0ed..669b109, review clean). SPEC01: recurso validado, aceleração/frenagem separadas; testes unitários + smoke/sync servidor e 4 clientes aprovados. Vertical/sprint adiados. Relatório 01-movement.md.
+- Task 2: complete (commits 669b109..ae05afa, review clean). SPEC02: correções de época/ações, perfis 50/100/200 e métricas precisas; 266 checks, smoke e sync com jitter/stall aprovados; leak do fixture eliminado. Relatório 02-prediction.md.
+- Task 3: complete (commits ae05afa..65992e3, review clean). SPEC03: catálogo novo por instância, cópias validadas e composição confiável; 32 suítes GDScript e combate 4/8extended aprovados. Relatório 03-combat.md.
+- SPEC04: próxima etapa; brief externo spec04-brief.md preparado.
 - SPEC05: pendente.
 - SPEC06: pendente.
 - SPEC07: pendente.
