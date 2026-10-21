@@ -301,6 +301,8 @@ func _use_room(room: MatchRoom) -> void:
 ## Liga os sinais das autoridades da sala; cada callback entra na própria sala
 ## antes de agir, então nada de uma sala é tratado no contexto de outra.
 func _wire_room(room: MatchRoom) -> void:
+	net_stats_interval_msec = NetworkConfig.integer_argument(arguments, "net-stats", 0)
+	room.world.set_telemetry_enabled(net_stats_interval_msec > 0)
 	var links: Array = []
 	var ra := room.round_authority
 	links.append([ra.state_changed, func(s: int, r: int): _use_room(room); _on_round_state_changed(s, r)])
@@ -462,6 +464,10 @@ func _start_combat_network_test() -> void:
 	add_child(combat_network_test)
 
 func _process(_delta: float) -> void:
+	if mode in ["server", "dedicated"] and net_stats_interval_msec > 0 and Time.get_ticks_msec() - net_stats_last_msec >= net_stats_interval_msec:
+		net_stats_last_msec = Time.get_ticks_msec()
+		for room in _active_rooms():
+			print("SERVER_NET_STATS room=%d variant_payload_estimate=%s rejections=%s" % [room.room_id, JSON.stringify(room.world.telemetry_snapshot()), JSON.stringify(room.world.rejection_counts)])
 	if mode == "menu":
 		_poll_hosting()
 		return
