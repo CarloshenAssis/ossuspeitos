@@ -36,7 +36,21 @@ static func validate_definition(definition: Variant) -> String:
 		return "invalid_reload"
 	if not is_finite_number(definition.spread_radians) or float(definition.spread_radians) < 0.0 or float(definition.spread_radians) > MAX_SPREAD_RADIANS:
 		return "invalid_spread"
+	for field in ["movement_spread_radians", "bloom_per_shot_radians", "max_bloom_radians", "bloom_recovery_radians_per_second"]:
+		var value: Variant = definition.get(field)
+		if not is_finite_number(value) or float(value) < 0.0:
+			return "invalid_" + field
+	if float(definition.bloom_per_shot_radians) > float(definition.max_bloom_radians):
+		return "bloom_exceeds_cap"
+	if float(definition.max_bloom_radians) > 0.0 and float(definition.bloom_recovery_radians_per_second) <= 0.0:
+		return "bloom_requires_recovery"
+	if float(definition.movement_spread_radians) > 0.0 or float(definition.max_bloom_radians) > 0.0:
+		if float(definition.spread_radians) + float(definition.movement_spread_radians) + float(definition.max_bloom_radians) > PI / 4.0:
+			return "dynamic_spread_exceeds_limit"
 	return ""
+
+static func recovered_bloom(current: float, elapsed_msec: int, recovery_per_second: float) -> float:
+	return maxf(0.0, current - maxi(0, elapsed_msec) * recovery_per_second / 1000.0)
 
 static func is_valid_identifier(value: Variant) -> bool:
 	if typeof(value) != TYPE_STRING:

@@ -113,7 +113,7 @@ func request_fire(peer_id: int, sequence: Variant, now_msec: int) -> Dictionary:
 	var aim := MovementRules.aim_direction(float(state["yaw"]), float(state.get("pitch", 0.0)))
 	var intent := {"sequence": sequence, "origin": eye, "direction": aim}
 	var context := {"alive": true, "round_active": true, "eye_position": eye, "yaw": state["yaw"],
-		"pitch": MovementRules.clamp_pitch(state.get("pitch", 0.0))}
+		"pitch": MovementRules.clamp_pitch(state.get("pitch", 0.0)), "velocity": state.get("velocity", Vector3.ZERO)}
 	var shot := combat_rules.request_shot(peer_id, intent, context, now_msec)
 	if not bool(shot.get("accepted", false)):
 		return shot

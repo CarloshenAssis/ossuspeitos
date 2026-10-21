@@ -20,6 +20,13 @@ func request_shot(peer_id: int, intent: Variant, context: Variant, now_msec: int
 	var definition: WeaponDefinition = inventory_authority.get_equipped_definition(peer_id)
 	var sequence: int = intent["sequence"]
 	var claimed_direction: Vector3 = intent["direction"]
+	var previous_time: int = inventory["last_shot_msec"]
+	var bloom := WeaponRules.recovered_bloom(float(inventory["shot_bloom_radians"]),
+		0 if previous_time < 0 else now_msec - previous_time, float(definition.bloom_recovery_radians_per_second))
+	var velocity: Vector3 = context.get("velocity", Vector3.ZERO)
+	var movement_fraction := clampf(Vector2(velocity.x, velocity.z).length() / MovementRules.MAX_SPEED, 0.0, 1.0)
+	var spread := float(definition.spread_radians) + float(definition.movement_spread_radians) * movement_fraction + bloom
+	inventory["shot_bloom_radians"] = minf(float(definition.max_bloom_radians), bloom + float(definition.bloom_per_shot_radians))
 	inventory["last_sequence"] = sequence
 	inventory["last_shot_msec"] = now_msec
 	inventory_authority.consume_round(peer_id)
@@ -29,7 +36,7 @@ func request_shot(peer_id: int, intent: Variant, context: Variant, now_msec: int
 		"origin": context["eye_position"],
 		# Rumo horizontal validado com o pitch oficial; a componente vertical
 		# declarada pelo cliente nunca é usada.
-		"direction": _apply_server_spread(WeaponRules.official_shot_direction(claimed_direction, float(context.get("pitch", 0.0))), float(definition.spread_radians)),
+		"direction": _apply_server_spread(WeaponRules.official_shot_direction(claimed_direction, float(context.get("pitch", 0.0))), spread),
 		"max_distance": float(definition.range_meters),
 		"damage": float(definition.damage),
 		"weapon_id": definition.id,
@@ -51,6 +58,8 @@ func _validate_request(peer_id: int, intent: Variant, context: Variant, now_msec
 		return "invalid_context"
 	if not context.has("eye_position") or not context.has("yaw"):
 		return "invalid_context"
+	if typeof(context.get("velocity", Vector3.ZERO)) != TYPE_VECTOR3 or not WeaponRules.is_finite_vector3(context.get("velocity", Vector3.ZERO)):
+		return "invalid_velocity"
 	if not bool(context["alive"]):
 		return "player_dead"
 	if not bool(context["round_active"]):
@@ -96,6 +105,9 @@ func _apply_server_spread(direction: Vector3, spread_radians: float) -> Vector3:
 	var axis := Vector3.UP if absf(direction.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
 	var tangent := direction.cross(axis).normalized()
 	var bitangent := direction.cross(tangent).normalized()
-	var radius := sqrt(_rng.randf()) * tan(spread_radians)
+	# Uniform spherical cap: cos(theta) is uniform on [cos(cone), 1].
+	# This remains finite through PI/2 and supports a full sphere at PI.
+	var axial := lerpf(1.0, cos(spread_radians), _rng.randf())
+	var radius := sqrt(maxf(0.0, 1.0 - axial * axial))
 	var angle := _rng.randf_range(0.0, TAU)
-	return (direction + tangent * cos(angle) * radius + bitangent * sin(angle) * radius).normalized()
+	return (direction * axial + tangent * cos(angle) * radius + bitangent * sin(angle) * radius).normalized()
