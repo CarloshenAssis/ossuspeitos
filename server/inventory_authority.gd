@@ -12,7 +12,12 @@ func _init(weapon_definitions: Dictionary = {}) -> void:
 	for weapon_id in weapon_definitions:
 		var definition: Variant = weapon_definitions[weapon_id]
 		if definition is WeaponDefinition and WeaponRules.validate_definition(definition).is_empty() and definition.id == weapon_id:
-			definitions[weapon_id] = definition
+			# Own the validated scalar values; Dictionary.duplicate(true) would
+			# still retain the caller's RefCounted definition object.
+			definitions[weapon_id] = WeaponDefinition.new(definition.id, definition.damage,
+				definition.magazine_capacity, definition.max_reserve_ammo,
+				definition.fire_interval_msec, definition.range_meters,
+				definition.reload_time_msec, definition.spread_radians)
 
 func register_player(peer_id: int) -> bool:
 	if peer_id <= 0 or inventories.has(peer_id):

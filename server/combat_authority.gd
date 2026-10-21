@@ -21,12 +21,13 @@ var _sequences: Dictionary = {}
 var _last_action_msec: Dictionary = {}
 var active_round_id := 0
 
-func _init(rounds: RoundAuthority, authoritative_world: AuthoritativeWorld) -> void:
+func _init(rounds: RoundAuthority, authoritative_world: AuthoritativeWorld, weapon_definitions: Dictionary = {}, rng: RandomNumberGenerator = null) -> void:
 	round_authority = rounds
 	world = authoritative_world
-	var definition := WeaponDefinition.new(COMMON_WEAPON_ID, 34, 6, 18, WeaponRules.COMMON_FIRE_INTERVAL_MSEC, 20.0, 1200, 0.0)
-	inventory = InventoryAuthority.new({COMMON_WEAPON_ID: definition})
-	combat_rules = CombatRules.new(inventory)
+	# Only an omitted/empty catalogue selects defaults. Invalid explicit entries
+	# are filtered by inventory and never silently replaced with a default gun.
+	inventory = InventoryAuthority.new(WeaponCatalog.defaults() if weapon_definitions.is_empty() else weapon_definitions)
+	combat_rules = CombatRules.new(inventory, rng)
 
 func begin_round(round_id: int, participant_ids: Array) -> void:
 	clear_round()
