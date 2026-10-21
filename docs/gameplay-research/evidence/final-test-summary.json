@@ -765,7 +765,8 @@
   },
   "import": {
     "exit": 0,
-    "script_parse_errors": []
+    "script_parse_errors": [],
+    "mode": "warm headless --editor --quit; not a complete fresh scan"
   },
   "live_owned_godot_processes_after": [],
   "independent_review": {
@@ -778,5 +779,23 @@
     "run": 39691608678,
     "jobs_success": 5,
     "final": "Consult current PR checks; not inferred from local tests"
+  },
+  "clean_import": {
+    "source_commit": "6484f54",
+    "headless_full": {
+      "engine_exit": 0,
+      "strict_gate_exit": 1,
+      "errors": 8,
+      "reason": "Godot 4.4.1 dummy-renderer GLB editor previews"
+    },
+    "software_graphics_full": {
+      "exit": 0,
+      "gated_errors": 0,
+      "imported_scenes": 8
+    },
+    "fresh_affected_suites_passed": 7,
+    "workflow_fix_commit": "8e880f4",
+    "independent_review": "PASS",
+    "ubuntu_xvfb_confirmation": "Consult current PR checks"
   }
 }

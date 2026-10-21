@@ -22,7 +22,7 @@ Correção adicional `28d18b6`: o teste de combate não enfileira ações antes 
 - **37/37 suítes GDScript PASS**, sem SCRIPT ERROR, Parse Error ou ERROR de engine; avisos de áudio/ObjectDB discriminados abaixo.
 - **22/22 cenários multiprocesso PASS**:19 originais e sync50/100/200 adicionais, incluindo campanhas8×3 local/jitter, casos adversos, privacidade, salas e quatro mutações detectadas.
 - Cena integrada **96 verificações**, wrapper obrigatório **servidor+4** e lifecycle/exit37/TERM em cena/combate/campanha PASS.
-- Importação Godot e sintaxe YAML/Bash do novo CI PASS. Revisão independente da branch PASS, sem achado importante.
+- Importação completa gráfica por software e sintaxe YAML/Bash do novo CI PASS. Revisão independente da branch PASS, sem achado importante.
 - Fingerprint de runtime/testes confirmado após a execução; nenhum processo Godot próprio de teste ficou vivo.
 - CI completo do PR, exports e container: consultar checks hospedados; não são inferidos dos testes locais.
 
@@ -60,3 +60,7 @@ O PR conserva main/publicação intactas, sem auto-merge. O novo job independent
 2. Preservar regras/dano existentes e adiar armas sociais/DOWNED/vertical — evita alterar o jogo nesta missão; esses recursos da visão original continuam lacunas.
 3. Perfis opcionais com padrão conservado — preserva Compatibility/servidor; certificação em GPU real fica pendente.
 4. High sem novas sombras de sala — experimentos tiveram superfícies ilegíveis, inclusive sem sombras até restringir o filtro a materiais texturizados; reintroduzir sombras exige nova investigação de geometria/driver/GPU.
+
+## Correção da importação limpa no CI
+
+O primeiro gameplay-specs falhou corretamente ao detectar oito erros de prévia GLB do renderizador dummy do Godot 4.4.1. Importação local quente/parcial não os expunha. A reprodução em checkout novo confirmou: --headless --import termina 0, mas gera oito ERROR de textura; importação gráfica completa Compatibility/software termina 0 sem erros, e sete suítes afetadas passaram nesse projeto novo. O commit 8e880f4 acrescenta suporte Xvfb/Mesa somente no novo job e usa --import para aguardar todos os assets. As verificações estritas e os testes headless permanecem; nenhum código de gameplay mudou. A execução Ubuntu/Xvfb é confirmada pelos checks atuais do PR. [Investigação](evidence/clean-import-report.md) e [revisão independente](evidence/clean-import-review.md).

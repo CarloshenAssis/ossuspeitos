@@ -64,3 +64,6 @@ Regressão final em3e40dba:37/37 suítesGDScript PASS; semSCRIPT/Parse/ERROR. Av
 
 ## Fechamento local
 Todas as oito tarefas implementadas e revisadas.37 suítes e22 variantes finais PASS; fingerprint3d6a92a21be423b9232910037039a0b5a9710cea1a1bb5ed1060a6b848f304f7 confirmado e zero processos próprios Godot vivos. Evidências/relatório final commitados; aguardando push/PR e checks hospedados finais, sem inferir exports por testes locais. Main permanece fora da integração.
+
+## CI final e importação limpa
+PR31 aberto com permissões reais de push/PR confirmadas; main dd15ff2 inalterada e autoMergeRequest=null. O primeiro novo check falhou na importação limpa por oito erros upstream de preview GLB no renderer dummy4.4.1. Corrigido em8e880f4: somente novo job, Xvfb/Mesa/software e --import completo; gate estrito preservado. Repro freshheadless red/freshgraphics green e sete suítesfresh PASS, revisão scoped PASS. Runtime continua3e40dba;37+22 não repetidos por mudança somenteCI. Checks hospedados da revisão atual ainda em acompanhamento; nenhum merge/publicação.

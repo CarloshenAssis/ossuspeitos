@@ -34,3 +34,7 @@ Final 22-variant network matrix completion and current hosted CI results must be
 ## Coordinator completion addendum
 
 Final local matrix completed:37/37 GDScript and22/22 multiprocess PASS; integration96 checks/server4 and wrapper lifecycle PASS. Runtime/test fingerprint remained identical to tested3e40dba. No live owned Godot test processes remained. Hosted final PR checks are separate evidence and must be consulted on the PR.
+
+## Subsequent CI-only follow-up
+
+Fresh import revealed Godot4.4.1 dummy GLB-preview errors. Commit8e880f4 changes only the new workflow import to complete software graphics/Xvfb with Mesa support; strict gate unchanged. Independent scoped review PASS, seven fresh affected suites PASS; no runtime changes. See clean-import-report.md and clean-import-review.md in this directory. Hosted latest PR checks confirm Ubuntu execution separately.
