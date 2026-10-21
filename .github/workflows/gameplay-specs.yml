@@ -19,12 +19,16 @@ jobs:
           version: 4.4.1
           use-dotnet: false
           include-templates: false
+      - name: Install import graphics support
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth libgl1-mesa-dri mesa-vulkan-drivers
       - name: Import project
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/gameplay-specs"
-          godot --headless --path . --editor --quit 2>&1 | tee "$RUNNER_TEMP/gameplay-specs/import.log"
+          # Godot 4.4 generates GLB scene previews during import; these require a renderer.
+          # --import waits for all assets, whereas --editor --quit can abort the initial scan.
+          LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a godot --path . --display-driver x11 --audio-driver Dummy --rendering-method gl_compatibility --rendering-driver opengl3 --import 2>&1 | tee "$RUNNER_TEMP/gameplay-specs/import.log"
           if grep -Eq 'SCRIPT ERROR|Parse Error|^ERROR:' "$RUNNER_TEMP/gameplay-specs/import.log"; then exit 1; fi
       - name: Validate SPEC regressions
         shell: bash
