@@ -1,5 +1,7 @@
 # SPECs 01–08 — plano de implementação incremental
 
+> Histórico de planejamento. A missão posterior [autonomous-mission.md](autonomous-mission.md) autorizou avanço contínuo na branch de integração e substituiu as pausas de aprovação descritas abaixo. Estado implementado, decisões e limites: [mission-progress.md](mission-progress.md) e [08-certification.md](08-certification.md). Merge na main e publicação continuam desautorizados.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** melhorar os sistemas existentes sem reconstruir o jogo, preservando autoridade, privacidade e os testes.

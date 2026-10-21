@@ -40,9 +40,9 @@ Ruling: melhorias gráficas usarão perfis opcionais medidos, mantendo baseline 
 - Task 3: complete (commits ae05afa..65992e3, review clean). SPEC03: catálogo novo por instância, cópias validadas e composição confiável; 32 suítes GDScript e combate 4/8extended aprovados. Relatório 03-combat.md.
 - Task 4: complete (commits e234aeb..4ff857f, review clean). SPEC04: precisão/bloom autoritativos e cone esférico estável; 6216 checks e laboratório12 passaram. Combate4 passou na repetição e8extended passou; timeout inicial CONTEST sem causa demonstrada registrado. Relatório04-calibration.md.
 - Task 5: complete (commits4ff857f..150b543 + correção28d18b6, review clean apósfixround1). SPEC05: nove suítes, spectator4 e gráfico aprovados; correção de prontidão validada coordinator37/netcode266/authority86 e combate4/8extended sequenciais aprovados. Revisões independentes de apresentação e harness PASS.
-- SPEC06: em execução, base28d18b6; brief externo spec06-brief.md.
-- SPEC07: pendente.
-- SPEC08: pendente.
+- Task 6: complete (commits6ff4bed..9d158bf, review clean). SPEC06: perfis isolados/localizados, baseline preservado;35 suítes, smoke4 e sync aprovados. Benchmarkquietllvmpipe p95 baseline24.429ms/low12.006/high23.220. Captureverificouhighlegível após restringirfiltro a texturas; sombrasnãoadicionadas.
+- Task 7: complete (commits9d158bf..44a0364, review clean). SPEC07: telemetriaopcional limitada, nenhuma mudançaDTO/protocolo. Testes focados, sync local/rtt200, round, salas/adversarial/resiliência e combate4/8extended comtelemetria passaram. Overheadsyntético4peers +7.4%/+6.2%, padrãooff.
+- SPEC08: implementação3e40dba, fixround1 dos três achados revisado; cena96, integração4, campanha8x3 e lifecycle aprovados. Regressão global + revisão de branch final em andamento antes de fechar certificação.
 
 ## Limitação operacional observada
 Após o reinício do ambiente, quatro servidores locais antigos do teste SPEC00 menu_flow permaneceram destacados (portas 33072/33075/33076/33077). Confirmados por cmdline, proprietário e logs; encerrados individualmente, sem atingir processos externos. A limpeza de descendentes do harness requer atenção na certificação final.
@@ -55,3 +55,9 @@ Task5: fix round1/5 em revisão — reset imediato após health0, ownership Char
 Task5: minor (resolvido documentalmente): relatório externo dizia teste de strength0 direto; cobertura real é disable integrado. Redação corrigida para disabled presentation identity.
 
 Correção adicional28d18b6: ações de teste agora aguardam barreira de previsão/época, sem relaxar timeouts/assertivas. Teste determinístico reproduziu falha antiga;4/8network passaram. Causa histórica doCI8 não atribuída semlogs. Review PASS compliance/quality.
+
+Ruling: o perfil high entregue manterá sombras de sala desligadas, com apenas qualidade de material opcional — capturas llvmpipe ficaram ilegíveis mesmo após reduzir opacidade; a causa específica não foi comprovada — custo se inadequado: reavaliar sombras/geometria/driver com GPU representativa antes de reintroduzir a opção.
+
+SPEC06 revisão PASS compliance/quality/evidence. O escurecimento persistiu sem sombras, logo a causa específica não foi atribuída a elas; high final preserva todas as luzes e aplica filtro apenas a materiais com albedo_texture. Captura final legível; GPUreal pendente.
+
+Regressão final em3e40dba:37/37 suítesGDScript PASS; semSCRIPT/Parse/ERROR. AvisosObjectDBpreexistentes nos fixtures arena_visuals/avatar_facing/combat_feedback preservados no relatório. Matrizmultiprocesso22variantes emexecução. Workflow novo independente gameplay-specs; existentes/publicação intactos.

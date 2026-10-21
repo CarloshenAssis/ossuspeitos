@@ -1,5 +1,7 @@
 # SPEC 00 — Contratos da arquitetura
 
+> A seção final registra os deltas dos SPECs 01–08. O inventário original abaixo permanece como baseline auditado.
+
 Auditado em 2026-10-21, no commit `dd15ff2ab29d5e67fccedc41c431c30eb7e32c6d`. Este documento descreve comportamento existente; não autoriza mudança de regras ou de protocolo. A Master SPEC v1.0 é direção de trabalho, não prova de que um recurso já existe.
 
 ## Composição e limites
@@ -108,3 +110,15 @@ Servidor local padrão127.0.0.1:9080; dedicado exige headless, bind padrão0.0.0
 3. SPEC 03/04: estender `WeaponDefinition`/`CombatRules`/`CombatAuthority`; não criar segundo WeaponController. Tratar separadamente regras especiais de papel ausentes e calibração de recoil/spread; servidor escolhe RNG.
 4. SPEC 05/06: efeitos visuais não escrevem estado autoritativo. Preservar GL Compatibility, origem/direção oficial e servidor sem nós gráficos. Objetos físicos de gameplay exigem definição explícita de autoridade e teste de replay.
 5. SPEC 08: aceitar somente recursos realmente aprovados, sem classificar arma especial, DOWNED ou salto como existentes. Atualizar contratos, todos consumidores, versão do protocolo e testes de incompatibilidade juntos se forem alterados.
+
+## Deltas implementados na missão autônoma
+
+- `MovementConfig`/`default_movement_config.tres` alimentam um snapshot validado de escalares compartilhados no build. Defaults 5/18/18 e simulação planar mantidos; não há escolha de configuração pelo cliente nem handshake novo.
+- Reconciliação recusa ACK de época anterior antes de mutar estado; época nova limpa ações e mira pendentes. A fila de teste também aguarda a mesma barreira de elegibilidade dos comandos normais.
+- `WeaponCatalog.defaults()` cria definições novas. `CombatAuthority` aceita catálogo/RNG confiáveis opcionais; inventário copia os campos validados. Precisão em movimento, bloom, cap e recuperação são internos ao servidor, zero por padrão na pistola comum. Cone usa amostragem esférica própria, sem seed do cliente.
+- `ArenaView` separa o pivô de movimento visual do pivô de recarga/recoil. Redução de movimento, morte e espectador limpam efeitos; preferências são aplicadas ao vivo. Origem/direção oficiais e estados de autoridade não recebem esses offsets.
+- Perfis gráficos são preferências locais: baseline preserva originais; low reduz custo de material; high só aplica filtro anisotrópico a materiais com textura albedo. Recursos compartilhados não são mutados. Nenhuma luz, colisão, hitbox ou física autoritativa nova.
+- `AuthoritativeWorld.set_telemetry_enabled()` habilita medidas limitadas, desligadas por padrão. `telemetry_snapshot()` retorna cópia de seis campos numéricos/amostras de tamanhos, sem papéis ou inventário. Serialização para estimar bytes Variant ocorre somente após validação estrutural; não mede bytes TCP. `clear()` limpa medidas e rejeições; cada sala conserva seu mundo.
+- Protocolo **11**, simulação **60 Hz**, lotes **30 Hz**, snapshots **20 Hz**, limites de fila **32**, pendentes **90**, pacote **8** e orçamento **12** permanecem. Não há novo RPC ou campo em snapshot/ACK público.
+
+A cena `tests/scenes/gameplay_integration.tscn` é exclusivamente de teste. O wrapper exige também transporte real com quatro clientes; campanha reutiliza o harness existente de oito jogadores/três rodadas. Certificação e limitações: [08-certification.md](08-certification.md).

@@ -1,0 +1,65 @@
+name: Gameplay SPEC checks
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gameplay-specs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: false
+      - name: Import project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/gameplay-specs"
+          godot --headless --path . --editor --quit 2>&1 | tee "$RUNNER_TEMP/gameplay-specs/import.log"
+          if grep -Eq 'SCRIPT ERROR|Parse Error|^ERROR:' "$RUNNER_TEMP/gameplay-specs/import.log"; then exit 1; fi
+      - name: Validate SPEC regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in movement_config weapon_catalog gunplay camera_effects graphics_profiles network_telemetry; do
+            log="$RUNNER_TEMP/gameplay-specs/$test.log"
+            timeout 90 godot --headless --path . --script "tests/${test}_test.gd" 2>&1 | tee "$log"
+            grep -Eq "^${test^^}_TEST_OK([[:space:]]|$)" "$log"
+            if grep -Eq 'SCRIPT ERROR|Parse Error|^ERROR:' "$log"; then exit 1; fi
+          done
+      - name: Validate integration wrapper process lifecycle
+        run: |
+          set -euo pipefail
+          bash tests/gameplay_integration_wrapper_test.sh 2>&1 | tee "$RUNNER_TEMP/gameplay-specs/wrapper-lifecycle.log"
+      - name: Validate integrated gameplay with four clients
+        shell: bash
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/gameplay-specs/integration
+        run: |
+          set -euo pipefail
+          GODOT_BIN="$(command -v godot)" ./tests/gameplay_integration_test.sh 2>&1 | tee "$RUNNER_TEMP/gameplay-specs/integration.log"
+          grep -q 'GAMEPLAY_INTEGRATION_TEST_OK clients=4' "$RUNNER_TEMP/gameplay-specs/integration.log"
+      - name: Validate additional latency profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          for profile in rtt50 rtt100 rtt200; do
+            PROFILE="$profile" SEED=1 TEST_LOG_DIR="$RUNNER_TEMP/gameplay-specs/$profile" GODOT_BIN="$(command -v godot)" ./tests/sync_network_test.sh 2>&1 | tee "$RUNNER_TEMP/gameplay-specs/$profile.log"
+            grep -q 'SYNC_NETWORK_TEST_OK' "$RUNNER_TEMP/gameplay-specs/$profile.log"
+          done
+      - name: Retain verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gameplay-specs-logs
+          path: ${{ runner.temp }}/gameplay-specs
+          if-no-files-found: error

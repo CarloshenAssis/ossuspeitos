@@ -1,5 +1,7 @@
 # SPEC 00 — Registro de referências, licenças e compatibilidade
 
+> Atualização SPECs 01–08: código novo original, sem importar código, bibliotecas ou mídia das sete referências. Os SHAs/licenças abaixo continuam fixados; nenhum arquivo GPL foi copiado, traduzido ou portado. Cenas/laboratórios novos são procedurais e usam as classes existentes do projeto. A procedência pendente dos assets anteriores não é resolvida por esta atualização.
+
 Consulta realizada em 21/10/2026 pela API do GitHub, com leitura dos metadados,
 árvores e arquivos abaixo em commits imutáveis. As sete referências foram
 consultadas; nenhuma delas foi compilada, executada ou incorporada ao Suspeitos.
