@@ -32,6 +32,7 @@ var current_zone_name := ""
 ## Distância do topo do chip de região; a demo offline o desce abaixo do banner.
 var region_chip_top := HudStyle.MARGIN
 var gameplay_visuals := true
+var graphics_profile := "baseline"
 var _alive_flags: Dictionary = {}
 ## Aparência cosmética pública por jogador (roster oficial). Nunca vem de papel.
 var _appearances: Dictionary = {}
@@ -96,6 +97,7 @@ const PREDICTED_SHOT_MARGIN_MSEC := 50
 func _ready() -> void:
 	_ensure_input_actions()
 	_build_arena()
+	set_graphics_profile(MenuSettings.load_saved().graphics_profile)
 	player_rig = Node3D.new()
 	add_child(player_rig)
 	camera = Camera3D.new()
@@ -822,3 +824,27 @@ func _update_presentation_motion(delta: float) -> void:
 		return
 	var velocity: Vector3 = _local_state.get("velocity", Vector3.ZERO)
 	motion_pivot.transform = camera_effects.sample(Vector2(velocity.x, velocity.z).length(), delta)
+
+## Cosmetics only: overrides belong to this view, cached mansion resources stay immutable.
+func set_graphics_profile(value: String) -> void:
+	graphics_profile = MenuSettings.sanitize_graphics_profile(value)
+	if art == null: return
+	var variants := {}
+	for node in art.meshes:
+		var mesh_node := node as MeshInstance3D
+		mesh_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if graphics_profile == "baseline":
+			mesh_node.material_override = null
+			continue
+		var original := mesh_node.mesh.surface_get_material(0) as StandardMaterial3D
+		var key := original.get_instance_id()
+		if not variants.has(key):
+			var copy := original.duplicate() as StandardMaterial3D
+			if graphics_profile == "low":
+				copy.shading_mode = BaseMaterial3D.SHADING_MODE_PER_VERTEX
+				copy.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+			elif copy.albedo_texture != null:
+				copy.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+			variants[key] = copy
+		mesh_node.material_override = variants[key]
+	# Preserve original light state; quality profiles affect materials only.
