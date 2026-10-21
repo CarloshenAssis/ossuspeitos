@@ -2726,6 +2726,8 @@ func _menu_open(panel_id: String) -> void:
 		desktop_menu.press(panel_id)
 
 func _apply_menu_settings(settings: MenuSettings) -> void:
+	if arena_view != null:
+		arena_view.set_presentation_motion(not settings.reduce_motion)
 	mouse_sensitivity = MOUSE_SENSITIVITY * MenuSettings.clamp_sensitivity(settings.sensitivity)
 	print("MENU_SETTINGS_APPLIED volume=%.2f sensitivity=%.2f" % [settings.volume, settings.sensitivity])
 

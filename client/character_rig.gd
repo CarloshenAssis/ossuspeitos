@@ -128,8 +128,11 @@ static func _pivot(pivot_parent: Node3D, pivot_name: String, point: Vector3, vis
 ## Move `node` para `pivot` mantendo a transformação global (pose de repouso).
 static func _adopt(pivot: Node3D, node: Node3D) -> void:
 	var global := _global_of(node)
+	var original_owner := node.owner
+	node.owner = null
 	node.get_parent().remove_child(node)
 	pivot.add_child(node)
+	node.owner = original_owner
 	node.transform = _global_of(pivot).affine_inverse() * global
 
 static func _box_in(parent: Node3D, mesh_node: MeshInstance3D) -> AABB:
