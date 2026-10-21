@@ -416,3 +416,7 @@ Leitura:
   dinâmicos.
 - **Ambiente das medidas:** todas vieram de renderização por software, o que
   não representa GPU real.
+
+## SPEC02 (2026-10-21)
+
+Epoch adoption now clears queued action/mouse/presentation history; older epoch ACKs cannot replace official state even with an equal/higher sequence. Tests retain cumulative equal-ACK epoch transitions and session reset. Test profiles add rtt50/100/200 with measured application FIFO holding delays, preserving prior profiles/TCP semantics. Metrics retain six decimals and separate yaw/pitch and pending-age samples. See `docs/gameplay-research/02-prediction.md` for actual measurements, fail-first evidence and limits. The netcode fixture's self-capturing callable uses a weak reference to release its RefCounted objects at exit.

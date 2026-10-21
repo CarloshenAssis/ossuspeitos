@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Fase 4, camada B: servidor e 4 clientes reais pelo WebSocket (protocolo 9),
-# mais um cliente com versão incompatível. PROFILE=local|rtt80|rtt150j aplica o
+# Fase 4, camada B: servidor e 4 clientes reais pelo WebSocket (protocolo 11),
+# mais um cliente com versão incompatível. PROFILE=local|rtt50|rtt80|rtt100|rtt200|rtt150j|rtt150j_stall aplica o
 # atraso de aplicação só de teste (tests/net_delay_peer.gd) em todos os
 # clientes; STALL=true interrompe o ator por 400 ms no meio do movimento.
 # SEED fixa o jitter. Ver tests/sync_network_coordinator.gd.
@@ -13,6 +13,10 @@ if [[ -z "$GODOT_BIN" ]]; then
   elif command -v godot >/dev/null; then GODOT_BIN="$(command -v godot)"; fi
 fi
 PROFILE="${PROFILE:-local}"
+case "$PROFILE" in
+  local|rtt50|rtt80|rtt100|rtt200|rtt150j|rtt150j_stall) ;;
+  *) echo "Unknown test profile: $PROFILE" >&2; exit 2 ;;
+esac
 SEED="${SEED:-1}"
 STALL="${STALL:-false}"
 PORT="${TEST_PORT:-$((26080 + RANDOM % 1000))}"

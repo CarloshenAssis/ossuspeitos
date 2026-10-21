@@ -10,6 +10,7 @@ const MAX_SAMPLES := 512
 
 var look_latency_ms: Array = []
 var snapshot_interval_ms: Array = []
+var pending_age_ms: Array = []
 var action_result_ms: Array = []
 var rejections: Dictionary = {}
 var sent_commands := 0
@@ -41,6 +42,7 @@ func snapshot_age_ms() -> float:
 	return float(Time.get_ticks_usec() - _last_snapshot_usec) / 1000.0 if _last_snapshot_usec > 0 else -1.0
 
 func pending_observed(count: int, oldest_age_usec: int) -> void:
+	record(pending_age_ms, float(oldest_age_usec) / 1000.0)
 	max_pending = maxi(max_pending, count)
 	max_pending_age_ms = maxf(max_pending_age_ms, float(oldest_age_usec) / 1000.0)
 
@@ -72,7 +74,7 @@ static func describe(samples: Array) -> String:
 		return "n=0"
 	var sorted := samples.duplicate()
 	sorted.sort()
-	return "n=%d,p50=%.1f,p95=%.1f,max=%.1f" % [sorted.size(), float(sorted[int(sorted.size() * 0.5)]),
+	return "n=%d,p50=%.6f,p95=%.6f,max=%.6f" % [sorted.size(), float(sorted[int(sorted.size() * 0.5)]),
 		float(sorted[mini(sorted.size() - 1, int(sorted.size() * 0.95))]), float(sorted[-1])]
 
 func summary(prediction: PlayerPrediction, interpolator: RemoteInterpolator) -> String:
@@ -80,6 +82,8 @@ func summary(prediction: PlayerPrediction, interpolator: RemoteInterpolator) -> 
 		"sent=%d packets=%d ack=%d pending=%d max_pending=%d max_pending_age_ms=%.0f" % [
 			sent_commands, sent_packets, prediction.last_ack, prediction.pending.size(), max_pending, max_pending_age_ms],
 		"snapshots=%d stale=%d foreign=%d interval_ms=%s" % [snapshots, stale_snapshots, foreign_session_snapshots, describe(snapshot_interval_ms)],
+		"pending_age_ms=%s" % describe(pending_age_ms),
+		"ack_error_yaw=%s ack_error_pitch=%s" % [describe(prediction.ack_errors_yaw), describe(prediction.ack_errors_pitch)],
 		"ack_error_m=%s ack_error_look=%s" % [describe(prediction.ack_errors_position), describe(prediction.ack_errors_look)],
 		"corrections_small=%d corrections_large=%d look_corrections=%d recoveries=%d epoch_resets=%d local_rejections=%d" % [
 			prediction.corrections_small, prediction.corrections_large, prediction.look_corrections, prediction.recoveries,
