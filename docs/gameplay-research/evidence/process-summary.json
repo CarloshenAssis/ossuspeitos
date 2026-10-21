@@ -1,0 +1,6 @@
+{
+  "tracked_live_godot_processes_after_run": 0,
+  "terminated_watchdog_sleep_zombies_adopted_by_pid1": 12,
+  "outer_timeouts": 0,
+  "note": "Only descendants of the baseline runner were monitored. Zombie entries are already terminated processes, not active servers."
+}

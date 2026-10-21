@@ -1,0 +1,225 @@
+{
+  "baseline_commit": "dd15ff2ab29d5e67fccedc41c431c30eb7e32c6d",
+  "godot": "4.4.1.stable.official.49a5bc7b6",
+  "source_log_root": "/workspace/.ossuspeitos-state/spec00-tests",
+  "selection": "Last duplicate-stage NET_STATS and TEST_NET_APPLIED per variant; last TRANSITION_REPORT per operation. Representative samples, not global aggregates; no role payloads or complete logs.",
+  "records": [
+    {
+      "variant": "sync_network_local",
+      "test": "tests/sync_network_test.sh",
+      "parameters": {
+        "PROFILE": "local",
+        "SEED": "1",
+        "STALL": "false"
+      },
+      "source_log": "sync_network_local.log",
+      "source_line": 43,
+      "metric": "NET_STATS",
+      "sample": "NET_STATS id=client-3 stage=DUPLICATE sent=878 packets=443 ack=875 pending=3 max_pending=5 max_pending_age_ms=69 snapshots=309 stale=0 foreign=0 interval_ms=n=308,p50=48.4,p95=55.2,max=55.6 ack_error_m=n=289,p50=0.0,p95=0.0,max=0.0 ack_error_look=n=289,p50=0.0,p95=0.0,max=0.0 corrections_small=0 corrections_large=0 look_corrections=0 recoveries=0 epoch_resets=4 local_rejections=0 look_to_frame_ms=n=0 action_to_result_ms=n=6,p50=34.7,p95=34.8,max=34.8 rejections={\"fire_replay\":1}"
+    },
+    {
+      "variant": "sync_network_rtt80",
+      "test": "tests/sync_network_test.sh",
+      "parameters": {
+        "PROFILE": "rtt80",
+        "SEED": "1",
+        "STALL": "false"
+      },
+      "source_log": "sync_network_rtt80.log",
+      "source_line": 50,
+      "metric": "NET_STATS",
+      "sample": "NET_STATS id=client-3 stage=DUPLICATE sent=896 packets=451 ack=888 pending=8 max_pending=11 max_pending_age_ms=173 snapshots=312 stale=1 foreign=0 interval_ms=n=311,p50=48.3,p95=55.3,max=55.7 ack_error_m=n=287,p50=0.0,p95=0.0,max=0.0 ack_error_look=n=287,p50=0.0,p95=0.0,max=0.0 corrections_small=0 corrections_large=0 look_corrections=0 recoveries=0 epoch_resets=4 local_rejections=0 look_to_frame_ms=n=0 action_to_result_ms=n=6,p50=117.5,p95=124.2,max=124.2 rejections={\"fire_replay\":1}"
+    },
+    {
+      "variant": "sync_network_rtt80",
+      "test": "tests/sync_network_test.sh",
+      "parameters": {
+        "PROFILE": "rtt80",
+        "SEED": "1",
+        "STALL": "false"
+      },
+      "source_log": "sync_network_rtt80.log",
+      "source_line": 51,
+      "metric": "TEST_NET_APPLIED",
+      "sample": "TEST_NET_APPLIED id=client-3 profile=rtt80 up_ms=40 down_ms=40 jitter_ms=0 up=n=458,p50=41.2,p95=41.3,max=43.8 down=n=361,p50=41.5,p95=41.8,max=46.1"
+    },
+    {
+      "variant": "sync_network_rtt150j",
+      "test": "tests/sync_network_test.sh",
+      "parameters": {
+        "PROFILE": "rtt150j",
+        "SEED": "3",
+        "STALL": "false"
+      },
+      "source_log": "sync_network_rtt150j.log",
+      "source_line": 50,
+      "metric": "NET_STATS",
+      "sample": "NET_STATS id=client-3 stage=DUPLICATE sent=915 packets=463 ack=902 pending=13 max_pending=16 max_pending_age_ms=255 snapshots=317 stale=0 foreign=0 interval_ms=n=316,p50=48.3,p95=68.9,max=75.8 ack_error_m=n=290,p50=0.0,p95=0.0,max=0.0 ack_error_look=n=290,p50=0.0,p95=0.0,max=0.0 corrections_small=0 corrections_large=0 look_corrections=0 recoveries=0 epoch_resets=4 local_rejections=0 look_to_frame_ms=n=0 action_to_result_ms=n=6,p50=200.3,p95=214.3,max=214.3 rejections={\"fire_replay\":1}"
+    },
+    {
+      "variant": "sync_network_rtt150j",
+      "test": "tests/sync_network_test.sh",
+      "parameters": {
+        "PROFILE": "rtt150j",
+        "SEED": "3",
+        "STALL": "false"
+      },
+      "source_log": "sync_network_rtt150j.log",
+      "source_line": 51,
+      "metric": "TEST_NET_APPLIED",
+      "sample": "TEST_NET_APPLIED id=client-3 profile=rtt150j up_ms=65 down_ms=65 jitter_ms=20 up=n=469,p50=75.8,p95=89.5,max=90.1 down=n=359,p50=76.3,p95=89.6,max=90.2"
+    },
+    {
+      "variant": "sync_network_stall",
+      "test": "tests/sync_network_test.sh",
+      "parameters": {
+        "PROFILE": "rtt150j",
+        "SEED": "5",
+        "STALL": "true"
+      },
+      "source_log": "sync_network_stall.log",
+      "source_line": 52,
+      "metric": "NET_STATS",
+      "sample": "NET_STATS id=client-1 stage=DUPLICATE sent=924 packets=467 ack=911 pending=13 max_pending=33 max_pending_age_ms=531 snapshots=320 stale=0 foreign=0 interval_ms=n=319,p50=48.3,p95=69.0,max=358.8 ack_error_m=n=285,p50=0.0,p95=0.0,max=0.0 ack_error_look=n=285,p50=0.0,p95=0.0,max=0.0 corrections_small=0 corrections_large=0 look_corrections=0 recoveries=0 epoch_resets=4 local_rejections=0 look_to_frame_ms=n=0 action_to_result_ms=n=6,p50=193.4,p95=220.8,max=220.8 rejections={\"fire_replay\":1}"
+    },
+    {
+      "variant": "sync_network_stall",
+      "test": "tests/sync_network_test.sh",
+      "parameters": {
+        "PROFILE": "rtt150j",
+        "SEED": "5",
+        "STALL": "true"
+      },
+      "source_log": "sync_network_stall.log",
+      "source_line": 53,
+      "metric": "TEST_NET_APPLIED",
+      "sample": "TEST_NET_APPLIED id=client-1 profile=rtt150j up_ms=65 down_ms=65 jitter_ms=20 up=n=473,p50=75.8,p95=89.6,max=372.5 down=n=362,p50=82.7,p95=89.8,max=386.5"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 183,
+      "metric": "TRANSITION_REPORT connect",
+      "sample": "TRANSITION_REPORT connect                    network    14      15.0      22.0      28.0      35.0"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 184,
+      "metric": "TRANSITION_REPORT countdown",
+      "sample": "TRANSITION_REPORT countdown                  ux          8    2006.9    2007.6    2007.8    2008.0"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 185,
+      "metric": "TRANSITION_REPORT countdown_to_play",
+      "sample": "TRANSITION_REPORT countdown_to_play          network     8       7.0       7.6       7.8       8.0"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 186,
+      "metric": "TRANSITION_REPORT elimination_to_body",
+      "sample": "TRANSITION_REPORT elimination_to_body        network    20       0.0       0.0       0.1       0.1"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 187,
+      "metric": "TRANSITION_REPORT ended_to_reveal",
+      "sample": "TRANSITION_REPORT ended_to_reveal            network     8       0.2       0.2       0.3       0.3"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 188,
+      "metric": "TRANSITION_REPORT error",
+      "sample": "TRANSITION_REPORT error                      network     3       6.8       6.9       6.9      13.7"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 182,
+      "metric": "TRANSITION_REPORT kind",
+      "sample": "TRANSITION_REPORT kind                       class       n       min       p50       p95       max"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 189,
+      "metric": "TRANSITION_REPORT play_first_snapshot",
+      "sample": "TRANSITION_REPORT play_first_snapshot        network     8       0.1       0.2      20.5      20.6"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 190,
+      "metric": "TRANSITION_REPORT ready_ack",
+      "sample": "TRANSITION_REPORT ready_ack                  network    11       5.8       6.7       7.1      13.4"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 191,
+      "metric": "TRANSITION_REPORT results_to_lobby",
+      "sample": "TRANSITION_REPORT results_to_lobby           ux          8    2000.8    2002.9    2014.9    2014.9"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 192,
+      "metric": "TRANSITION_REPORT room_create",
+      "sample": "TRANSITION_REPORT room_create                network     3       7.1       7.1       7.1       7.1"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 193,
+      "metric": "TRANSITION_REPORT room_join",
+      "sample": "TRANSITION_REPORT room_join                  network     8       7.0       7.2      14.0      14.1"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 194,
+      "metric": "TRANSITION_REPORT server_ready_to_countdown",
+      "sample": "TRANSITION_REPORT server_ready_to_countdown  server      2       0.3       0.3       0.3       0.6"
+    },
+    {
+      "variant": "rooms_network",
+      "test": "tests/rooms_network_test.sh",
+      "parameters": {},
+      "source_log": "rooms_network.log",
+      "source_line": 195,
+      "metric": "TRANSITION_REPORT server_tick",
+      "sample": "TRANSITION_REPORT server_tick                server      4       0.9       1.1       1.8       9.1"
+    }
+  ]
+}
