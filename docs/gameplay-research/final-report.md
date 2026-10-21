@@ -1,6 +1,6 @@
 # Suspeitos — entrega dos SPECs 01–08
 
-Branch `codex/gameplay-specs-01-08`, baseada na auditoria do PR #30 (`cfe260b`). Implementação de integração: `3e40dba`; commits posteriores de CI/documentação não mudam o runtime testado. A branch conserva a ancestralidade da auditoria, sem cherry-pick/cópia paralela. O PR consolidado depende do histórico do PR #30; nenhum deles foi mesclado.
+Branch `codex/gameplay-specs-01-08`, baseada na auditoria do PR #30 (`cfe260b`). Implementação de integração: `3e40dba`; commits posteriores de CI/documentação e cleanup do harness não mudam o código de gameplay testado. A branch conserva a ancestralidade da auditoria, sem cherry-pick/cópia paralela. O PR consolidado depende do histórico do PR #30; nenhum deles foi mesclado.
 
 ## Resultado implementado
 
@@ -64,3 +64,7 @@ O PR conserva main/publicação intactas, sem auto-merge. O novo job independent
 ## Correção da importação limpa no CI
 
 O primeiro gameplay-specs falhou corretamente ao detectar oito erros de prévia GLB do renderizador dummy do Godot 4.4.1. Importação local quente/parcial não os expunha. A reprodução em checkout novo confirmou: --headless --import termina 0, mas gera oito ERROR de textura; importação gráfica completa Compatibility/software termina 0 sem erros, e sete suítes afetadas passaram nesse projeto novo. O commit 8e880f4 acrescenta suporte Xvfb/Mesa somente no novo job e usa --import para aguardar todos os assets. As verificações estritas e os testes headless permanecem; nenhum código de gameplay mudou. A execução Ubuntu/Xvfb é confirmada pelos checks atuais do PR. [Investigação](evidence/clean-import-report.md) e [revisão independente](evidence/clean-import-review.md).
+
+## Cleanup do harness de menu
+
+O commit f639d83 corrige o helper de servidor do teste de menu: exec faz o PID registrado pertencer ao Godot, evitando deixá-lo vivo ao encerrar um shell intermediário. Todos os cinco usos são assíncronos; assertivas, timeouts, comandos e status foram preservados. O teste real passou novamente nos dez cenários, e auditoria por UID/executável/portas encontrou zero servidores restantes após EXIT, sem limpeza externa. Este é o único delta de testes desde a matriz original; produção e as outras suítes permanecem idênticas. O encerramento antecipado de menus assíncronos continua limitado pelo timeout existente de 120 s. [Evidência](evidence/menu-cleanup-report.md) e [revisão](evidence/menu-cleanup-review.md).

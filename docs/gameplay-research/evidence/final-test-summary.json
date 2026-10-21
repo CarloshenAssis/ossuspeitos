@@ -523,12 +523,23 @@
       "env": {},
       "expected_marker": "MENU_FLOW_TEST_OK",
       "exit": 0,
-      "seconds": 58.45,
+      "seconds": null,
       "markers": [
         "MENU_FLOW_TEST_OK scenes=10"
       ],
       "script_errors": [],
-      "status": "PASS"
+      "status": "PASS",
+      "original_matrix_run": {
+        "exit": 0,
+        "seconds": 58.45,
+        "markers": [
+          "MENU_FLOW_TEST_OK scenes=10"
+        ],
+        "status": "PASS"
+      },
+      "source_commit": "f639d83",
+      "measurement_note": "Targeted rerun after exec fix; timing not recorded",
+      "owned_servers_after_normal_exit": 0
     },
     {
       "test": "tests/sync_network_test.sh",
@@ -797,5 +808,9 @@
     "workflow_fix_commit": "8e880f4",
     "independent_review": "PASS",
     "ubuntu_xvfb_confirmation": "Consult current PR checks"
-  }
+  },
+  "runtime_identity_scope": "Production files unchanged since3e40dba; sole test delta menu_flow server exec retested atf639d83",
+  "test_tree_delta_after_matrix": [
+    "tests/menu_flow_test.sh"
+  ]
 }

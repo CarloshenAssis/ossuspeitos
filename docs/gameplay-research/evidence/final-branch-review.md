@@ -38,3 +38,7 @@ Final local matrix completed:37/37 GDScript and22/22 multiprocess PASS; integrat
 ## Subsequent CI-only follow-up
 
 Fresh import revealed Godot4.4.1 dummy GLB-preview errors. Commit8e880f4 changes only the new workflow import to complete software graphics/Xvfb with Mesa support; strict gate unchanged. Independent scoped review PASS, seven fresh affected suites PASS; no runtime changes. See clean-import-report.md and clean-import-review.md in this directory. Hosted latest PR checks confirm Ubuntu execution separately.
+
+## Menu harness follow-up
+
+Commitf639d83 changes only server() to exec in the existing menu harness. Five asynchronous callers confirmed, actual ten-scenario suite PASS, exact post-EXIT ownership audit zero servers, independent menu-cleanup-review PASS. Production and all other test files unchanged from3e40dba; targeted menu rerun supersedes its original matrix entry.

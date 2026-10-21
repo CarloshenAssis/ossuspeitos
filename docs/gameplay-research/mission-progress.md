@@ -67,3 +67,6 @@ Todas as oito tarefas implementadas e revisadas.37 suítes e22 variantes finais 
 
 ## CI final e importação limpa
 PR31 aberto com permissões reais de push/PR confirmadas; main dd15ff2 inalterada e autoMergeRequest=null. O primeiro novo check falhou na importação limpa por oito erros upstream de preview GLB no renderer dummy4.4.1. Corrigido em8e880f4: somente novo job, Xvfb/Mesa/software e --import completo; gate estrito preservado. Repro freshheadless red/freshgraphics green e sete suítesfresh PASS, revisão scoped PASS. Runtime continua3e40dba;37+22 não repetidos por mudança somenteCI. Checks hospedados da revisão atual ainda em acompanhamento; nenhum merge/publicação.
+
+## Follow-up do cleanup legado
+Resolvida em f639d83 a limitação de servidores destacados do baseline: server() usaexec, todos5callersbackground. Suite menu10scenes PASS, zeroownedserversapósEXITsemgroupkill, revisãoPASS. Único delta tests/menu_flow_test.sh desde3e40dba; produçãoe37GDs/21outroscenáriosidênticos, menu retestado. Fingerprint originalpermaneceevidênciada matrizbase; summaryregistraorunsubstituto. Últimocódigo de gameplay permanece3e40dba; CIseráconferido noheadfinaldoPR31.
