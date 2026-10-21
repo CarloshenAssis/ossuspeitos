@@ -38,8 +38,20 @@ Ruling: melhorias gráficas usarão perfis opcionais medidos, mantendo baseline 
 - Task 1: complete (commits ac4f0ed..669b109, review clean). SPEC01: recurso validado, aceleração/frenagem separadas; testes unitários + smoke/sync servidor e 4 clientes aprovados. Vertical/sprint adiados. Relatório 01-movement.md.
 - Task 2: complete (commits 669b109..ae05afa, review clean). SPEC02: correções de época/ações, perfis 50/100/200 e métricas precisas; 266 checks, smoke e sync com jitter/stall aprovados; leak do fixture eliminado. Relatório 02-prediction.md.
 - Task 3: complete (commits ae05afa..65992e3, review clean). SPEC03: catálogo novo por instância, cópias validadas e composição confiável; 32 suítes GDScript e combate 4/8extended aprovados. Relatório 03-combat.md.
-- SPEC04: próxima etapa; brief externo spec04-brief.md preparado.
-- SPEC05: pendente.
-- SPEC06: pendente.
+- Task 4: complete (commits e234aeb..4ff857f, review clean). SPEC04: precisão/bloom autoritativos e cone esférico estável; 6216 checks e laboratório12 passaram. Combate4 passou na repetição e8extended passou; timeout inicial CONTEST sem causa demonstrada registrado. Relatório04-calibration.md.
+- Task 5: complete (commits4ff857f..150b543 + correção28d18b6, review clean apósfixround1). SPEC05: nove suítes, spectator4 e gráfico aprovados; correção de prontidão validada coordinator37/netcode266/authority86 e combate4/8extended sequenciais aprovados. Revisões independentes de apresentação e harness PASS.
+- SPEC06: em execução, base28d18b6; brief externo spec06-brief.md.
 - SPEC07: pendente.
 - SPEC08: pendente.
+
+## Limitação operacional observada
+Após o reinício do ambiente, quatro servidores locais antigos do teste SPEC00 menu_flow permaneceram destacados (portas 33072/33075/33076/33077). Confirmados por cmdline, proprietário e logs; encerrados individualmente, sem atingir processos externos. A limpeza de descendentes do harness requer atenção na certificação final.
+
+## CI de checkpoint
+Run39689745482 (SPEC01–03): match-tests/menu-tests/rooms-tests passaram; network-tests falhou no cenário8extended. netcode-tests também passou na conclusão; resultado geral FAILURE pelo network-tests. Download do log detalhado redireciona para blob storage bloqueado neste ambiente; não considerar CI aprovado. Falha intermitente CONTEST também observada localmente; investigação de causalidade do harness em andamento, sem enfraquecer assertivas.
+
+Task5: fix round1/5 em revisão — reset imediato após health0, ownership CharacterRig e aplicação ao vivo reduce_motion. Novos regressivos passaram; gate combate4 depende da correção separada de prontidão de época identificada em combat-flake-research.md.
+
+Task5: minor (resolvido documentalmente): relatório externo dizia teste de strength0 direto; cobertura real é disable integrado. Redação corrigida para disabled presentation identity.
+
+Correção adicional28d18b6: ações de teste agora aguardam barreira de previsão/época, sem relaxar timeouts/assertivas. Teste determinístico reproduziu falha antiga;4/8network passaram. Causa histórica doCI8 não atribuída semlogs. Review PASS compliance/quality.
