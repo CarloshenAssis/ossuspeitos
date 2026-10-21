@@ -1,8 +1,26 @@
 class_name MovementRules
 extends RefCounted
 
+const MovementConfigResource = preload("res://shared/movement_config.gd")
+
 const MAX_SPEED := 5.0
 const ACCELERATION := 18.0
+# Compatibility constants above remain the presentation/consumer envelope.
+# Copy once at class initialization, bypassing ResourceLoader's mutable cache.
+static var _movement_parameters: Dictionary = _load_movement_parameters()
+
+static func _load_movement_parameters() -> Dictionary:
+	var config = ResourceLoader.load("res://shared/default_movement_config.tres", "", ResourceLoader.CACHE_MODE_IGNORE)
+	var parameters: Dictionary
+	if config == null or not config is MovementConfigResource:
+		parameters = {"rejection": "movement_config_missing"}
+		parameters.make_read_only()
+	else:
+		parameters = config.validated_parameters()
+	if not str(parameters["rejection"]).is_empty():
+		push_error("Bundled movement configuration rejected: " + str(parameters["rejection"]))
+	return parameters
+
 ## Mira (protocolo 9): cada comando pode girar no máximo `MAX_YAW_DELTA`, e um
 ## balde por eixo (rajada `2 × MAX_YAW_DELTA`, reabastecido a `MAX_YAW_RATE`
 ## por segundo SIMULADO, isto é, por tick de comando) limita a taxa. Os valores
@@ -65,6 +83,9 @@ static func aim_direction(yaw: float, pitch: float) -> Vector3:
 ## Recusa de um comando antes de simulá-lo (valores do cliente): vazio se ele
 ## pode ser aplicado ao estado atual. Não altera nada.
 static func command_rejection(state: Dictionary, move: Vector2, yaw_delta: float, pitch_delta: float) -> String:
+	var config_rejection := str(_movement_parameters["rejection"])
+	if not config_rejection.is_empty():
+		return config_rejection
 	var reason := validate_input(move, yaw_delta, pitch_delta)
 	if not reason.is_empty():
 		return reason
@@ -103,14 +124,35 @@ static func look_intent(state: Dictionary, raw_yaw: float, raw_pitch: float) -> 
 ## já atualizado. Sem relógio de parede: o servidor e o replay do cliente
 ## chegam ao mesmo resultado.
 static func step_movement(state: Dictionary, move: Vector2, delta: float) -> void:
+	var reason := str(_movement_parameters["rejection"])
+	if not reason.is_empty():
+		push_error("Movement rejected before simulation: " + reason)
+		return
+	_step_with_parameters(state, move, delta, _movement_parameters)
+
+## Pure local configuration-to-step API for tools/tests; never installs active
+## configuration. Rejects invalid resources before touching any state.
+static func step_with_config(state: Dictionary, move: Vector2, delta: float, config: Resource) -> String:
+	if config == null or not config is MovementConfigResource:
+		return "movement_config_missing"
+	var parameters: Dictionary = config.validated_parameters()
+	var reason := str(parameters["rejection"])
+	if not reason.is_empty():
+		return reason
+	_step_with_parameters(state, move, delta, parameters)
+	return ""
+
+static func _step_with_parameters(state: Dictionary, move: Vector2, delta: float, parameters: Dictionary) -> void:
+	var speed := float(parameters["walk_speed"])
+	var rate := float(parameters["ground_deceleration"] if move == Vector2.ZERO else parameters["ground_acceleration"])
 	var yaw := float(state["yaw"])
 	var local_direction := Vector3(move.x, 0.0, move.y)
 	var direction := local_direction.rotated(Vector3.UP, yaw)
-	var target_velocity := direction * MAX_SPEED
+	var target_velocity := direction * speed
 	var velocity: Vector3 = state["velocity"]
-	velocity = velocity.move_toward(target_velocity, ACCELERATION * delta)
-	if velocity.length() > MAX_SPEED:
-		velocity = velocity.normalized() * MAX_SPEED
+	velocity = velocity.move_toward(target_velocity, rate * delta)
+	if velocity.length() > speed:
+		velocity = velocity.normalized() * speed
 	var resolved := resolve_step(state["position"], velocity * delta)
 	var position: Vector3 = resolved["position"]
 	if bool(resolved["blocked_x"]):
