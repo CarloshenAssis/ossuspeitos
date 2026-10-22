@@ -23,7 +23,7 @@ signal room_join_requested(code: String, player_name: String)
 signal room_ready_requested(ready: bool)
 signal online_leave_requested
 
-const PANELS := ["main", "host", "join", "online", "howto", "settings", "hall", "room"]
+const PANELS := ["main", "host", "join", "online", "howto", "settings", "audio", "hall", "room"]
 ## Cor cosmética por aparência (só um ponto ao lado do nome na lista da sala).
 const APPEARANCE_COLORS := {
 	"ember": Color("#E0703A"), "moss": Color("#7FA35A"), "dawn": Color("#E3A0B0"), "night": Color("#5B6FB0"),
@@ -112,6 +112,7 @@ func _build_card() -> void:
 	panels["online"] = _build_online()
 	panels["howto"] = _build_howto()
 	panels["settings"] = _build_settings()
+	panels["audio"] = _build_audio_settings()
 	panels["hall"] = _build_hall()
 	panels["room"] = _build_room()
 	for panel_id in PANELS:
@@ -552,6 +553,7 @@ func _build_settings() -> VBoxContainer:
 		settings.volume = v
 		settings.apply_audio()
 		_save_settings())
+	_button("settings_audio", "VOLUMES DA PARTIDA", box, false, func(): _show_panel("audio"))
 	var sensitivity := _slider(box, "settings_sensitivity", "Sensibilidade do mouse", MenuSettings.SENSITIVITY_MIN, MenuSettings.SENSITIVITY_MAX, 0.05, settings.sensitivity,
 		func(v): return "%.2f×" % v)
 	sensitivity.value_changed.connect(func(v):
@@ -701,6 +703,7 @@ func _first_focus_target() -> Control:
 		"room": return buttons["room_ready"]
 		"howto": return buttons["howto_back"]
 		"settings": return buttons["settings_volume"]
+		"audio": return buttons["settings_movement_volume"]
 	return null
 
 ## Enter: ação principal do painel (ou avançar do campo de nome).
@@ -734,6 +737,8 @@ func _escape() -> void:
 		_dismiss_status()
 	elif panel_name in ["hall", "room"]:
 		_leave_online()
+	elif panel_name == "audio" and not flow.busy():
+		_show_panel("settings")
 	elif panel_name != "main" and not flow.busy():
 		_show_panel("main")
 
@@ -1022,3 +1027,15 @@ func _sound(sound_name: String) -> void:
 		return
 	_player.stream = SfxBank.stream(sound_name)
 	_player.play()
+
+func _build_audio_settings() -> VBoxContainer:
+	var box := _panel()
+	box.add_child(MenuTheme.heading("Sons da partida"))
+	for category in ["movement_volume", "environment_volume", "combat_volume"]:
+		var titles := {"movement_volume":"Passos", "environment_volume":"Portas e objetos", "combat_volume":"Combate"}
+		var sound_slider := _slider(box,"settings_"+category,titles[category],0.0,1.0,0.05,float(settings.get(category)),func(value): return "%d%%" % int(round(value*100)))
+		sound_slider.value_changed.connect(func(value):
+			settings.set(category,value)
+			_save_settings())
+	_button("audio_back","VOLTAR",box,true,func(): _show_panel("settings"))
+	return box

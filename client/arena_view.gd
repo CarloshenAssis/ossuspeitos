@@ -18,6 +18,7 @@ var motion_pivot: Node3D
 const CameraEffects = preload("res://client/camera_effects.gd")
 var camera_effects := CameraEffects.new()
 var presentation_motion := true
+var spatial_audio: SpatialAudioController
 var fx: CombatFx
 var _muzzle_flash: MeshInstance3D
 var _combat_prev: Dictionary = {}
@@ -139,6 +140,9 @@ func _ready() -> void:
 	weapon_model.add_child(_muzzle_flash)
 	fx = CombatFx.new()
 	add_child(fx)
+	spatial_audio = SpatialAudioController.new()
+	add_child(spatial_audio)
+	configure_audio(MenuSettings.load_saved())
 	var overlay := CanvasLayer.new()
 	add_child(overlay)
 	var overlay_root := Control.new()
@@ -875,3 +879,16 @@ func _update_environment_prompt() -> void:
 	if not item.is_empty():
 		var def := EnvironmentRules.definition(str(item.id))
 		environment_prompt.text = ("E — Fechar porta" if item.open else "E — Abrir porta") if def.kind == "door" else "F — Pegar objeto   G — Empurrar"
+
+func configure_audio(settings: MenuSettings) -> void:
+	if spatial_audio != null:
+		spatial_audio.configure(settings.movement_volume, settings.environment_volume)
+	if fx != null:
+		fx.set_category_volume(settings.combat_volume)
+
+func apply_sound_events(events: Array, round_id: int, bootstrap: bool = false) -> void:
+	if spatial_audio == null: return
+	if bootstrap:
+		spatial_audio.prime(events, round_id)
+		return
+	spatial_audio.consume(events,round_id,camera_origin(),local_peer_id,EnvironmentRules.blockers(environment_view.snapshot))

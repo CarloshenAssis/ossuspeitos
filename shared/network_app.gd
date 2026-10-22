@@ -18,6 +18,9 @@ var authoritative_world: AuthoritativeWorld
 var body_registry := BodyRegistry.new()
 var interaction_authority: InteractionAuthority
 var local_environment: Dictionary = {}
+var sound_authority: SoundEventAuthority
+var local_sound_events: Array = []
+var _sound_bootstrapped := false
 var local_bodies: Dictionary = {}
 var combat_authority: CombatAuthority
 var arena_view: ArenaView
@@ -300,6 +303,7 @@ func _use_room(room: MatchRoom) -> void:
 	combat_authority = room.combat
 	body_registry = room.bodies
 	interaction_authority = room.interactions
+	sound_authority = room.sounds
 
 ## Liga os sinais das autoridades da sala; cada callback entra na própria sala
 ## antes de agir, então nada de uma sala é tratado no contexto de outra.
@@ -571,6 +575,7 @@ func _physics_process(_delta: float) -> void:
 func _tick_room(now_msec: int) -> void:
 	interaction_authority.tick(NetSync.TICK_SECONDS)
 	authoritative_world.step(_command_gate, _run_command_action, _on_command_rejected)
+	sound_authority.observe_movement()
 	combat_authority.tick(now_msec)
 	round_authority.tick(now_msec)
 	if round_authority.consume_countdown_tick(now_msec):
@@ -592,7 +597,7 @@ func _broadcast_snapshot() -> void:
 			continue
 		world_snapshot.rpc_id(int(peer_id), {"tick": server_tick, "session": session_nonce,
 			"players": players, "ack": authoritative_world.ack_for(int(peer_id)),
-			"environment": interaction_authority.snapshot()})
+			"environment": interaction_authority.snapshot(), "sounds": sound_authority.snapshot()})
 
 ## Membros da sala corrente com o socket aberto. Um cliente que caiu fica
 ## no lobby até o aviso de desconexão chegar; enviar a ele só gera erro do
@@ -1404,6 +1409,8 @@ func _run_command_action(peer_id: int, action: Dictionary, _seq: int) -> void:
 		result = interaction_authority.request(peer_id, action, now)
 	else:
 		result = combat_authority.request_pickup(peer_id, action.get("pickup_id", ""), id, now)
+	if kind == NetSync.ACTION_RELOAD and bool(result.get("accepted", false)):
+		sound_authority.emit_authorized("reload", authoritative_world.states[peer_id].position, peer_id)
 	_report_action_result(peer_id, kind, id, result)
 
 func _report_action_result(peer_id: int, kind: String, id: int, result: Dictionary) -> void:
@@ -1483,6 +1490,17 @@ func world_snapshot(payload: Dictionary) -> void:
 		prediction.set_environment_blockers(EnvironmentRules.blockers(environment))
 		if arena_view != null:
 			arena_view.apply_environment(environment)
+	local_sound_events.clear()
+	var raw_sounds: Variant = payload.get("sounds", [])
+	if typeof(raw_sounds) == TYPE_ARRAY and raw_sounds.size() <= SoundEventRules.MAX_EVENTS:
+		for raw_sound in raw_sounds:
+			var sound := SoundEventRules.sanitize(raw_sound)
+			if not sound.is_empty() and int(sound.round_id) == int(local_round_public.get("round_id", 0)):
+				local_sound_events.append(sound)
+	if arena_view != null and not environment.is_empty():
+		arena_view.apply_sound_events(local_sound_events, int(environment.round_id), not _sound_bootstrapped)
+	if not environment.is_empty() and int(environment.round_id) > 0:
+		_sound_bootstrapped = true
 	var ack: Dictionary = payload.get("ack", {})
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "snapshot", payload)
 	var own_id := multiplayer.get_unique_id()
@@ -1767,6 +1785,7 @@ func _on_round_state_changed(state: int, round_id: int) -> void:
 
 func _on_round_roles_ready(round_id: int, participant_ids: Array) -> void:
 	interaction_authority.reset(round_id)
+	sound_authority.reset(round_id)
 	combat_authority.begin_round(round_id, participant_ids)
 	# Nova época de controle: comandos da fase anterior (ainda em trânsito)
 	# são recusados sem efeito, com resultado explícito para suas ações.
@@ -2779,6 +2798,7 @@ func _apply_menu_settings(settings: MenuSettings) -> void:
 	if arena_view != null:
 		arena_view.set_presentation_motion(not settings.reduce_motion)
 		arena_view.set_graphics_profile(settings.graphics_profile)
+		arena_view.configure_audio(settings)
 	mouse_sensitivity = MOUSE_SENSITIVITY * MenuSettings.clamp_sensitivity(settings.sensitivity)
 	print("MENU_SETTINGS_APPLIED volume=%.2f sensitivity=%.2f" % [settings.volume, settings.sensitivity])
 

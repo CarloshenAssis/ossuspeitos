@@ -22,6 +22,7 @@ var world := AuthoritativeWorld.new()
 var combat: CombatAuthority
 var bodies := BodyRegistry.new()
 var interactions: InteractionAuthority
+var sounds: SoundEventAuthority
 var host_peer_id := 0
 var created_msec := 0
 var last_activity_msec := 0
@@ -42,6 +43,8 @@ func _init(id: int, room_code: String, now_msec: int, ready_gate: bool,
 	round_authority.ready_gate = ready_gate
 	combat = CombatAuthority.new(round_authority, world)
 	interactions = InteractionAuthority.new(round_authority, world)
+	sounds = SoundEventAuthority.new(round_authority, world)
+	interactions.event_emitted.connect(sounds.observe_interaction)
 
 func member_count() -> int:
 	return lobby.size()
@@ -168,6 +171,7 @@ func destroy_reason(now_msec: int, empty_grace_msec: int, lobby_idle_msec: int) 
 
 ## Encerramento: apaga tudo desta sala.
 func clear() -> void:
+	sounds.reset(0)
 	combat.clear_round()
 	round_authority.clear()
 	interactions.reset(0)

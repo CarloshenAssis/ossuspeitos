@@ -27,6 +27,7 @@ Logs completos: `/workspace/.ossuspeitos-state/phase2/spec09/`.
 | `--script tests/netcode_test.gd` | NETCODE_TEST_OK, 266 verificações |
 | `--script tests/combat_authority_test.gd` | COMBAT_AUTHORITY_TEST_OK, 86 verificações |
 | `bash tests/network_smoke_test.sh` | NETWORK_SMOKE_OK, servidor + 4 clientes, encerramento concluído |
+| `TEST_PORT=41209 bash tests/combat_network_test.sh` | COMBAT_NETWORK_TEST_OK, servidor + 4 clientes, extended=false, encerramento concluído |
 | `bash tests/physics_backend_lab_test.sh` | ambos backends OK, sem erro de engine/script |
 
 O teste novo inclui concorrência de posse, replay/rate limit, jogador morto, alvo ausente, massa, payload de teleporte inválido, DTO sem segredo, cópias independentes, isolamento e reset de salas, colisão de movimento e raio da mesma porta, previsão igual **antes** do ACK e aproximação real até parar na porta, elevar/soltar/cair/empurrar objeto. O RED inicial produziu `INTERACTION_ASSERT interactive authority exists` antes da implementação; logs `red.log` e `extended.log` preservam a evolução.
@@ -47,3 +48,5 @@ Medição única, uma caixa, simulação acelerada, host compartilhado; **não**
 Não há destruição, arremesso com força livre, corpo mole, empilhamento físico geral nem migração do movimento planar. Comparação nativa é laboratório, não runtime de produção. O smoke de quatro clientes comprova regressão de transporte, mas não substitui o novo cenário multiprocesso de interação/áudio/investigação do SPEC 16. A validação completa com 200 ms e oito jogadores será registrada nesse cenário integrado, sem presumir resultado.
 
 Correção verificada RED→GREEN: encerrar rodada entre pegar objeto no piso e o primeiro tick de transporte restaura o bloqueador por release_peer. A suíte final passou43checks.
+
+Regressão adicional de revisão: o teste foi ampliado para 43 verificações; a primeira execução detectou `ended round collision cannot retain held-object exemption` (43 checks, uma falha), quando a rodada terminava entre pegar o objeto e seu primeiro tick. Evidência RED: `ended-carry-red.log`. GREEN confirmado em ended-carry-green.log:43checks, zero falhas; incluído no commit a35f872.

@@ -33,6 +33,7 @@ const SMOKE := Color(0.35, 0.36, 0.4)
 var events: Array = []
 var _ui_players: Array = []
 var _world_players: Array = []
+var _category_volume := 1.0
 var _next_ui := 0
 var _next_world := 0
 
@@ -56,6 +57,7 @@ func _ready() -> void:
 ## Som do próprio jogador (não posicional).
 func play_ui(sound_name: String) -> void:
 	_log(sound_name, Vector3.ZERO)
+	if _category_volume <= 0.0: return
 	var player: AudioStreamPlayer = _ui_players[_next_ui]
 	_next_ui = (_next_ui + 1) % _ui_players.size()
 	player.stream = SfxBank.stream(sound_name)
@@ -64,6 +66,7 @@ func play_ui(sound_name: String) -> void:
 ## Som de um evento público no mundo, na posição oficial do evento.
 func play_world(sound_name: String, position: Vector3) -> void:
 	_log(sound_name + "@world", position)
+	if _category_volume <= 0.0: return
 	var player: AudioStreamPlayer3D = _world_players[_next_world]
 	_next_world = (_next_world + 1) % _world_players.size()
 	player.stream = SfxBank.stream(sound_name)
@@ -186,3 +189,14 @@ func _expire(node: Node, seconds: float) -> void:
 	get_tree().create_timer(seconds).timeout.connect(func():
 		if is_instance_valid(node):
 			node.queue_free())
+
+func set_category_volume(value: float) -> void:
+	var gain := clampf(value,0.0,1.0) if is_finite(value) else 0.8
+	_category_volume = gain
+	var offset := linear_to_db(maxf(gain,0.0001))
+	for player in _ui_players:
+		player.volume_db=UI_VOLUME_DB+offset
+		if gain<=0: player.stop()
+	for player in _world_players:
+		player.volume_db=WORLD_VOLUME_DB+offset
+		if gain<=0: player.stop()
