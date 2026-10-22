@@ -6,7 +6,7 @@ extends RefCounted
 signal event_emitted(event: Dictionary)
 const ACTION_INTERVAL_MSEC := 200
 const MAX_SEQUENCE_ADVANCE := 64
-const MAX_CARRY_MASS := 4.0
+const MAX_CARRY_MASS := EnvironmentRules.MAX_CARRY_MASS
 var rounds: RoundAuthority
 var world: AuthoritativeWorld
 var investigations: InvestigationAuthority

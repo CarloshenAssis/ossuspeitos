@@ -1321,7 +1321,7 @@ func queue_environment_interaction(verb: String, object_id: String = "") -> bool
 		if target.is_empty(): return false
 	if target.is_empty():
 		if arena_view == null: return false
-		var item: Dictionary = arena_view.environment_view.nearest(prediction.state.get("position", Vector3.ZERO), multiplayer.get_unique_id(), verb if verb != "toggle" else "")
+		var item: Dictionary = arena_view.environment_view.nearest(prediction.state.get("position", Vector3.ZERO), multiplayer.get_unique_id(), verb)
 		if item.is_empty(): return false
 		target = str(item.id)
 	var id := _next_action_id(NetSync.ACTION_INTERACT)

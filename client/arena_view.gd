@@ -902,21 +902,18 @@ func apply_environment(value: Dictionary) -> void:
 		environment_view.apply_state(value)
 
 func _update_environment_prompt() -> void:
-	if environment_prompt == null or environment_view == null:
-		return
+	if environment_prompt == null or environment_view == null: return
 	environment_prompt.text = ""
-	if not gameplay_visuals or spectator_target_peer_id != 0 or not bool(_alive_flags.get(local_peer_id, true)):
-		return
+	if not gameplay_visuals or spectator_target_peer_id != 0 or not bool(_alive_flags.get(local_peer_id, true)): return
+	var messages: Array[String]=[]
 	var held := environment_view.nearest(player_rig.position, local_peer_id, "drop")
 	if not held.is_empty():
-		environment_prompt.text = "Q — Soltar objeto"
-		return
-	var nearby_body := nearest_investigation()
-	if not nearby_body.is_empty(): environment_prompt.text = "I — Inspecionar corpo"
-	var item := environment_view.nearest(player_rig.position, local_peer_id)
-	if not item.is_empty():
-		var def := EnvironmentRules.definition(str(item.id))
-		environment_prompt.text = ("E — Fechar porta" if item.open else "E — Abrir porta") if def.kind == "door" else "F — Pegar objeto   G — Empurrar"
+		messages.append(environment_view.hint_for(str(held.id),int(held.holder),local_peer_id))
+	else:
+		var item := environment_view.nearest(player_rig.position, local_peer_id)
+		if not item.is_empty(): messages.append(environment_view.hint_for(str(item.id),int(item.holder),local_peer_id))
+	if not nearest_investigation().is_empty(): messages.append("I — Inspecionar corpo")
+	environment_prompt.text="\n".join(messages)
 
 func configure_audio(settings: MenuSettings) -> void:
 	if spatial_audio != null:

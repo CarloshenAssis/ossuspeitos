@@ -5,6 +5,7 @@ extends RefCounted
 ## meshes; never a mutable static room state. No native physics dependency.
 const MAX_OBJECTS := 24
 const REACH := 2.5
+const MAX_CARRY_MASS := 4.0
 const MAX_HORIZONTAL_SPEED := 1.5
 const MAX_FALL_SPEED := 6.0
 const OBJECT_KEYS := ["id", "position", "velocity", "open", "holder"]

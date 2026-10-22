@@ -8,7 +8,10 @@ Base59926cb, branchcodex/gameplay-specs-09-16. PR30/31abertos; maindd15ff2 inalt
 - SPEC10: implementado/integradopor sala;39/39suítes incluindo30checksaudio e smoke4 PASS. Occlusãoexperimental desligada; corrida nãoinventada. Ver10-audio.md.
 - SPEC11: concluído inicialmente,35checksnovos/36gráficos e40/40suítes PASS. Camada procedural, sem simulação/segredos. Ver11-animation.md.
 - SPEC12: implementado,93checks e41/41suítesPASS. Corpooficial/DTOprivado/controleI/LOS e orçamentoúnico deinteract. Testenovoreal4RTT200 comduasinspeções/sigilopassou;8x3emexecução, nãoinferirresultado.
-- SPEC13–16: pendentes.
+- SPEC13: integrado à mansão;74checks degeometria/hints/mensagens e42/42suítes PASS. Semtrilhaambientalcontínua nova.
+- SPEC14: avaliação documental em fechamento.
+- SPEC15: benchmark comparativo independente em execução, runtimecongelado.
+- SPEC16: harnessnovo4local/4RTT200/8×3local e lifecyclePASS; regressãofinal/revisão/CI/PRpendentes.
 
 Ruling: usar física analítica limitada para bloqueadores competitivos e Physics/Jolt apenas no laboratório — preserva replay e geometria — custo: objetos não terão dinâmica rígida arbitrária.
 Ruling: protocolo12 explícito para ações/snapshots de ambiente sem novos métodos RPC — impede cliente11 ignorar colisões — custo: builds11/12 precisam ser atualizadas juntas.

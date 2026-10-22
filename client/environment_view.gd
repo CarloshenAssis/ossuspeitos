@@ -42,9 +42,21 @@ func nearest(position: Vector3, own_peer: int, verb: String="") -> Dictionary:
   if verb=="drop" and int(item.holder)==own_peer: return item.duplicate(true)
   if verb=="drop": continue
   if int(item.holder)>0: continue
+  if verb=="toggle" and def.kind!="door": continue
   if verb in ["take","push"] and def.kind!="prop": continue
+  if verb=="take" and float(def.mass)>EnvironmentRules.MAX_CARRY_MASS: continue
   var distance := position.distance_to(item.position)
   if distance<closest:
    result=item
    closest=distance
  return result.duplicate(true)
+
+func hint_for(id: String, holder: int, own_peer: int) -> String:
+ var def := EnvironmentRules.definition(id)
+ if def.is_empty(): return ""
+ if holder>0: return "Q — Soltar objeto" if holder==own_peer else "Objeto em uso por outro jogador"
+ if def.kind=="door":
+  for item in snapshot.get("objects",[]):
+   if item.id==id: return "E — Fechar porta" if item.open else "E — Abrir porta"
+ if float(def.mass)>EnvironmentRules.MAX_CARRY_MASS: return "G — Empurrar (objeto pesado)"
+ return "F — Pegar objeto   G — Empurrar"

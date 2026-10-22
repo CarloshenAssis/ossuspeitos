@@ -248,6 +248,19 @@ func _process(_delta: float) -> void:
 # --- Avisos (modelo puro) ---------------------------------------------------------
 
 static func rejection_notice(action: String, reason: String, combat: Dictionary = {}) -> String:
+	if action=="interact":
+		var interaction_messages := {
+			"object_too_heavy":"Objeto pesado · use G para empurrar",
+			"interaction_blocked":"Há um obstáculo no caminho",
+			"object_occupied":"Objeto em uso · aguarde ficar livre",
+			"already_carrying":"Solte o objeto que está carregando",
+			"not_holder":"Você não está segurando esse objeto",
+			"object_unavailable":"Objeto indisponível",
+			"body_unavailable":"Corpo indisponível nesta rodada",
+			"out_of_range":"Aproxime-se para interagir",
+			"rate_limited":"Aguarde um instante antes de interagir",
+			"invalid_interaction":"Ação indisponível para esse objeto"}
+		if interaction_messages.has(reason): return interaction_messages[reason]
 	# Sem reserva oficial, R não resolve: aponta para a munição do mapa.
 	if reason == "empty_magazine" and not combat.is_empty() and int(combat.get("reserve", 0)) <= 0:
 		return "Pente vazio · procure munição"
