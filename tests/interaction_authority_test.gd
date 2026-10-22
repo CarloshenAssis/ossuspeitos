@@ -117,6 +117,19 @@ func _initialize() -> void:
  authority.tick(NetSync.TICK_SECONDS)
  check(authority.object_state(prop).holder==0,"ended round releases holder")
  check(EnvironmentRules.blockers(authority.snapshot())==room.world.environment_blockers,"ended round collision cannot retain held-object exemption")
+ # A forced drop must not reset a still-connected player's action budget.
+ room.round_authority.state=RoundState.ACTIVE
+ room.round_authority.alive[1]=true
+ authority.reset(room.round_authority.round_id)
+ room.world.teleport(1,p+Vector3(-1.2,-0.2,0))
+ room.world.teleport(2,Vector3(25,1,2.5))
+ var accepted_count := 0
+ for index in range(1,66):
+  var toggle: Dictionary=authority.request(1,{"id":index,"object_id":door_id,"verb":"toggle"},10000+index*250)
+  if toggle.accepted: accepted_count+=1
+ check(accepted_count==65,"long connected action history accepted")
+ authority.release_peer(1)
+ check(authority.request(1,{"id":66,"object_id":door_id,"verb":"toggle"},27000).accepted,"forced release preserves live action sequence")
  room.clear()
  print("INTERACTION_AUTHORITY_TEST_%s checks=%d failures=%d" % ["OK" if failures==0 else "FAILED",checks,failures])
  quit(0 if failures==0 else 1)

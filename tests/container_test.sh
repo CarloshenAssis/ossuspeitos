@@ -110,8 +110,8 @@ T0=$(date +%s%N)
 start_container "$MAIN" -e PORT="$PORT" -e ARMED_MYSTERY_STATUS_SECONDS=5 -p "127.0.0.1:$PORT:$PORT" "$IMAGE"
 wait_clog "$MAIN" 'DEDICATED_READY' 30
 echo "STARTUP ready_ms=$(( ($(date +%s%N) - T0) / 1000000 ))"
-assert_grep ready-line "DEDICATED_READY bind=0.0.0.0 port=$PORT port_source=env capacity=8 protocol=11 shutdown_file=on max_rooms=12" <(clog "$MAIN")
-assert_grep release-build 'DEDICATED_START game=armed-mystery commit=[0-9a-f]+ godot=4\.4\.1-stable .*protocol=11 build=release display=headless capacity=8' <(clog "$MAIN")
+assert_grep ready-line "DEDICATED_READY bind=0.0.0.0 port=$PORT port_source=env capacity=8 protocol=12 shutdown_file=on max_rooms=12" <(clog "$MAIN")
+assert_grep release-build 'DEDICATED_START game=armed-mystery commit=[0-9a-f]+ godot=4\.4\.1-stable .*protocol=12 build=release display=headless capacity=8' <(clog "$MAIN")
 assert_equal non-root-uid "$(docker exec "$MAIN" id -u)" 10001
 assert_equal app-read-only "$(docker exec "$MAIN" sh -c 'touch /app/x 2>/dev/null && echo writable || echo read-only')" read-only
 BUSY_STATUS=0
@@ -165,7 +165,7 @@ assert_grep join-deadline-logged 'DEDICATED_JOIN_DEADLINE peer_id=' <(clog "$MAI
 assert_grep status-line 'DEDICATED_STATUS uptime_s=[0-9]+ peers=0 hall=0 pending=0 rooms=0 rooms_playing=0 room_members=0 ' <(clog "$MAIN")
 stats "$MAIN" idle
 probe after-idle && ok probe-after-idle || bad probe-after-idle
-assert_grep probe-joined 'PROBE_OK .* result=joined .* round_state=WAITING room=lobby protocol=11' "$TMP_DIR/probe-after-idle.log"
+assert_grep probe-joined 'PROBE_OK .* result=joined .* round_state=WAITING room=lobby protocol=12' "$TMP_DIR/probe-after-idle.log"
 
 # --- multiplayer: 8 clientes, sigilo, recusas, adversário, saídas ---------------
 SCENE=multiplayer

@@ -13,3 +13,5 @@ Ruling: protocolo12 explícito para ações/snapshots de ambiente sem novos mét
 Ruling: não inventar sprint, poderes secretos ou NPCs — regras incompletas e escopo — custo: corrida real/habilidades futuras permanecem fora desta fase.
 
 Ruling: oclusão por AABB fica opcional/desabilitada por padrão — orçamento/escuta ainda não certificados — custo: sons de outra sala usam distância/posicionamento sem abafamento por parede no padrão.
+
+Revisão independente09: forcedrelease apagava orçamento de ações e bloqueava a conexão apósid65. Teste reproduziuRED (45checks,1falha); release_peer agora preserva orçamento até reset da rodada, GREEN45/45. Três expectativas remanescentesprotocol11 no harnesscontainer corrigidaspara12; assertivas mantidas, execução realcontainer fica noCI final.

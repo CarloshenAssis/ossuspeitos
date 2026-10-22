@@ -120,8 +120,8 @@ func release_peer(peer_id: int) -> void:
    item.holder=0
    item.velocity=Vector3.ZERO
    _changed("object",item,peer_id)
- _last_ids.erase(peer_id)
- _last_times.erase(peer_id)
+ # Forced release can happen within a living connection. Keep its replay and
+ # rate budgets; reset() alone clears them at the new round boundary.
  _sync_blockers()
 
 func tick(delta: float) -> void:
