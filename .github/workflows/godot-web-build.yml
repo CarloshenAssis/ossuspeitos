@@ -217,6 +217,15 @@ jobs:
       - name: Install Chromium for the browser test
         run: npx --yes playwright@1.56.1 install --with-deps chromium
 
+      - name: Retain WebSocket packets through a stalled browser poll
+        env:
+          TEST_LOG_DIR: ${{ runner.temp }}/godot-web-logs/websocket-backlog
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock playwright@1.56.1 >/dev/null
+          GODOT_BIN="$(command -v godot)" bash tests/websocket_backlog_test.sh
+
       # Chromium headless: menu Web (sem criar partida local/LAN, URL de
       # servidor da query ignorada fora de localhost) e uma rodada completa
       # numa sala de um servidor local, com o navegador como 4º jogador.
