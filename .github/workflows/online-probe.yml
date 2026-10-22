@@ -22,12 +22,11 @@ jobs:
               message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
               print('::notice title=HISTORIC_WEB_FAILURE_LOG::' + message)
           with ZipFile(sys.argv[1]) as archive:
-              notice('FILES\n' + '\n'.join(archive.namelist()))
               for name in archive.namelist():
-                  if not name.endswith('.log') or 'web-playtest' not in name:
+                  if name not in ['web-playtest/web-room.log', 'web-playtest.log']:
                       continue
                   data = archive.read(name).decode('utf-8', errors='replace')
-                  tail = data[-18000:]
-                  for offset in range(0, len(tail), 3000):
-                      notice(name + '\n' + tail[offset:offset+3000])
+                  tail = data[-12000:]
+                  for offset in range(0, len(tail), 4000):
+                      notice(name + '\n' + tail[offset:offset+4000])
           PYLOG
