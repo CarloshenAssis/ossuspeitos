@@ -55,8 +55,17 @@ func _init(real_peer: MultiplayerPeer, profile: String, seed_value: int) -> void
 	stall_at_ms = float(values.get("stall_at", -1.0))
 	stall_ms = float(values.get("stall", 0.0))
 	_rng.seed = seed_value
-	inner.peer_connected.connect(func(id: int): peer_connected.emit(id))
-	inner.peer_disconnected.connect(func(id: int): peer_disconnected.emit(id))
+	var owner: WeakRef = weakref(self)
+	inner.peer_connected.connect(_weak_forwarder(owner, "peer_connected"))
+	inner.peer_disconnected.connect(_weak_forwarder(owner, "peer_disconnected"))
+
+## Static factory: the lambda captures only WeakRef and signal name, never
+## this wrapper. Otherwise inner -> lambda -> wrapper -> inner is a cycle.
+static func _weak_forwarder(owner: WeakRef, signal_name: String) -> Callable:
+	return func(id: int) -> void:
+		var target: MultiplayerPeer = owner.get_ref()
+		if target != null:
+			target.emit_signal(signal_name, id)
 
 ## Interrupção comandada pelo teste: nada é liberado nos próximos `duration_ms`.
 func trigger_stall(duration_ms: float) -> void:
