@@ -1088,3 +1088,8 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
 - Protocolo12 transporta intenções e snapshots compactos; catálogo/enum são parte da versão. Clientes11 são recusados; cliente e servidor devem ser atualizados juntos em publicação futura autorizada.
 - Sons vêm de ações aceitas e deslocamento oficial, com pool limitado e categorias locais; reload remoto pertence a combate. Animação só altera apresentação. Investigação envia apenas fatos públicos ao solicitante autorizado, sem poder especial de papel inventado.
 - IA/diálogo são avaliação documental; oclusão está experimental desligada. Não importar engines/plugins/assets externos. Decisões, custos e evidências: [relatório da Fase2](phase2/final-report.md) e [contratos](phase2/architecture-contracts.md).
+
+## Integração — transições Web e lifecycle (2026-10-22)
+
+- Fila de entrada do transport cliente limitada a 524287 B: headroom para backlog durante pausas do navegador, sem mudar protocolo12, autoridade, saída ou servidor. Regressão real Chromium pausa poll por 3200 ms e exige 50 snapshots + controle. Não representa tolerância ilimitada a travamentos.
+- Timers de efeitos capturam WeakRef; clear/destruição não deixa callbacks acessarem Nodes liberados. Gate Web passa a reprovar também erros do motor. Causas e limites em [transições Web](integration-web-stability.md).

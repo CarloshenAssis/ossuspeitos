@@ -1,0 +1,70 @@
+{
+  "godot": "4.4.1.stable.official.49a5bc7b6",
+  "base": "9aea418e2e49943bf556db495d7bc5d42ac179af",
+  "historical_failure": {
+    "run": 39720577174,
+    "observations": [
+      "Web buffer payload overflow",
+      "5 freed Node capture errors",
+      "browser lobby result timeout; native/server reset completed"
+    ]
+  },
+  "web_backlog": {
+    "fixture": "tests/websocket_backlog_test.sh",
+    "transport": "production client/websocket_client_transport.gd",
+    "server": "loopback only",
+    "packets": 50,
+    "payload_bytes": 3332,
+    "rate_hz": 20,
+    "pause_poll_ms": 3200,
+    "red": {
+      "run": 39724298477,
+      "check": 119644583853,
+      "inbound_bytes": 65535,
+      "received": 19,
+      "tail": true,
+      "engine_errors": true,
+      "status": "FAIL"
+    },
+    "green": {
+      "run": 39724468247,
+      "check": 119645119396,
+      "inbound_bytes": 524287,
+      "received": 50,
+      "tail": true,
+      "engine_errors": false,
+      "status": "PASS"
+    },
+    "limit": "Finite bounded receive headroom; does not guarantee arbitrary render stalls or production throughput."
+  },
+  "fx_lifecycle": {
+    "fixture": "tests/combat_fx_lifecycle_test.gd",
+    "checks": 29,
+    "red": {
+      "process_exit": 0,
+      "positive_marker": true,
+      "freed_capture_errors": 16,
+      "strict_status": "FAIL"
+    },
+    "green": {
+      "process_exit": 0,
+      "freed_capture_errors": 0,
+      "warnings": 0,
+      "strict_status": "PASS"
+    },
+    "suite_after_fx_fix": {
+      "passed": 45,
+      "failed": 0,
+      "preexisting_ObjectDB_warnings": 3
+    }
+  },
+  "publication": "No Pages or Railway deployment. Strict protocol12 readiness previously refused protocol_version.",
+  "combined_local_suite": {
+    "passed": 45,
+    "failed": 0,
+    "strict_engine_error_gate": true,
+    "fresh_graphical_import_exit": 0,
+    "fresh_graphical_import_engine_errors": 0,
+    "initial_attempt": "Root checkout had stale class cache; interrupted before import. Not counted PASS."
+  }
+}
