@@ -2,6 +2,11 @@ name: Godot Web build (demo + playtest)
 
 on:
   workflow_dispatch:
+    inputs:
+      release_sha:
+        description: "SHA completo de main aprovado para publicar após confirmar o servidor compatível; vazio gera apenas artifacts"
+        required: false
+        default: ""
   push:
     branches:
       - main
@@ -16,10 +21,24 @@ jobs:
   build-web-demo:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      publish_allowed: ${{ steps.release_policy.outputs.allowed }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Validate Pages release policy
+        run: python3 -m unittest discover -s tests -p pages_release_policy_test.py
+
+      - name: Evaluate explicit release approval
+        id: release_policy
+        env:
+          RELEASE_EVENT: ${{ github.event_name }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_APPROVED_SHA: ${{ inputs.release_sha }}
+        run: python3 scripts/pages_release_policy.py >> "$GITHUB_OUTPUT"
 
       - name: Set up Godot with export templates
         uses: chickensoft-games/setup-godot@v2
@@ -236,11 +255,11 @@ jobs:
           if-no-files-found: error
 
       - name: Configure GitHub Pages
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: steps.release_policy.outputs.allowed == 'true'
         uses: actions/configure-pages@v5
 
       - name: Upload GitHub Pages artifact
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: steps.release_policy.outputs.allowed == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: build/site
@@ -254,7 +273,7 @@ jobs:
           if-no-files-found: warn
 
   deploy-pages:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: needs.build-web-demo.outputs.publish_allowed == 'true'
     needs: build-web-demo
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -266,6 +285,39 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
+      - name: Check out approved source
+        uses: actions/checkout@v4
+
+      - name: Set up homologated Godot for strict production check
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Import complete project
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update && sudo apt-get install -y xvfb xauth libgl1-mesa-dri
+          LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a godot --path . --display-driver x11 --audio-driver Dummy --rendering-method gl_compatibility --rendering-driver opengl3 --import 2>&1 | tee "$RUNNER_TEMP/pages-import.log"
+          if grep -Eq 'SCRIPT ERROR|Parse Error|^ERROR:' "$RUNNER_TEMP/pages-import.log"; then exit 1; fi
+          git show HEAD:project.godot > project.godot
+
+      - name: Require matching production protocol and live snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          current_main="$(git ls-remote origin refs/heads/main | cut -f1)"
+          test "$current_main" = "$GITHUB_SHA"
+          protocol="$(sed -n 's/^const PROTOCOL_VERSION := \([0-9]*\).*/\1/p' shared/network_config.gd)"
+          url="$(sed -n 's/^network\/online_url="\(.*\)"$/\1/p' project.godot)"
+          test -n "$url"
+          status=0
+          timeout 45 godot --headless --path . -- --mode=client --probe=true --client-id="release-${GITHUB_RUN_ID: -6}" --url="$url" > "$RUNNER_TEMP/pages-probe.log" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/pages-probe.log"
+          python3 scripts/pages_release_policy.py --verify-probe "$RUNNER_TEMP/pages-probe.log" --exit-code "$status" --protocol "$protocol"
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
