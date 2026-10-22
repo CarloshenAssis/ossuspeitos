@@ -26,3 +26,5 @@ Ruling: todos os participantes vivos podem inspecionar apenas fatos públicos do
 Ruling: catálogo distribuído e ringcontíguo compactam o fio no protocolo12 — elimina geometria/chaves repetidas mantendoDTOs e32eventos — custo: mudança futura de ordem/enum/catálogo exige versionamento explícito e decode acrescenta~0.30ms/snapshot nestehost.
 
 Revisão final independente a8e6db6: um Important (recarga remota fora do volume de combate), nenhum outro achado. Correção RED32/2falhas → GREEN33/0, incluindo porta preservada, e44/44suítesPASS após delta. Evidência e limites em evidence/review-resolution.md. NovoCI restaura project.godot após import para testar configuração exata. Regressão multiprocesso permanece identificada como a8e6db6, não como execução retroativa deste delta sonoro.
+
+Fechamento local: regressão independente a8e6db6 concluiu44/44GDScript e29/29harnesses/transporte/auxiliares, incluindo4local,4RTT200 e8×3Fase2, todosPASS. Executor35f219b repetiu44/44 após correção de áudio; revisor de testes também confirmou33checks áudio nesse commit. CI remoto/PR serão registrados noPR doSHAfinal, sem presumir sucesso antecipado.
