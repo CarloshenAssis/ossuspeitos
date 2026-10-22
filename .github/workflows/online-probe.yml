@@ -1,161 +1,26 @@
-name: Online server probe
-
-# Conecta um cliente Godot real ao servidor online de produção pelo protocolo
-# normal (TLS, WebSocket, handshake do protocolo, entrada na sala) e sai.
-# Não usa flags de coordenador de teste e não reinicia nada no servidor; um
-# jogador na sala pode ver a sonda entrar e sair. Não é gate de PR comum:
-# roda sob demanda, quando o endpoint online muda e quando o protocolo muda.
-#
-# O servidor online roda a `main` (o Railway republica a `main`). Esta sonda
-# NUNCA roda no push da `main`: se o Railway esperar o CI do commit ("Wait
-# for CI"), uma sonda que só passa depois do deploy bloquearia o próprio
-# deploy. Para conferir um deploy novo, rode sob demanda com `attempts`
-# (repete a cada 40 s até o servidor aceitar o protocolo do código).
-#
-# Num PR, a produção roda a `main` já publicada, que pode estar atrás do PR
-# (protocolo novo) ou atrás da própria `main` (deploy em andamento): a recusa
-# `protocol_version` é registrada como aviso, não falha. Qualquer outra falha
-# (TLS, conexão, handshake) continua falhando.
-
+name: Integration diagnostic log reader
 on:
   workflow_dispatch:
-    inputs:
-      url:
-        description: "Endereço wss:// do servidor (vazio = configuração do projeto)"
-        required: false
-        default: ""
-      attempts:
-        description: "Tentativas, uma a cada 40 s (ex.: 15 para esperar um deploy)"
-        required: false
-        default: "1"
-  pull_request:
-    paths:
-      - project.godot
-      - client/online_endpoint.gd
-      - shared/network_config.gd
-      - .github/workflows/online-probe.yml
-
 permissions:
   contents: read
-
+  actions: read
 jobs:
-  probe:
+  read-release-preflight-log:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Godot
-        uses: chickensoft-games/setup-godot@v2
-        with:
-          version: 4.4.1
-          use-dotnet: false
-          include-templates: false
-
-      - name: Validate project
-        run: godot --headless --path . --editor --quit 2>&1 | tail -3
-
-      - name: Probe the online server with a real Godot client
+      - name: Read completed probe job log without contacting production
         env:
-          INPUT_URL: ${{ github.event.inputs.url }}
-          INPUT_ATTEMPTS: ${{ github.event.inputs.attempts }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          set -o pipefail
-          url="$INPUT_URL"
-          if [[ -z "$url" ]]; then
-            url="$(sed -n 's/^network\/online_url="\(.*\)"$/\1/p' project.godot)"
-          fi
-          if [[ -z "$url" ]]; then url="wss://ossuspeitos-production.up.railway.app"; fi
-          echo "PROBE_TARGET url=$url"
-          getent hosts "${url#wss://}" || true
-          # Protocolo do código em teste; com salas (protocolo 11+) a sonda
-          # cria uma sala própria e sai (o servidor a destrói em 30 s).
-          protocol="$(sed -n 's/^const PROTOCOL_VERSION := \([0-9]*\).*/\1/p' shared/network_config.gd)"
-          base_protocol="$protocol"
-          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
-            git fetch --depth=1 origin "$GITHUB_BASE_REF"
-            base_protocol="$(git show "origin/$GITHUB_BASE_REF:shared/network_config.gd" | sed -n 's/^const PROTOCOL_VERSION := \([0-9]*\).*/\1/p')"
-          fi
-          echo "PROBE_EXPECTED_PROTOCOL code=$protocol base=$base_protocol event=$GITHUB_EVENT_NAME"
-          attempts=1
-          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$INPUT_ATTEMPTS" =~ ^[0-9]+$ && "$INPUT_ATTEMPTS" -ge 1 && "$INPUT_ATTEMPTS" -le 20 ]]; then
-            attempts="$INPUT_ATTEMPTS"
-          fi
-          for attempt in $(seq 1 "$attempts"); do
-            timeout 60 godot --headless --path . -- --mode=client --probe=true \
-              --client-id="sonda-ci-${GITHUB_RUN_ID: -6}" --url="$url" 2>&1 | tee probe.log || true
-            if grep -qE "PROBE_OK .* result=(joined detail=peer_id=[0-9]+ snapshots=[0-9]+ round_state=[A-Z]+( room=[a-z]+)?|refused detail=(room_unavailable|name_taken|room_full|round_in_progress|server_full)) protocol=$protocol" probe.log; then
-              echo "PROBE_RESULT ok attempt=$attempt protocol=$protocol"
-              # Fase 10 (sob demanda): a sala da sonda, vazia, some depois da
-              # carência do servidor (30 s): entrar pelo código dá "sala não
-              # encontrada". Nenhuma partida é iniciada.
-              code="$(sed -n 's/.*ROOM_JOINED id=[^ ]* code=\([A-Z0-9]*\).*/\1/p' probe.log | head -n1)"
-              if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && -n "$code" ]]; then
-                sleep 40
-                timeout 60 godot --headless --path . -- --mode=client --probe=true \
-                  --client-id="sonda-limpeza-${GITHUB_RUN_ID: -6}" --url="$url" \
-                  --room-action=join --room-code="$code" --probe-expect-room-error=room_not_found 2>&1 | tee cleanup.log || true
-                if ! grep -qE "PROBE_OK .* result=expected_error detail=room_not_found protocol=$protocol" cleanup.log; then
-                  echo "PROBE_RESULT cleanup_failed code_room_still_present_or_error"
-                  exit 1
-                fi
-                echo "PROBE_RESULT cleanup_ok empty_room_removed=true"
-              fi
-              exit 0
-            fi
-            if [[ "$GITHUB_EVENT_NAME" == pull_request ]] \
-                && grep -q 'PROBE_FAILED .* reason=join_rejected:protocol_version' probe.log; then
-              echo "::notice::A produção fala outro protocolo (main=$base_protocol, PR=$protocol): deploy anterior ainda no ar ou protocolo novo neste PR. Recusa de versão legível, servidor vivo; confira o deploy com a sonda sob demanda."
-              echo "PROBE_RESULT version_refusal code=$protocol base=$base_protocol"
-              exit 0
-            fi
-            echo "PROBE_RESULT retry attempt=$attempt/$attempts"
-            [[ "$attempt" -lt "$attempts" ]] && sleep 40
-          done
-          exit 1
-
-  # Fase 9 (PR2): o cliente Web completo no Chromium headless contra o
-  # servidor online (padrão do projeto): JOGAR ONLINE, CRIAR SALA e fecha a
-  # aba. A sala vazia é destruída pelo servidor em 30 s. Só sob demanda.
-  web-probe:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Godot with export templates
-        uses: chickensoft-games/setup-godot@v2
-        with:
-          version: 4.4.1
-          use-dotnet: false
-          include-templates: true
-
-      - name: Export Web playtest
-        run: |
-          godot --headless --path . --editor --quit > /dev/null 2>&1 || true
-          mkdir -p build/web-playtest
-          godot --headless --path . --export-release "Web Playtest" build/web-playtest/index.html
-
-      - name: Install Chromium
-        run: |
-          npx --yes playwright@1.56.1 install --with-deps chromium
-          npm install --no-save --no-package-lock playwright@1.56.1 >/dev/null
-
-      - name: Create a room from the browser on the online server
-        run: |
-          set -o pipefail
-          mkdir -p "$RUNNER_TEMP/web-probe"
-          WEB_SHOTS="$RUNNER_TEMP/web-probe" timeout 120 node tests/web_playtest_browser.mjs build/web-playtest external 2>&1 \
-            | tee "$RUNNER_TEMP/web-probe/web-probe.log"
-          grep -q 'WEB_TEST_OK scenario=external' "$RUNNER_TEMP/web-probe/web-probe.log"
-
-      - name: Upload screenshots and log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-probe
-          path: ${{ runner.temp }}/web-probe
-          if-no-files-found: warn
+          set -euo pipefail
+          gh api repos/CarloshenAssis/ossuspeitos/actions/jobs/119637566228/logs > "$RUNNER_TEMP/probe.log"
+          python3 - "$RUNNER_TEMP/probe.log" <<'PYLOG'
+          import sys
+          from pathlib import Path
+          lines = Path(sys.argv[1]).read_text().splitlines()
+          for line in lines:
+              if any(key in line for key in ['PROBE_', 'JOIN_REJECTED', 'CLIENT_CONNECTION_FAILED', 'SCRIPT ERROR']):
+                  message = line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                  print('::notice title=RELEASE_PREFLIGHT_LOG::' + message)
+          PYLOG
