@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 62257250fbdf061a46ec060f0ec6cec2840ac19c
+          ref: 797862a5f698b4eb4c3ecc6dfa340c1d1d14ed09
       - uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.4.1
