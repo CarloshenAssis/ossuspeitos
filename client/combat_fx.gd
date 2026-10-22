@@ -186,9 +186,14 @@ func _material(color: Color, glow: float) -> StandardMaterial3D:
 	return material
 
 func _expire(node: Node, seconds: float) -> void:
+	# The scene-tree timer may outlive clear() or the entire FX owner. Capture
+	# only a RefCounted weak handle: a freed Node capture errors before the
+	# lambda body (and therefore before is_instance_valid) can execute.
+	var reference: WeakRef = weakref(node)
 	get_tree().create_timer(seconds).timeout.connect(func():
-		if is_instance_valid(node):
-			node.queue_free())
+		var target := reference.get_ref() as Node
+		if target != null:
+			target.queue_free())
 
 func set_category_volume(value: float) -> void:
 	var gain := clampf(value,0.0,1.0) if is_finite(value) else 0.8
