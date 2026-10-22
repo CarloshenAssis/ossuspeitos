@@ -20,6 +20,7 @@ var interaction_authority: InteractionAuthority
 var local_environment: Dictionary = {}
 var sound_authority: SoundEventAuthority
 var local_sound_events: Array = []
+var local_inspection: Dictionary = {}
 var _sound_bootstrapped := false
 var local_bodies: Dictionary = {}
 var combat_authority: CombatAuthority
@@ -597,7 +598,8 @@ func _broadcast_snapshot() -> void:
 			continue
 		world_snapshot.rpc_id(int(peer_id), {"tick": server_tick, "session": session_nonce,
 			"players": players, "ack": authoritative_world.ack_for(int(peer_id)),
-			"environment": interaction_authority.snapshot(), "sounds": sound_authority.snapshot()})
+			"environment": interaction_authority.snapshot(), "sounds": sound_authority.snapshot(),
+			"inspection": current_room.investigations.last_for_peer(int(peer_id))})
 
 ## Membros da sala corrente com o socket aberto. Um cliente que caiu fica
 ## no lobby até o aviso de desconexão chegar; enviar a ele só gera erro do
@@ -646,6 +648,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_queue_local_action(NetSync.ACTION_PICKUP, pickup_id)
 		else:
 			queue_environment_interaction("toggle")
+	elif event.is_action_pressed("inspect_body"):
+		queue_environment_interaction("inspect")
 	elif event.is_action_pressed("object_take"):
 		queue_environment_interaction("take")
 	elif event.is_action_pressed("object_push"):
@@ -1311,6 +1315,10 @@ func queue_environment_interaction(verb: String, object_id: String = "") -> bool
 	if not _commands_enabled():
 		return false
 	var target := object_id
+	if target.is_empty() and verb == "inspect":
+		if arena_view == null: return false
+		target = arena_view.nearest_investigation()
+		if target.is_empty(): return false
 	if target.is_empty():
 		if arena_view == null: return false
 		var item: Dictionary = arena_view.environment_view.nearest(prediction.state.get("position", Vector3.ZERO), multiplayer.get_unique_id(), verb if verb != "toggle" else "")
@@ -1490,6 +1498,10 @@ func world_snapshot(payload: Dictionary) -> void:
 		prediction.set_environment_blockers(EnvironmentRules.blockers(environment))
 		if arena_view != null:
 			arena_view.apply_environment(environment)
+	local_inspection = InvestigationRules.sanitize(payload.get("inspection", {}))
+	if not local_inspection.is_empty() and int(local_inspection.round_id) != int(local_round_public.get("round_id", 0)):
+		local_inspection = {}
+	if arena_view != null: arena_view.apply_inspection(local_inspection)
 	local_sound_events.clear()
 	var raw_sounds: Variant = payload.get("sounds", [])
 	if typeof(raw_sounds) == TYPE_ARRAY and raw_sounds.size() <= SoundEventRules.MAX_EVENTS:
@@ -2408,7 +2420,7 @@ func _clear_local_bodies() -> void:
 
 func _safe_combat_reason(raw_reason: Variant) -> String:
 	var reason := str(raw_reason)
-	var allowed := ["round_not_active", "unknown_peer", "player_dead", "invalid_sequence", "replay", "sequence_jump", "rate_limited", "invalid_pickup", "item_not_found", "item_unavailable", "out_of_range", "inventory_full", "incompatible_item", "no_equipped_weapon", "reserve_full", "empty_magazine", "reloading", "fire_rate", "invalid_origin", "non_finite", "implausible_origin", "invalid_direction", "direction_not_normalized", "direction_vertical", "direction_yaw_divergence", "direction_pitch_divergence", "invalid_pitch", "magazine_full", "reserve_empty", "already_reloading", "stale_epoch", "not_participant", "input_rejected", "queue_full", "invalid_interaction", "object_unavailable", "interaction_blocked", "object_occupied", "object_too_heavy", "already_carrying", "not_holder"]
+	var allowed := ["round_not_active", "unknown_peer", "player_dead", "invalid_sequence", "replay", "sequence_jump", "rate_limited", "invalid_pickup", "item_not_found", "item_unavailable", "out_of_range", "inventory_full", "incompatible_item", "no_equipped_weapon", "reserve_full", "empty_magazine", "reloading", "fire_rate", "invalid_origin", "non_finite", "implausible_origin", "invalid_direction", "direction_not_normalized", "direction_vertical", "direction_yaw_divergence", "direction_pitch_divergence", "invalid_pitch", "magazine_full", "reserve_empty", "already_reloading", "stale_epoch", "not_participant", "input_rejected", "queue_full", "invalid_interaction", "object_unavailable", "interaction_blocked", "object_occupied", "object_too_heavy", "already_carrying", "not_holder", "body_unavailable"]
 	return reason if reason in allowed else "rejected"
 
 # --- Teste local no PC --------------------------------------------------------

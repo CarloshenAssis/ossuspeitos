@@ -7,6 +7,8 @@ var targets: Dictionary = {}
 var camera: Camera3D
 var environment_view: EnvironmentView
 var environment_prompt: Label
+var inspection_label: Label
+var _inspection_request := 0
 var player_rig: Node3D
 var pickup_nodes: Dictionary = {}
 var pickup_states: Dictionary = {}
@@ -179,6 +181,11 @@ func _ready() -> void:
 	environment_prompt = Label.new()
 	environment_prompt.position = Vector2(20, 100)
 	overlay_root.add_child(environment_prompt)
+	inspection_label = Label.new()
+	inspection_label.position = Vector2(20, 132)
+	inspection_label.custom_minimum_size = Vector2(520, 48)
+	inspection_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	overlay_root.add_child(inspection_label)
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Oculta (lobby da sala online, fase 9): não prende o mouse.
@@ -675,6 +682,7 @@ func show_hit_marker() -> void:
 func set_player_alive(peer_id: int, alive: bool) -> void:
 	_alive_flags[peer_id] = alive
 	if peer_id == local_peer_id and not alive:
+		apply_inspection({})
 		_reset_presentation_motion()
 	if avatars.has(peer_id):
 		(avatars[peer_id] as Node3D).visible = alive
@@ -903,6 +911,8 @@ func _update_environment_prompt() -> void:
 	if not held.is_empty():
 		environment_prompt.text = "Q — Soltar objeto"
 		return
+	var nearby_body := nearest_investigation()
+	if not nearby_body.is_empty(): environment_prompt.text = "I — Inspecionar corpo"
 	var item := environment_view.nearest(player_rig.position, local_peer_id)
 	if not item.is_empty():
 		var def := EnvironmentRules.definition(str(item.id))
@@ -961,3 +971,27 @@ func _update_body_transitions(delta: float) -> void:
 			lowest=minf(lowest,bounds.position.y)
 		if is_finite(lowest): (entry.fall as Node3D).position.y+=0.01-lowest
 		if ratio>=1.0 or not presentation_motion: _body_transitions.erase(id)
+
+func nearest_investigation() -> String:
+	if player_rig == null: return ""
+	var target := ""
+	var nearest := EnvironmentRules.REACH
+	for id in bodies:
+		var node: Node3D=bodies[id]
+		var official: Vector3=node.get_meta("official_position",node.position)
+		var distance := player_rig.position.distance_to(official)
+		if distance<=nearest:
+			nearest=distance
+			target="body:%d" % int(id)
+	return target
+
+func apply_inspection(raw: Dictionary) -> void:
+	if inspection_label == null: return
+	var info := InvestigationRules.sanitize(raw)
+	if info.is_empty():
+		inspection_label.text=""
+		_inspection_request=0
+		return
+	if int(info.request_id)==_inspection_request: return
+	_inspection_request=int(info.request_id)
+	inspection_label.text="Corpo de %s — eliminação confirmada nesta rodada." % str(info.label)

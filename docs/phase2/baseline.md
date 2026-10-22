@@ -89,3 +89,7 @@ Godot 4.4.1, Compatibility, **Mesa llvmpipe LLVM 19 software**, AMD EPYC 9V74, 9
 No sync RTT200, client-2 no estágio DUPLICATE observou 323 snapshots; intervalo p50 48.354 ms / p95 55.300 ms; fila pendente máxima 18, idade máxima 290 ms, erro de ACK posição/yaw/pitch máximo zero. Esses números são uma observação local de aplicação sobre TCP, não perda física, tráfego total nem média de todos os peers/estágios. O perfil injeta 100 ms em cada direção. Logs completos preservam os demais estágios.
 
 Não medidos nesta rodada: CPU/memória comparativa detalhada, tempo de física isolado, bytes reais de fio, desempenho GPU física, Web/Windows/export/container, campanha 8×3 completa. Estes permanecem na matriz final da Fase 2, sem herdar aprovação dos resultados anteriores.
+
+## Observação posterior sobre logs de rede
+
+A baseline multiprocesso5/5 acima usou saídas/marcadores dos harnesses existentes; não equivale a um gate de ausência de todos os erros de teardown. Na criação do harnessnovo, foram identificados também nos logs originais RTT200 avisos ObjectDB e `ERROR: 1 resources still in use` associados ao wrapper NetDelayPeer. Portanto zero erros se aplica à importação/GDScript conforme a seção original, não a todo log de rede. O novo harness mantém gate estrito e trata seu próprio lifecycle sem ocultar mensagens.

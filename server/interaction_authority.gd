@@ -9,6 +9,7 @@ const MAX_SEQUENCE_ADVANCE := 64
 const MAX_CARRY_MASS := 4.0
 var rounds: RoundAuthority
 var world: AuthoritativeWorld
+var investigations: InvestigationAuthority
 var round_id := 0
 var revision := 0
 var _objects: Array=[]
@@ -26,6 +27,7 @@ func reset(id: int) -> void:
  _objects=EnvironmentRules.initial_objects()
  _last_ids.clear()
  _last_times.clear()
+ if investigations!=null: investigations.reset()
  _sync_blockers()
 
 func snapshot() -> Dictionary:
@@ -56,6 +58,8 @@ func request(peer_id: int, action: Dictionary, now_msec: int) -> Dictionary:
  # cannot circumvent the same action budget. The command queue also bounds it.
  _last_ids[peer_id]=action.id
  _last_times[peer_id]=now_msec
+ if action.verb=="inspect":
+  return investigations.inspect_body(peer_id,str(action.object_id),int(action.id)) if investigations!=null else _reject("body_unavailable")
  var object: Dictionary={}
  for item in _objects:
   if item.id==action.object_id:

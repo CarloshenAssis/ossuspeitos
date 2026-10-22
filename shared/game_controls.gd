@@ -17,6 +17,7 @@ const ACTIONS := [
 	{"action": "move_left", "group": "Movimento", "text": "Andar para a esquerda", "key": KEY_A},
 	{"action": "move_right", "group": "Movimento", "text": "Andar para a direita", "key": KEY_D},
 	{"action": "interact", "group": "Interação e coleta", "text": "Pegar arma/munição ou abrir/fechar porta", "key": KEY_E},
+	{"action": "inspect_body", "group": "Interação e coleta", "text": "Inspecionar corpo próximo", "key": KEY_I},
 	{"action": "object_take", "group": "Interação e coleta", "text": "Pegar objeto leve próximo", "key": KEY_F},
 	{"action": "object_push", "group": "Interação e coleta", "text": "Empurrar objeto próximo", "key": KEY_G},
 	{"action": "object_drop", "group": "Interação e coleta", "text": "Soltar objeto carregado", "key": KEY_Q},

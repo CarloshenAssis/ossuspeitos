@@ -8,7 +8,7 @@ const REACH := 2.5
 const MAX_HORIZONTAL_SPEED := 1.5
 const MAX_FALL_SPEED := 6.0
 const OBJECT_KEYS := ["id", "position", "velocity", "open", "holder"]
-const VERBS := ["toggle", "push", "take", "drop"]
+const VERBS := ["toggle", "push", "take", "drop", "inspect"]
 
 static var _definitions: Array = _build_definitions()
 static var _by_id: Dictionary = _build_index()

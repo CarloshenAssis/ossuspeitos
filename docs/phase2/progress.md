@@ -7,7 +7,7 @@ Base59926cb, branchcodex/gameplay-specs-09-16. PR30/31abertos; maindd15ff2 inalt
 - SPEC09: implementado e validado inicialmente:43checks, movement/netcode266/combat86 e smoke4. Laboratório nativoGodotPhysics e Jolt PASS; sem trocar backendprodução. CorreçãofimrodadacarregandoRED→GREEN. Ver09-physics.md. Integração09–16 completa ainda pendente.
 - SPEC10: implementado/integradopor sala;39/39suítes incluindo30checksaudio e smoke4 PASS. Occlusãoexperimental desligada; corrida nãoinventada. Ver10-audio.md.
 - SPEC11: concluído inicialmente,35checksnovos/36gráficos e40/40suítes PASS. Camada procedural, sem simulação/segredos. Ver11-animation.md.
-- SPEC12: iniciando integração de investigação genérica.
+- SPEC12: implementado,93checks e41/41suítesPASS. Corpooficial/DTOprivado/controleI/LOS e orçamentoúnico deinteract. Testenovoreal4RTT200 comduasinspeções/sigilopassou;8x3emexecução, nãoinferirresultado.
 - SPEC13–16: pendentes.
 
 Ruling: usar física analítica limitada para bloqueadores competitivos e Physics/Jolt apenas no laboratório — preserva replay e geometria — custo: objetos não terão dinâmica rígida arbitrária.
@@ -17,3 +17,5 @@ Ruling: não inventar sprint, poderes secretos ou NPCs — regras incompletas e 
 Ruling: oclusão por AABB fica opcional/desabilitada por padrão — orçamento/escuta ainda não certificados — custo: sons de outra sala usam distância/posicionamento sem abafamento por parede no padrão.
 
 Revisão independente09: forcedrelease apagava orçamento de ações e bloqueava a conexão apósid65. Teste reproduziuRED (45checks,1falha); release_peer agora preserva orçamento até reset da rodada, GREEN45/45. Três expectativas remanescentesprotocol11 no harnesscontainer corrigidaspara12; assertivas mantidas, execução realcontainer fica noCI final.
+
+Ruling: todos os participantes vivos podem inspecionar apenas fatos públicos do corpo — não define poder especial de detetive nem vaza segredo — custo: exclusividade por papel exigirá uma política futura explícita.

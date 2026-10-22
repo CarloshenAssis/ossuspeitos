@@ -23,6 +23,7 @@ var combat: CombatAuthority
 var bodies := BodyRegistry.new()
 var interactions: InteractionAuthority
 var sounds: SoundEventAuthority
+var investigations: InvestigationAuthority
 var host_peer_id := 0
 var created_msec := 0
 var last_activity_msec := 0
@@ -43,6 +44,8 @@ func _init(id: int, room_code: String, now_msec: int, ready_gate: bool,
 	round_authority.ready_gate = ready_gate
 	combat = CombatAuthority.new(round_authority, world)
 	interactions = InteractionAuthority.new(round_authority, world)
+	investigations = InvestigationAuthority.new(round_authority, world, bodies, lobby)
+	interactions.investigations = investigations
 	sounds = SoundEventAuthority.new(round_authority, world)
 	interactions.event_emitted.connect(sounds.observe_interaction)
 
@@ -96,6 +99,7 @@ func remove_member(peer_id: int, now_msec: int) -> bool:
 	if not lobby.has(peer_id):
 		return false
 	interactions.release_peer(peer_id)
+	investigations.clear_peer(peer_id)
 	world.remove_player(peer_id)
 	combat.clear_player(peer_id)
 	round_authority.leave(peer_id, now_msec)
