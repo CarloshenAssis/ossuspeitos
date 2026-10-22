@@ -167,13 +167,10 @@ func _ready() -> void:
 	test_mutation = NetworkConfig.test_mutation(arguments)
 	if not test_mutation.is_empty():
 		print("TEST_MUTATION name=%s" % test_mutation)
-	mode = str(arguments.get("mode", ""))
-	if mode.is_empty() and OS.has_feature("visual_demo"):
-		mode = "demo"
+	mode = resolve_start_mode(arguments, OS.has_feature("visual_demo"),
+		OS.has_feature("desktop_playtest"), DisplayServer.get_name() != "headless")
 	# Build de PC ou execução gráfica sem argumentos: menu de teste local. A demo
 	# Web entra antes (feature `visual_demo`) e continua OFFLINE / SEM SERVIDOR.
-	if mode.is_empty() and (OS.has_feature("desktop_playtest") or DisplayServer.get_name() != "headless"):
-		mode = "menu"
 	if mode == "server":
 		start_server()
 	elif mode == "dedicated":
@@ -186,6 +183,17 @@ func _ready() -> void:
 		start_menu()
 	else:
 		fail("MODE_REQUIRED use -- --mode=server, -- --mode=client, -- --mode=menu or -- --mode=demo")
+
+## Export `visual_demo` não é um cliente online: nenhum argumento recebido pode
+## mudar esse build para menu, cliente ou servidor. Os demais presets mantêm a
+## seleção explícita de modo e o fallback gráfico existente.
+static func resolve_start_mode(args: Dictionary, visual_demo: bool, desktop_playtest: bool, graphical: bool) -> String:
+	if visual_demo:
+		return "demo"
+	var requested := str(args.get("mode", ""))
+	if requested.is_empty() and (desktop_playtest or graphical):
+		return "menu"
+	return requested
 
 func start_demo() -> void:
 	var demo := VisualDemo.new()

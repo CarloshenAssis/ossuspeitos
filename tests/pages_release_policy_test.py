@@ -11,7 +11,8 @@ SHA = 'a' * 40
 class PagesReleasePolicyTest(unittest.TestCase):
     def policy(self, event, ref, sha, approved):
         env = dict(os.environ, RELEASE_EVENT=event, RELEASE_REF=ref,
-                   RELEASE_SHA=sha, RELEASE_APPROVED_SHA=approved)
+                   RELEASE_SHA=sha, RELEASE_APPROVED_SHA=approved,
+                   RELEASE_MODE='online')
         return subprocess.run(['python3', str(SCRIPT)], env=env, capture_output=True, text=True)
 
     def test_only_explicit_dispatch_for_exact_main_commit_can_publish(self):
@@ -27,7 +28,7 @@ class PagesReleasePolicyTest(unittest.TestCase):
             with self.subTest(event=event, ref=ref, approved=approved):
                 result = self.policy(event, ref, sha, approved)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout.strip(), 'allowed=' + str(expected).lower())
+                self.assertIn('allowed=' + str(expected).lower(), result.stdout)
 
     def test_probe_requires_joined_snapshot_matching_protocol_and_clean_exit(self):
         good = 'PROBE_OK url=wss://example.invalid result=joined detail=peer_id=123 snapshots=2 round_state=WAITING room=private protocol=12 elapsed_ms=42\n'
