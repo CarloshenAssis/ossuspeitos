@@ -4,9 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       release_sha:
-        description: "SHA completo de main aprovado para publicar após confirmar o servidor compatível; vazio gera apenas artifacts"
+        description: "SHA completo de main que será publicado"
         required: false
         default: ""
+      publication_mode:
+        description: "Offline publica somente a demonstração; online exige sondagem estrita do servidor"
+        required: true
+        type: choice
+        options:
+          - offline
+          - online
+        default: offline
   push:
     branches:
       - main
@@ -23,6 +31,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       publish_allowed: ${{ steps.release_policy.outputs.allowed }}
+      publication_mode: ${{ steps.release_policy.outputs.publication_mode }}
 
     steps:
       - name: Check out repository
@@ -38,6 +47,7 @@ jobs:
           RELEASE_REF: ${{ github.ref }}
           RELEASE_SHA: ${{ github.sha }}
           RELEASE_APPROVED_SHA: ${{ inputs.release_sha }}
+          RELEASE_MODE: ${{ inputs.publication_mode || 'offline' }}
         run: python3 scripts/pages_release_policy.py >> "$GITHUB_OUTPUT"
 
       - name: Set up Godot with export templates
@@ -72,6 +82,9 @@ jobs:
             "$RUNNER_TEMP/godot-web-logs/demo.log"
           ! grep -Eq 'ROUND_|ROLE_|ASSASSIN|DETECTIVE|VICTIM' \
             "$RUNNER_TEMP/godot-web-logs/demo.log"
+          godot --headless --path . --script tests/visual_demo_mode_test.gd 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/demo-mode.log"
+          grep -q 'VISUAL_DEMO_MODE_TEST_OK' "$RUNNER_TEMP/godot-web-logs/demo-mode.log"
 
       - name: Validate movement rules
         run: |
@@ -113,6 +126,15 @@ jobs:
           godot --headless --path . --script tests/arena_layout_test.gd 2>&1 \
             | tee "$RUNNER_TEMP/godot-web-logs/arena-layout.log"
           grep -q 'ARENA_LAYOUT_TEST_OK' "$RUNNER_TEMP/godot-web-logs/arena-layout.log"
+
+      - name: Validate offline visual assets and animation
+        run: |
+          set -o pipefail
+          for test in arena_visuals character_animation avatar_facing mansion_art camera_effects; do
+            log="$RUNNER_TEMP/godot-web-logs/$test.log"
+            godot --headless --path . --script "tests/${test}_test.gd" 2>&1 | tee "$log"
+            grep -Eq "${test^^}_TEST_OK" "$log"
+          done
 
       - name: Validate authoritative weapon and combat rules
         run: |
@@ -178,8 +200,19 @@ jobs:
       - name: Export Web demo (offline)
         run: |
           set -o pipefail
+          # O preset usa uma cena de entrada offline e uma lista de exclusão de
+          # código online. Remover o endpoint apenas durante este export impede
+          # que o PCK carregue código/URL de conexão; o projeto original volta
+          # antes do export do playtest completo.
+          cp project.godot "$RUNNER_TEMP/project.godot.saved"
+          restore_project_setting() { cp "$RUNNER_TEMP/project.godot.saved" project.godot; }
+          trap restore_project_setting EXIT
+          sed -i '/^network\/online_url=/d' project.godot
+          sed -i 's@^run/main_scene="res://shared/network_app.tscn"$@run/main_scene="res://client/visual_demo.tscn"@' project.godot
           godot --headless --path . --export-release "Web Demo" build/web/index.html 2>&1 \
             | tee "$RUNNER_TEMP/godot-web-logs/export.log"
+          restore_project_setting
+          trap - EXIT
           touch build/web/.nojekyll
 
       # Fase 9: cliente completo no navegador (menu, salas online, partida).
@@ -213,6 +246,13 @@ jobs:
             echo "Web playtest package contains test scripts" >&2
             exit 1
           fi
+          if strings build/web/index.pck | grep -Eiq 'ossuspeitos-production\.up\.railway\.app|online-url|web_playtest|CLIENT_CONNECTING|start_client|connect_to_url|transport\.connect_to_url'; then
+            echo "Offline demo package contains online endpoint or client markers" >&2
+            exit 1
+          fi
+
+      - name: Test offline artifact verifier
+        run: python3 -m unittest discover -s tests -p offline_site_artifact_test.py
 
       - name: Install Chromium for the browser test
         run: npx --yes playwright@1.56.1 install --with-deps chromium
@@ -238,16 +278,53 @@ jobs:
           GODOT_BIN="$(command -v godot)" WEB_DIR=build/web-playtest ./tests/web_playtest_test.sh 2>&1 \
             | tee "$RUNNER_TEMP/godot-web-logs/web-playtest.log"
 
-      # Site: raiz com os dois caminhos; demo offline em /demo/, cliente
-      # completo em /playtest/.
-      - name: Assemble site
+      - name: Assemble offline Pages artifact
+        if: steps.release_policy.outputs.publication_mode == 'offline'
         run: |
-          mkdir -p build/site
-          cp web/site/index.html build/site/index.html
-          cp -r build/web build/site/demo
-          cp -r build/web-playtest build/site/playtest
-          touch build/site/.nojekyll
-          find build/site -maxdepth 2 -name index.html | sort
+          mkdir -p build/site-offline
+          cp web/site/index.html build/site-offline/index.html
+          cp -r build/web build/site-offline/demo
+          touch build/site-offline/.nojekyll
+          python3 scripts/verify_offline_site.py build/site-offline
+          strings build/site-offline/demo/index.pck > "$RUNNER_TEMP/godot-web-logs/offline-package-strings.log"
+          if grep -Eiq 'ossuspeitos-production\.up\.railway\.app|online-url|web_playtest|CLIENT_CONNECTING|start_client|connect_to_url|transport\.connect_to_url|/playtest' "$RUNNER_TEMP/godot-web-logs/offline-package-strings.log"; then
+            echo "Offline Web package includes online endpoint/client route" >&2
+            exit 1
+          fi
+
+      - name: Test publication modes
+        run: |
+          python3 -m unittest discover -s tests -p pages_release_mode_test.py
+          python3 -m unittest discover -s tests -p pages_release_policy_test.py
+
+      - name: Run offline demo in Chromium
+        if: steps.release_policy.outputs.publication_mode == 'offline'
+        env:
+          WEB_SHOTS: ${{ runner.temp }}/godot-web-logs/web-demo
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock playwright@1.56.1 >/dev/null
+          mkdir -p "$WEB_SHOTS"
+          node tests/web_demo_browser.mjs build/site-offline 2>&1 \
+            | tee "$RUNNER_TEMP/godot-web-logs/web-demo.log"
+
+      - name: Retain offline demo browser evidence
+        if: always() && steps.release_policy.outputs.publication_mode == 'offline'
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-web-demo-browser-evidence
+          path: ${{ runner.temp }}/godot-web-logs/web-demo
+          if-no-files-found: warn
+
+      - name: Assemble online Pages artifact
+        if: steps.release_policy.outputs.publication_mode == 'online'
+        run: |
+          mkdir -p build/site-online
+          cp web/site/online-index.html build/site-online/index.html
+          cp -r build/web build/site-online/demo
+          cp -r build/web-playtest build/site-online/playtest
+          touch build/site-online/.nojekyll
+          find build/site-online -maxdepth 2 -name index.html | sort
 
       - name: Upload Web demo
         uses: actions/upload-artifact@v4
@@ -271,7 +348,7 @@ jobs:
         if: steps.release_policy.outputs.allowed == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: build/site
+          path: build/site-${{ steps.release_policy.outputs.publication_mode }}
 
       - name: Upload failure logs
         if: failure()
@@ -298,13 +375,22 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up homologated Godot for strict production check
+        if: needs.build-web-demo.outputs.publication_mode == 'online'
         uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.4.1
           use-dotnet: false
           include-templates: false
 
+      - name: Require current main for offline publication
+        if: needs.build-web-demo.outputs.publication_mode == 'offline'
+        run: |
+          set -euo pipefail
+          current_main="$(git ls-remote origin refs/heads/main | cut -f1)"
+          test "$current_main" = "$GITHUB_SHA"
+
       - name: Import complete project
+        if: needs.build-web-demo.outputs.publication_mode == 'online'
         shell: bash
         run: |
           set -euo pipefail
@@ -314,6 +400,7 @@ jobs:
           git show HEAD:project.godot > project.godot
 
       - name: Require matching production protocol and live snapshots
+        if: needs.build-web-demo.outputs.publication_mode == 'online'
         shell: bash
         run: |
           set -euo pipefail

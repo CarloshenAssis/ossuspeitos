@@ -61,14 +61,12 @@ Seu controlador gera apenas estados descartáveis para a apresentação e não c
 `MultiplayerPeer`, não usa RPC e não instancia a autoridade do servidor.
 
 O preset Web desativa threads para permitir inspeção local com um servidor HTTP
-simples. Pull requests validam e geram o artifact sem publicar. O deploy em Pages
-só ocorre após execução manual ou push em `main`, depois de todos os testes e da
-verificação do conteúdo exportado; Railway continua fora deste marco.
-
-Neste marco o preset inclui todos os recursos para reduzir o risco de omitir uma
-dependência da demo. Isso também inclui scripts do servidor no PCK e não deve ser
-considerado proteção de segredos; antes de adicionar papéis ou compras secretas,
-o export deverá selecionar estritamente os recursos do cliente.
+simples. Pull requests validam os dois exports e os testes de navegador sem
+publicar. Pages só publica por `workflow_dispatch` em `main` com o SHA completo
+aprovado. Para publicação online, a sondagem de protocolo e snapshots permanece
+obrigatória; o modo offline usa a cena e o export restrito descritos na decisão
+“Publicação isolada da demonstração offline em GitHub Pages”. Railway continua
+fora deste marco.
 
 ## Marco 3: fundações do ciclo de partida
 
@@ -1093,3 +1091,30 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
 
 - Fila de entrada do transport cliente limitada a 524287 B: headroom para backlog durante pausas do navegador, sem mudar protocolo12, autoridade, saída ou servidor. Regressão real Chromium pausa poll por 3200 ms e exige 50 snapshots + controle. Não representa tolerância ilimitada a travamentos.
 - Timers de efeitos capturam WeakRef; clear/destruição não deixa callbacks acessarem Nodes liberados. Gate Web passa a reprovar também erros do motor. Causas e limites em [transições Web](integration-web-stability.md).
+
+## Publicação isolada da demonstração offline em GitHub Pages
+
+O workflow de Pages tem dois modos de publicação explícitos, escolhidos por
+`workflow_dispatch` e vinculados ao SHA completo de `main`. `offline` publica uma
+página que identifica a demonstração como offline junto somente com a exportação
+Web `visual_demo` em `/demo/`; não publica nem referencia o cliente de salas
+online. O preset usa uma cena de entrada exclusiva e exclui `NetworkApp`, a
+interface de sala, transportes, scripts de servidor, testes, documentação e
+configuração Railway do PCK. Ele preserva os modelos GLB e scripts visuais de
+que a cena precisa. Além disso, o build `visual_demo` sempre escolhe a demo mesmo
+se receber argumento de cliente online. Antes do upload, o verificador falha se
+detectar a rota `/playtest/`, o endereço WebSocket de produção, marcadores de
+transporte ou arquivos Web ausentes. O build também verifica o bundle exportado,
+incluindo o PCK.
+
+O modo `online` mantém a página de playtest e seus caminhos anteriores, mas só
+publica após a sondagem existente confirmar que o SHA atual de `main` é o
+aprovado e que o serviço responde com o protocolo do cliente, sala ingressada,
+peer e snapshots válidos. A publicação offline não tenta sondar nem contactar o
+serviço. Nenhum dos modos altera o deploy separado do Railway.
+
+A demonstração offline oferece caminhada local com colisão, câmera em primeira
+pessoa, mansão, quatro personagens cosméticos em patrulha e suas animações. Ela
+não implementa sessão multiplayer, papéis, lobby, ciclo de rodadas, combate,
+inventário ou espectador; esses recursos dependem do cliente e servidor online
+com protocolos compatíveis.

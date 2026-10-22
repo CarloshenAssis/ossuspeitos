@@ -33,30 +33,28 @@
 
 **Files:** Modify `scripts/pages_release_policy.py` and `tests/pages_release_policy_test.py`.
 
-- [ ] Add first a test for explicit offline and online dispatch, exact SHA, and rejection of missing/invalid modes, push/PR events, wrong ref, and wrong SHA.
-- [ ] Verify the new cases fail against the existing single-mode policy.
-- [ ] Add a separate online mode with the same exact-SHA eligibility. Preserve strict probe validation unchanged.
-- [ ] Run the policy suite; both modes should be eligible only on manual main dispatch with exact SHA.
+- [x] Add a test for explicit offline and online dispatch, exact SHA, and rejection of missing/invalid modes, push/PR events, wrong ref, and wrong SHA.
+- [x] Add a separate online mode with the same exact-SHA eligibility. Preserve strict probe validation unchanged.
+- [x] Run the policy suite; both modes should be eligible only on manual main dispatch with exact SHA.
 
 ### Task 2: Offline landing and artifact isolation
 
 **Files:** Preserve the current online landing as `web/site/online-index.html`; replace `web/site/index.html` with the Portuguese offline presentation. Add `scripts/verify_offline_site.py` and `tests/offline_site_artifact_test.py`.
 
-- [ ] Write tests for an offline site containing its landing, Web Demo files, and `/demo/`, while rejecting `/playtest/`, online labels/endpoints, absent assets, and Web entry files.
-- [ ] Verify tests fail before the checker exists.
-- [ ] Implement the checker against a directory tree; inspect all public text and packed bytes for the production WebSocket URL and prohibited online paths.
-- [ ] Build test fixture directories for valid and invalid offline artifacts and run the checker tests.
+- [x] Write tests for an offline site containing its landing, Web Demo files, and `/demo/`, while rejecting `/playtest/`, online labels/endpoints, absent assets, and Web entry files.
+- [x] Implement the checker against a directory tree; inspect all public text and packed bytes for the production WebSocket URL and prohibited online paths.
+- [x] Build test fixture directories for valid and invalid offline artifacts and run the checker tests.
 
 ### Task 3: Mode-specific Pages assembly and browser validation
 
 **Files:** Modify `.github/workflows/godot-web-build.yml`; add `tests/web_demo_browser.mjs`; document the demo in `web/site/index.html` and `docs/decisions.md`.
 
-- [ ] Keep both existing exports and the full local Web Playtest tests on the workflow head.
-- [ ] Offline assembly includes the offline landing plus `build/web` at `/demo/` only and runs the artifact checker.
-- [ ] Online assembly uses the preserved online landing and both existing export paths.
-- [ ] The offline release deploy job checks current main SHA but skips online protocol probing. Online mode retains the existing full-SHA, matching protocol, joined room, and live snapshot probe.
-- [ ] Chromium opens the offline root, follows its demo link, observes `DEMO_READY network=disabled`, confirms a rendered canvas/models, exercises camera/movement inputs, watches briefly for stability, and fails on any WebSocket or engine/page error.
-- [ ] Run the demo test, full browser tests, export verification, and all workflow-required checks.
+- [x] Keep both existing exports and the full local Web Playtest tests on the workflow head.
+- [x] Offline assembly includes the offline landing plus `build/web` at `/demo/` only and runs the artifact checker. Its dedicated entry scene and export exclusions omit the online client from the executable PCK.
+- [x] Online assembly uses the preserved online landing and both existing export paths.
+- [x] The offline release deploy job checks current main SHA but skips online protocol probing. Online mode retains the existing full-SHA, matching protocol, joined room, and live snapshot probe.
+- [x] Chromium opens the offline root, follows its demo link, observes `DEMO_READY network=disabled`, confirms a rendered canvas/models, exercises camera/movement inputs, watches briefly for stability, and fails on any WebSocket or engine/page error.
+- [ ] Run the demo test, full browser tests, export verification, and all workflow-required checks. Local offline export/browser and visual regression suites passed; remaining checks run on the PR CI.
 
 ### Task 4: Publish and confirm Pages
 

@@ -6,8 +6,9 @@ from pathlib import Path
 import re
 
 
-def allow_release(event, ref, sha, approved):
+def allow_release(event, ref, sha, approved, mode):
     return (event == 'workflow_dispatch' and ref == 'refs/heads/main'
+            and mode in {'offline', 'online'}
             and re.fullmatch(r'[0-9a-f]{40}', sha) is not None and approved == sha)
 
 
@@ -32,9 +33,11 @@ def main():
         accepted = valid_probe(args.exit_code, args.verify_probe.read_text(), args.protocol or '')
         print('PAGES_PRODUCTION_PROTOCOL_' + ('OK' if accepted else 'BLOCKED'))
         return 0 if accepted else 1
+    mode = os.environ.get('RELEASE_MODE', '')
     allowed = allow_release(*(os.environ.get(key, '') for key in
-        ['RELEASE_EVENT', 'RELEASE_REF', 'RELEASE_SHA', 'RELEASE_APPROVED_SHA']))
+        ['RELEASE_EVENT', 'RELEASE_REF', 'RELEASE_SHA', 'RELEASE_APPROVED_SHA']), mode)
     print('allowed=' + str(allowed).lower())
+    print('publication_mode=' + (mode if mode in {'offline', 'online'} else 'invalid'))
     return 0
 
 
