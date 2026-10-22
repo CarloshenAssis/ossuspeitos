@@ -22,7 +22,6 @@ try {
  page.on('console',msg=>{lines.push(msg.text());console.log(msg.text());});
  page.on('pageerror',e=>{lines.push('PAGE_ERROR '+e.message);console.log('PAGE_ERROR '+e.message);});
  await page.goto(`http://127.0.0.1:${server.address().port}/`);
- await page.waitForFunction(()=>false,{},{timeout:1}).catch(()=>{});
  const deadline=Date.now()+20000;
  while(!lines.some(l=>/^WEBSOCKET_BACKLOG_TEST_/.test(l))&&Date.now()<deadline) await page.waitForTimeout(100);
  if(!lines.includes('WEBSOCKET_BACKLOG_TEST_OK')||lines.some(l=>/ERROR:|SCRIPT ERROR|Parse Error|PAGE_ERROR/.test(l))) throw new Error('bounded Web backlog or runtime-error gate failed');
