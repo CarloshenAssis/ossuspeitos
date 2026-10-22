@@ -917,7 +917,7 @@ func _update_environment_prompt() -> void:
 
 func configure_audio(settings: MenuSettings) -> void:
 	if spatial_audio != null:
-		spatial_audio.configure(settings.movement_volume, settings.environment_volume)
+		spatial_audio.configure(settings.movement_volume, settings.environment_volume, settings.combat_volume)
 	if fx != null:
 		fx.set_category_volume(settings.combat_volume)
 

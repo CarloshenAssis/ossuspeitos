@@ -59,6 +59,23 @@ func run() -> void:
 	check(audio.consume([rules.make(4,1,"reload",Vector3.ZERO,99)],1,Vector3.ZERO,99,[])==0,"own reload already rendered privately")
 	check(audio.consume([rules.make(5,2,"door",Vector3.ZERO,2)],1,Vector3.ZERO,99,[])==0,"foreign round sound refused")
 	check(audio.consume([rules.make(1,2,"door",Vector3.ZERO,2)],2,Vector3.ZERO,99,[])==1,"new round may reuse event id")
+	# Combat mute must include another player's accepted reload, independently
+	# of the door/object volume. Exercise the actual view/settings consumer.
+	var mute_view:=ArenaView.new()
+	root.add_child(mute_view)
+	var mute_settings:=MenuSettings.new()
+	mute_settings.movement_volume=1.0
+	mute_settings.environment_volume=1.0
+	mute_settings.combat_volume=0.0
+	mute_view.configure_audio(mute_settings)
+	check(mute_view.spatial_audio.consume([rules.make(1,1,"reload",Vector3.ZERO,2)],1,Vector3.ZERO,99,[])==0,"combat zero silences remote reload while environment stays audible")
+	check(mute_view.spatial_audio.consume([rules.make(2,1,"door",Vector3.ZERO,2)],1,Vector3.ZERO,99,[])==1,"combat mute preserves door audio")
+	mute_settings.environment_volume=0.0
+	mute_settings.combat_volume=1.0
+	mute_view.configure_audio(mute_settings)
+	check(mute_view.spatial_audio.consume([rules.make(3,1,"reload",Vector3.ZERO,2)],1,Vector3.ZERO,99,[])==1,"remote reload remains audible when only environment is muted")
+	for voice in mute_view.spatial_audio.get_children(): voice.stop()
+	mute_view.free()
 	check(audio.get_child_count()==audio.MAX_VOICES,"fixed audio voice pool")
 	check(audio.attenuation(Vector3.ZERO,Vector3(1,0,0),[])>audio.attenuation(Vector3.ZERO,Vector3(10,0,0),[]),"distance reduces level")
 	var obstacle=[{"center":Vector3(3,1,3),"size":Vector3(1,3,1)}]

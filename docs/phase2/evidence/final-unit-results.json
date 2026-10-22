@@ -1,0 +1,445 @@
+{
+  "godot": "4.4.1.stable.official.49a5bc7b6",
+  "results": [
+    {
+      "test": "arena_layout_test.gd",
+      "exit": 0,
+      "seconds": 5.129,
+      "errors": [],
+      "markers": [
+        "ARENA_LAYOUT_TEST_OK checks=5117 blockers=182 spawns=8 pickups=20 rooms=9"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "arena_visuals_test.gd",
+      "exit": 0,
+      "seconds": 1.168,
+      "errors": [],
+      "markers": [
+        "ARENA_VISUALS_TEST_OK checks=151"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "avatar_facing_test.gd",
+      "exit": 0,
+      "seconds": 1.217,
+      "errors": [],
+      "markers": [
+        "AVATAR_FACING_TEST_OK checks=27"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "camera_effects_test.gd",
+      "exit": 0,
+      "seconds": 2.122,
+      "errors": [],
+      "markers": [
+        "CAMERA_EFFECTS_TEST_OK"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "character_actions_test.gd",
+      "exit": 0,
+      "seconds": 1.168,
+      "errors": [],
+      "markers": [
+        "CHARACTER_ACTIONS_TEST_OK checks=35 failures=0"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "character_animation_test.gd",
+      "exit": 0,
+      "seconds": 1.218,
+      "errors": [],
+      "markers": [
+        "CHARACTER_ANIMATION_TEST_OK checks=472"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "character_appearance_test.gd",
+      "exit": 0,
+      "seconds": 1.218,
+      "errors": [],
+      "markers": [
+        "CHARACTER_APPEARANCE_TEST_OK checks=142"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "combat_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "COMBAT_AUTHORITY_TEST_OK checks=86"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "combat_feedback_test.gd",
+      "exit": 0,
+      "seconds": 1.167,
+      "errors": [],
+      "markers": [
+        "COMBAT_FEEDBACK_TEST_OK checks=84"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "combat_network_coordinator_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "COMBAT_NETWORK_COORDINATOR_TEST_OK checks=37"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "combat_rules_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "COMBAT_RULES_TEST_OK checks=25"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "dedicated_config_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "DEDICATED_CONFIG_TEST_OK checks=49"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "desktop_session_test.gd",
+      "exit": 0,
+      "seconds": 1.218,
+      "errors": [],
+      "markers": [
+        "DESKTOP_SESSION_TEST_OK checks=271"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "environment_presentation_test.gd",
+      "exit": 0,
+      "seconds": 1.22,
+      "errors": [],
+      "markers": [
+        "ENVIRONMENT_PRESENTATION_TEST_OK checks=74 failures=0"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "environment_wire_test.gd",
+      "exit": 0,
+      "seconds": 1.22,
+      "errors": [],
+      "markers": [
+        "ENVIRONMENT_WIRE_TEST_OK checks=23 failures=0"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "gameplay_integration_test.gd",
+      "exit": 0,
+      "seconds": 1.118,
+      "errors": [],
+      "markers": [
+        "GAMEPLAY_INTEGRATION_SCENE_OK checks=96"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "graphics_profiles_test.gd",
+      "exit": 0,
+      "seconds": 1.171,
+      "errors": [],
+      "markers": [
+        "GRAPHICS_PROFILES_TEST_OK"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "gunplay_test.gd",
+      "exit": 0,
+      "seconds": 1.183,
+      "errors": [],
+      "markers": [
+        "GUNPLAY_TEST_OK checks=6216"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "hud_presentation_test.gd",
+      "exit": 0,
+      "seconds": 1.167,
+      "errors": [],
+      "markers": [
+        "HUD_PRESENTATION_TEST_OK checks=19 layout=skipped"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "interaction_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.218,
+      "errors": [],
+      "markers": [
+        "INTERACTION_AUTHORITY_TEST_OK checks=45 failures=0"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "inventory_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.169,
+      "errors": [],
+      "markers": [
+        "INVENTORY_AUTHORITY_TEST_OK checks=23"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "investigation_test.gd",
+      "exit": 0,
+      "seconds": 1.168,
+      "errors": [],
+      "markers": [
+        "INVESTIGATION_TEST_OK checks=93 failures=0"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "mansion_art_test.gd",
+      "exit": 0,
+      "seconds": 1.218,
+      "errors": [],
+      "markers": [
+        "MANSION_ART_TEST_OK checks=44135 items=1653 meshes=248 lights=24 materials=40"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "match_hud_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "errors": [],
+      "markers": [
+        "MATCH_HUD_TEST_OK checks=39"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "menu_test.gd",
+      "exit": 0,
+      "seconds": 1.168,
+      "errors": [],
+      "markers": [
+        "MENU_TEST_OK checks=198"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "movement_config_test.gd",
+      "exit": 0,
+      "seconds": 1.219,
+      "errors": [],
+      "markers": [
+        "MOVEMENT_CONFIG_TEST_OK"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "movement_rules_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "errors": [],
+      "markers": [
+        "MOVEMENT_RULES_TEST_OK"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "net_delay_lifecycle_test.gd",
+      "exit": 0,
+      "seconds": 1.173,
+      "errors": [],
+      "markers": [
+        "NET_DELAY_LIFECYCLE_TEST_OK checks=42"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "netcode_test.gd",
+      "exit": 0,
+      "seconds": 2.173,
+      "errors": [],
+      "markers": [
+        "NETCODE_TEST_OK checks=266"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "network_telemetry_test.gd",
+      "exit": 0,
+      "seconds": 1.167,
+      "errors": [],
+      "markers": [
+        "NETWORK_TELEMETRY_TEST_OK"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "player_messages_test.gd",
+      "exit": 0,
+      "seconds": 1.167,
+      "errors": [],
+      "markers": [
+        "PLAYER_MESSAGES_TEST_OK checks=676 messages=29"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "rooms_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "ROOMS_TEST_OK checks=2626"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "round_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.168,
+      "errors": [],
+      "markers": [
+        "ROUND_AUTHORITY_TEST_OK checks=192"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "round_hud_test.gd",
+      "exit": 0,
+      "seconds": 1.167,
+      "errors": [],
+      "markers": [
+        "ROUND_HUD_TEST_OK checks=98"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "round_reset_bodies_test.gd",
+      "exit": 0,
+      "seconds": 1.168,
+      "errors": [],
+      "markers": [
+        "ROUND_RESET_BODIES_TEST_OK checks=259"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "round_rules_test.gd",
+      "exit": 0,
+      "seconds": 1.167,
+      "errors": [],
+      "markers": [
+        "ROUND_RULES_TEST_OK checks=63"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "shutdown_handshake_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "SHUTDOWN_HANDSHAKE_TEST_OK checks=47"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "spatial_audio_test.gd",
+      "exit": 0,
+      "seconds": 1.118,
+      "errors": [],
+      "markers": [
+        "SPATIAL_AUDIO_TEST_OK checks=33 failures=0"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "spectator_reveal_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "SPECTATOR_REVEAL_AUTHORITY_TEST_OK checks=60"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "spectator_reveal_client_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "errors": [],
+      "markers": [
+        "SPECTATOR_REVEAL_CLIENT_TEST_OK checks=16"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "transition_metrics_test.gd",
+      "exit": 0,
+      "seconds": 1.167,
+      "errors": [],
+      "markers": [
+        "TRANSITION_METRICS_TEST_OK checks=30"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "vertical_aim_test.gd",
+      "exit": 0,
+      "seconds": 1.217,
+      "errors": [],
+      "markers": [
+        "VERTICAL_AIM_TEST_OK checks=81"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "weapon_catalog_test.gd",
+      "exit": 0,
+      "seconds": 1.167,
+      "errors": [],
+      "markers": [
+        "WEAPON_CATALOG_TEST_OK checks=9"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "weapon_rules_test.gd",
+      "exit": 0,
+      "seconds": 1.168,
+      "errors": [],
+      "markers": [
+        "WEAPON_RULES_TEST_OK checks=27"
+      ],
+      "status": "PASS"
+    }
+  ]
+}

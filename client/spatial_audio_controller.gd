@@ -6,6 +6,7 @@ const MAX_VOICES := 12
 const MAX_DISTANCE := 24.0
 var movement_volume := 0.8
 var environment_volume := 0.8
+var combat_volume := 0.8
 var occlusion_enabled := false
 var _round_id := 0
 var _last_id := 0
@@ -21,9 +22,10 @@ func _ready() -> void:
 		voice.unit_size=4.0
 		add_child(voice)
 		_priorities.append(0)
-func configure(movement: float, environment: float) -> void:
+func configure(movement: float, environment: float, combat: float=0.8) -> void:
 	movement_volume=clampf(movement,0.0,1.0) if is_finite(movement) else 0.8
 	environment_volume=clampf(environment,0.0,1.0) if is_finite(environment) else 0.8
+	combat_volume=clampf(combat,0.0,1.0) if is_finite(combat) else 0.8
 	# Live muting must also stop a sound already playing.
 	for voice in get_children(): voice.stop()
 func reset(round_id: int=0) -> void:
@@ -55,7 +57,8 @@ func consume(events: Variant, round_id: int, listener: Vector3, own_peer: int, b
 		if event.is_empty() or event.round_id!=round_id or event.id<=_last_id: continue
 		_last_id=event.id
 		if event.kind=="reload" and event.peer_id==own_peer: continue
-		var volume := movement_volume if SoundEventRules.category(event.kind)=="movement" else environment_volume
+		var category := SoundEventRules.category(event.kind)
+		var volume := combat_volume if category=="combat" else (movement_volume if category=="movement" else environment_volume)
 		if volume<=0 or listener.distance_to(event.position)>=MAX_DISTANCE: continue
 		var priority := SoundEventRules.priority(event.kind)
 		var slot := -1

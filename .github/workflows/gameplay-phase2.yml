@@ -28,6 +28,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/phase2"
           LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a godot --path . --display-driver x11 --audio-driver Dummy --rendering-method gl_compatibility --rendering-driver opengl3 --import 2>&1 | tee "$RUNNER_TEMP/phase2/import.log"
           if grep -Eq 'SCRIPT ERROR|Parse Error|^ERROR:' "$RUNNER_TEMP/phase2/import.log"; then exit 1; fi
+          # Editor import normalizes settings; test the committed configuration.
+          git show HEAD:project.godot > project.godot
       - name: Run complete unit regression matrix
         shell: bash
         run: GODOT_BIN="$(command -v godot)" python3 tests/run_phase2_unit_tests.py --logs "$RUNNER_TEMP/phase2/units"

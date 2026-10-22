@@ -19,6 +19,7 @@ static func sanitize(raw: Variant) -> Dictionary:
 	if not position.is_finite(): return {}
 	return value.duplicate()
 static func category(kind: String) -> String:
+	if kind=="reload": return "combat"
 	return "movement" if kind in ["step_walk","step_run"] else "environment"
 static func priority(kind: String) -> int:
 	return 1 if category(kind)=="movement" else 2
