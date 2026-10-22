@@ -73,7 +73,7 @@ jobs:
 
       - name: Validate offline demo
         run: |
-          set -o pipefail
+          set -euo pipefail
           godot --headless --path . -- --mode=demo --demo-test=true 2>&1 \
             | tee "$RUNNER_TEMP/godot-web-logs/demo.log"
           grep -q 'DEMO_TEST_OK simulated_players=4 network=disabled' \
@@ -129,7 +129,7 @@ jobs:
 
       - name: Validate offline visual assets and animation
         run: |
-          set -o pipefail
+          set -euo pipefail
           for test in arena_visuals character_animation avatar_facing mansion_art camera_effects; do
             log="$RUNNER_TEMP/godot-web-logs/$test.log"
             godot --headless --path . --script "tests/${test}_test.gd" 2>&1 | tee "$log"
@@ -199,7 +199,7 @@ jobs:
 
       - name: Export Web demo (offline)
         run: |
-          set -o pipefail
+          set -euo pipefail
           # O preset usa uma cena de entrada offline e uma lista de exclusão de
           # código online. Remover o endpoint apenas durante este export impede
           # que o PCK carregue código/URL de conexão; o projeto original volta
@@ -218,13 +218,14 @@ jobs:
       # Fase 9: cliente completo no navegador (menu, salas online, partida).
       - name: Export Web playtest (full client)
         run: |
-          set -o pipefail
+          set -euo pipefail
           mkdir -p build/web-playtest
           godot --headless --path . --export-release "Web Playtest" build/web-playtest/index.html 2>&1 \
             | tee "$RUNNER_TEMP/godot-web-logs/export-playtest.log"
 
       - name: Verify Web artifacts
         run: |
+          set -euo pipefail
           for dir in build/web build/web-playtest; do
             if [[ ! -s "$dir/index.html" ]]; then
               echo "Missing non-empty Web entry point: $dir/index.html" >&2
@@ -281,6 +282,7 @@ jobs:
       - name: Assemble offline Pages artifact
         if: steps.release_policy.outputs.publication_mode == 'offline'
         run: |
+          set -euo pipefail
           mkdir -p build/site-offline
           cp web/site/index.html build/site-offline/index.html
           cp -r build/web build/site-offline/demo
@@ -294,6 +296,7 @@ jobs:
 
       - name: Test publication modes
         run: |
+          set -euo pipefail
           python3 -m unittest discover -s tests -p pages_release_mode_test.py
           python3 -m unittest discover -s tests -p pages_release_policy_test.py
 
@@ -319,6 +322,7 @@ jobs:
       - name: Assemble online Pages artifact
         if: steps.release_policy.outputs.publication_mode == 'online'
         run: |
+          set -euo pipefail
           mkdir -p build/site-online
           cp web/site/online-index.html build/site-online/index.html
           cp -r build/web build/site-online/demo
