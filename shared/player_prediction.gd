@@ -46,6 +46,8 @@ var epoch_resets := 0
 var local_rejections := 0
 var ack_errors_position: Array = []
 var ack_errors_look: Array = []
+var ack_errors_yaw: Array = []
+var ack_errors_pitch: Array = []
 const MAX_SAMPLES := 512
 
 func reset_all() -> void:
@@ -142,7 +144,7 @@ static func official_from(player: Dictionary, ack: Dictionary) -> Dictionary:
 func reconcile(ack: Dictionary, player: Dictionary) -> Dictionary:
 	var ack_seq := int(ack.get("seq", 0))
 	var ack_epoch := int(ack.get("epoch", 0))
-	if has_state and ack_seq < last_ack:
+	if has_state and (ack_epoch < epoch or ack_seq < last_ack):
 		return {"stale": true}
 	official = official_from(player, ack)
 	if not has_state or ack_epoch != epoch:
@@ -151,6 +153,10 @@ func reconcile(ack: Dictionary, player: Dictionary) -> Dictionary:
 		epoch = ack_epoch
 		last_ack = ack_seq
 		pending.clear()
+		clear_look()
+		queued_action = {}
+		position_offset_age = 0.0
+		look_offset_age = 0.0
 		state = official.duplicate()
 		previous_position = state["position"]
 		position_offset = Vector3.ZERO
@@ -164,6 +170,8 @@ func reconcile(ack: Dictionary, player: Dictionary) -> Dictionary:
 	# Erro da previsão no ponto do ACK (antes de reconciliar).
 	if resolved_prediction.has("predicted_position") and int(resolved_prediction["seq"]) == ack_seq:
 		_sample(ack_errors_position, (resolved_prediction["predicted_position"] as Vector3).distance_to(official["position"]))
+		_sample(ack_errors_yaw, absf(angle_difference(float(resolved_prediction["predicted_yaw"]), float(official["yaw"]))))
+		_sample(ack_errors_pitch, absf(float(resolved_prediction["predicted_pitch"]) - float(official["pitch"])))
 		_sample(ack_errors_look, maxf(absf(angle_difference(float(resolved_prediction["predicted_yaw"]), float(official["yaw"]))),
 			absf(float(resolved_prediction["predicted_pitch"]) - float(official["pitch"]))))
 	var old_position: Vector3 = state["position"]

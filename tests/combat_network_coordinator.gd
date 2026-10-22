@@ -353,7 +353,7 @@ func _try_run_client_command() -> void:
 		processed_commands[received_command_id] = true
 		combat_test_ack.rpc_id(1, round_id, command, received_command_id, "command_received")
 	if command == "INITIAL":
-		if app.local_combat_state.is_empty() or pickup_entries.size() != MansionMap.PICKUPS.size() or privacy_leaks != 0: return
+		if not app._commands_enabled() or app.local_combat_state.is_empty() or pickup_entries.size() != MansionMap.PICKUPS.size() or privacy_leaks != 0: return
 		print("COMBAT_PRIVATE_STATE_OK id=%s updates=%d" % [app.client_label, private_updates])
 		processed_commands[received_command_id] = true
 		combat_test_ack.rpc_id(1, round_id, command, received_command_id, "ready")

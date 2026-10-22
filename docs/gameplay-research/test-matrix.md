@@ -1,5 +1,7 @@
 # Matriz de checks por SPEC
 
+> A missão [autonomous-mission.md](autonomous-mission.md) substituiu as pausas de aprovação entre SPECs. A seção final registra os checks novos; os nove gates existentes e a proibição de merge/publicação permanecem.
+
 Data: 2026-10-21. Base: `dd15ff2ab29d5e67fccedc41c431c30eb7e32c6d`.
 Esta é uma proposta para revisão, não uma alteração de proteção ou CI.
 Resultados desta execução: [initial-test-report.md](initial-test-report.md).
@@ -82,3 +84,11 @@ SPEC N: branch própria → testes + evidências → PR → revisão humana → 
 autorizado. SPEC N+1 só começa após aprovação do anterior e atualização da base.
 Não habilitar auto-merge. Build de teste/artifact não equivale a autorização
 para publicação no Pages/Railway. Não despachar sonda de produção como teste local.
+
+## Matriz implementada na branch de integração
+
+`gameplay-specs.yml` acrescenta o job independente **`gameplay-specs`** (20 minutos), sem alterar os cinco workflows existentes. Ele importa o projeto no Godot 4.4.1, exige marcadores e rejeita erros de script/parse nas novas suítes de movimento, catálogo, gunplay, câmera, perfis gráficos e telemetria. Também executa a regressão de lifecycle do wrapper, a integração obrigatória servidor+4 e sync rtt50/rtt100/rtt200. Logs são retidos mesmo em falha. Não possui permissão de publicação.
+
+O décimo check só deve ser tornado obrigatório após sua primeira execução verde e conferência do nome/origem no PR. Proposta de proteção: os nove gates originais + `gameplay-specs`, PR obrigatório, branch atualizada, conversas resolvidas e sem force-push/exclusão. Nenhuma regra foi gravada pela API nesta missão.
+
+Os novos arquivos não substituem os testes antigos. A regressão global inclui todos os `tests/*_test.gd`, os 19 cenários multiprocesso originais, os três perfis adicionais, a integração e sua regressão de encerramento. Resultados efetivos ficam no relatório final; marcador sem exit correto não é aprovação.

@@ -12,6 +12,10 @@ var weapon_model: Node3D
 ## Pivô entre a câmera e a pistola: recuo e pose de recarga mexem só aqui,
 ## nunca na câmera (a direção do disparo vem da câmera).
 var weapon_pivot: Node3D
+var motion_pivot: Node3D
+const CameraEffects = preload("res://client/camera_effects.gd")
+var camera_effects := CameraEffects.new()
+var presentation_motion := true
 var fx: CombatFx
 var _muzzle_flash: MeshInstance3D
 var _combat_prev: Dictionary = {}
@@ -28,6 +32,7 @@ var current_zone_name := ""
 ## Distância do topo do chip de região; a demo offline o desce abaixo do banner.
 var region_chip_top := HudStyle.MARGIN
 var gameplay_visuals := true
+var graphics_profile := "baseline"
 var _alive_flags: Dictionary = {}
 ## Aparência cosmética pública por jogador (roster oficial). Nunca vem de papel.
 var _appearances: Dictionary = {}
@@ -92,6 +97,7 @@ const PREDICTED_SHOT_MARGIN_MSEC := 50
 func _ready() -> void:
 	_ensure_input_actions()
 	_build_arena()
+	set_graphics_profile(MenuSettings.load_saved().graphics_profile)
 	player_rig = Node3D.new()
 	add_child(player_rig)
 	camera = Camera3D.new()
@@ -108,7 +114,11 @@ func _ready() -> void:
 	# O pivô fica na própria arma: recuo e recarga são inclinações curtas no
 	# lugar, sem varrer a pistola pela tela.
 	weapon_pivot.position = VIEWMODEL_OFFSET
-	camera.add_child(weapon_pivot)
+	motion_pivot = Node3D.new()
+	motion_pivot.name = "PresentationMotion"
+	camera.add_child(motion_pivot)
+	motion_pivot.add_child(weapon_pivot)
+	presentation_motion = not MenuSettings.load_saved().reduce_motion
 	weapon_pivot.add_child(weapon_model)
 	# Clarão da própria arma: pequeno, na boca do cano, só por um instante.
 	_muzzle_flash = MeshInstance3D.new()
@@ -262,6 +272,7 @@ func _process(delta: float) -> void:
 			elif animator.amplitude > 0.0 or animator.speed > 0.0:
 				animator.rest()
 	_update_local_view(delta)
+	_update_presentation_motion(delta)
 	_expire_predicted_shots()
 	_visual_time += delta
 	for pickup_id in pickup_nodes:
@@ -412,7 +423,7 @@ func apply_combat_state(state: Dictionary) -> void:
 			"pickup_ok", "reload_start", "reload_end": fx.play_ui(feedback)
 			"hurt":
 				fx.play_ui("hurt")
-				_damage_kick()
+				if int(state.get("health", 0)) > 0: _damage_kick()
 	if state.is_empty() or int(state.get("round_id", 0)) != int(_combat_prev.get("round_id", 0)):
 		# Nenhum disparo antecipado atravessa rodadas.
 		predicted_shots.clear()
@@ -476,6 +487,8 @@ func _set_reload_pose(active: bool) -> void:
 	_pose_tween.tween_property(weapon_pivot, "position", VIEWMODEL_OFFSET + (RELOAD_DROP if active else Vector3.ZERO), 0.18)
 
 func _recoil() -> void:
+	if not presentation_motion or not gameplay_visuals or not bool(_alive_flags.get(local_peer_id, true)):
+		return
 	if _reload_pose:
 		return
 	if _pose_tween != null: _pose_tween.kill()
@@ -490,6 +503,7 @@ func _recoil() -> void:
 ## Dano recebido: tranco curto só no deslocamento de projeção da câmera
 ## (`v_offset`/`h_offset`); a orientação e a origem da mira não mudam.
 func _damage_kick() -> void:
+	if not presentation_motion or not gameplay_visuals or int(_combat_prev.get("health", 0)) <= 0: return
 	if _kick_tween != null: _kick_tween.kill()
 	camera.v_offset = -DAMAGE_KICK
 	camera.h_offset = DAMAGE_KICK * 0.5
@@ -517,6 +531,8 @@ func set_gameplay_visuals(active: bool) -> void:
 	_refresh_gameplay_visuals()
 
 func _refresh_gameplay_visuals() -> void:
+	if not gameplay_visuals or not _combat_has_weapon:
+		_reset_presentation_motion()
 	if crosshair != null: crosshair.visible = gameplay_visuals
 	if weapon_model != null: weapon_model.visible = gameplay_visuals and _combat_has_weapon
 
@@ -629,6 +645,8 @@ func show_hit_marker() -> void:
 
 func set_player_alive(peer_id: int, alive: bool) -> void:
 	_alive_flags[peer_id] = alive
+	if peer_id == local_peer_id and not alive:
+		_reset_presentation_motion()
 	if avatars.has(peer_id):
 		(avatars[peer_id] as Node3D).visible = alive
 	# Eliminado: pose de repouso; ao voltar, nenhum deslocamento antigo conta.
@@ -781,3 +799,52 @@ static func _pose_body(character: Node3D) -> void:
 	var head: Node3D = rig.get("head")
 	if head != null:
 		head.rotation = Vector3(0.0, 0.35, 0.0)
+
+## One writer for the motion child; reload/recoil continue on WeaponPivot.
+func set_presentation_motion(enabled: bool) -> void:
+	presentation_motion = enabled
+	if not enabled: _reset_presentation_motion()
+
+func _reset_presentation_motion() -> void:
+	camera_effects.reset()
+	if motion_pivot != null: motion_pivot.transform = Transform3D.IDENTITY
+	if _pose_tween != null: _pose_tween.kill()
+	if weapon_pivot != null:
+		weapon_pivot.position = VIEWMODEL_OFFSET + (RELOAD_DROP if _reload_pose else Vector3.ZERO)
+		weapon_pivot.rotation = RELOAD_POSE if _reload_pose else Vector3.ZERO
+	if _kick_tween != null: _kick_tween.kill()
+	if camera != null:
+		camera.h_offset = 0.0
+		camera.v_offset = 0.0
+	if _muzzle_flash != null: _muzzle_flash.visible = false
+
+func _update_presentation_motion(delta: float) -> void:
+	if not presentation_motion or not gameplay_visuals or not is_visible_in_tree() or not _combat_has_weapon or spectator_target_peer_id != 0 or not bool(_alive_flags.get(local_peer_id, true)):
+		_reset_presentation_motion()
+		return
+	var velocity: Vector3 = _local_state.get("velocity", Vector3.ZERO)
+	motion_pivot.transform = camera_effects.sample(Vector2(velocity.x, velocity.z).length(), delta)
+
+## Cosmetics only: overrides belong to this view, cached mansion resources stay immutable.
+func set_graphics_profile(value: String) -> void:
+	graphics_profile = MenuSettings.sanitize_graphics_profile(value)
+	if art == null: return
+	var variants := {}
+	for node in art.meshes:
+		var mesh_node := node as MeshInstance3D
+		mesh_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if graphics_profile == "baseline":
+			mesh_node.material_override = null
+			continue
+		var original := mesh_node.mesh.surface_get_material(0) as StandardMaterial3D
+		var key := original.get_instance_id()
+		if not variants.has(key):
+			var copy := original.duplicate() as StandardMaterial3D
+			if graphics_profile == "low":
+				copy.shading_mode = BaseMaterial3D.SHADING_MODE_PER_VERTEX
+				copy.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+			elif copy.albedo_texture != null:
+				copy.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+			variants[key] = copy
+		mesh_node.material_override = variants[key]
+	# Preserve original light state; quality profiles affect materials only.

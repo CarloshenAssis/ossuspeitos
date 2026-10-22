@@ -12,7 +12,14 @@ func _init(weapon_definitions: Dictionary = {}) -> void:
 	for weapon_id in weapon_definitions:
 		var definition: Variant = weapon_definitions[weapon_id]
 		if definition is WeaponDefinition and WeaponRules.validate_definition(definition).is_empty() and definition.id == weapon_id:
-			definitions[weapon_id] = definition
+			# Own the validated scalar values; Dictionary.duplicate(true) would
+			# still retain the caller's RefCounted definition object.
+			definitions[weapon_id] = WeaponDefinition.new(definition.id, definition.damage,
+				definition.magazine_capacity, definition.max_reserve_ammo,
+				definition.fire_interval_msec, definition.range_meters,
+				definition.reload_time_msec, definition.spread_radians,
+				definition.movement_spread_radians, definition.bloom_per_shot_radians,
+				definition.max_bloom_radians, definition.bloom_recovery_radians_per_second)
 
 func register_player(peer_id: int) -> bool:
 	if peer_id <= 0 or inventories.has(peer_id):
@@ -184,7 +191,7 @@ func clear_session() -> void:
 	ground_items.clear()
 
 func _empty_inventory() -> Dictionary:
-	return {"weapon_id": "", "equipped": false, "magazine": 0, "reserve": 0, "reloading": false, "reload_deadline_msec": 0, "last_sequence": -1, "last_shot_msec": -1}
+	return {"weapon_id": "", "equipped": false, "magazine": 0, "reserve": 0, "reloading": false, "reload_deadline_msec": 0, "last_sequence": -1, "last_shot_msec": -1, "shot_bloom_radians": 0.0}
 
 func _cancel_reload(inventory: Dictionary) -> void:
 	inventory["reloading"] = false

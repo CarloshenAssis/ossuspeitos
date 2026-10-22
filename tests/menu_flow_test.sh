@@ -37,7 +37,7 @@ wait_marker() { local p=$1 f=$2 pid=$3; for _ in {1..600}; do grep -qE -- "$p" "
 status_of() { if wait "$1"; then LAST_STATUS=0; else LAST_STATUS=$?; fi; }
 # Menu com preferências isoladas por processo.
 menu() { local name=$1; shift; timeout 120 "$GAME_BIN" --headless "${PATH_ARGS[@]}" -- --mode=menu --menu-settings-path="$TMP_DIR/settings-$name.cfg" "$@" >"$TMP_DIR/$name.log" 2>&1; }
-server() { local name=$1; shift; "$GAME_BIN" --headless "${PATH_ARGS[@]}" -- --mode=server --bind=127.0.0.1 "$@" >"$TMP_DIR/$name.log" 2>&1; }
+server() { local name=$1; shift; exec "$GAME_BIN" --headless "${PATH_ARGS[@]}" -- --mode=server --bind=127.0.0.1 "$@" >"$TMP_DIR/$name.log" 2>&1; }
 # Porta que aceita TCP e nunca responde ao WebSocket (servidor travado).
 blackhole() {
   python3 - "$1" >"$TMP_DIR/blackhole.log" 2>&1 <<'PY' &

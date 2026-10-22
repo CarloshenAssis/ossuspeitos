@@ -585,6 +585,17 @@ func _build_settings() -> VBoxContainer:
 			settings.resolution = MenuSettings.RESOLUTIONS[index]
 			settings.apply_display()
 			_save_settings())
+	box.add_child(MenuTheme.label("Qualidade gráfica", MenuTheme.SMALL_SIZE, MenuTheme.PARCHMENT))
+	var graphics := Button.new()
+	var graphics_labels := ["Baixa", "Padrão", "Alta (texturas)"]
+	graphics.text = graphics_labels[MenuSettings.GRAPHICS_PROFILES.find(settings.graphics_profile)]
+	graphics.pressed.connect(func():
+		var index := (MenuSettings.GRAPHICS_PROFILES.find(settings.graphics_profile) + 1) % MenuSettings.GRAPHICS_PROFILES.size()
+		settings.graphics_profile = MenuSettings.GRAPHICS_PROFILES[index]
+		graphics.text = graphics_labels[index]
+		_save_settings())
+	box.add_child(graphics)
+	buttons["settings_graphics"] = graphics
 	var motion := CheckBox.new()
 	motion.text = "Reduzir movimento da interface"
 	motion.button_pressed = settings.reduce_motion

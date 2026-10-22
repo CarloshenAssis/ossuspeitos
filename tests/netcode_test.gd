@@ -1,9 +1,9 @@
 extends SceneTree
 
-## Fase 4, camada A: algoritmos e contrato do protocolo 9, sem rede real.
+## Fase 4, camada A: algoritmos e contrato do protocolo 11, sem rede real.
 ## Servidor (`AuthoritativeWorld` + `CombatAuthority`) e cliente
 ## (`PlayerPrediction`, `RemoteInterpolator`, `ArenaView`) conversam por um laço
-## em processo com filas FIFO atrasadas (perfis de 0, 80 e 150 ms com jitter e
+## em processo com filas FIFO atrasadas (perfis de 0, 50, 80, 100, 200 e jitter com
 ## seed), o mesmo contrato de pacotes do fio.
 
 const LOCAL := 1
@@ -17,6 +17,11 @@ var _frame := 0
 var _report: Array = []
 
 func _initialize() -> void:
+	_test_epoch_reset_discards_pending_action()
+	_test_out_of_order_ack_does_not_rewind()
+	_test_pending_limit_recovers()
+	_test_duplicate_input_single_step()
+	_test_metrics_precision()
 	_test_same_input_same_state()
 	_test_partial_ack_and_replay()
 	_test_rejected_command_is_retired()
@@ -32,7 +37,7 @@ func _initialize() -> void:
 	_test_snapshot_filter()
 	_test_interpolation()
 	_test_correction_smoothing()
-	for profile in ["local", "rtt80", "rtt150j"]:
+	for profile in ["local", "rtt50", "rtt80", "rtt100", "rtt200", "rtt150j"]:
 		_test_convergence_under_delay(profile, 7)
 	_arena = ArenaView.new()
 	_arena.local_peer_id = LOCAL
@@ -57,7 +62,7 @@ func _process(_delta: float) -> bool:
 # --- Laço cliente/servidor em processo ----------------------------------------
 
 ## Um servidor com um jogador e um cliente previsor, ligados por filas com
-## atraso (em ticks) que preservam a ordem, como o fluxo WebSocket.
+## atraso (em ticks) que preservam a ordem, como o fluxo WebSocket/TCP.
 class Loop:
 	var world := AuthoritativeWorld.new()
 	var client := PlayerPrediction.new()
@@ -71,6 +76,8 @@ class Loop:
 	var rng := RandomNumberGenerator.new()
 	var last_up := 0
 	var last_down := 0
+	var max_queue := 0
+	var max_pending := 0
 	var rejections: Array = []
 	var actions: Array = []
 	var gate_reason := ""
@@ -79,6 +86,10 @@ class Loop:
 	func _init(profile: String, seed_value: int) -> void:
 		rng.seed = seed_value
 		match profile:
+			# Quantized at 60 Hz: 25ms -> 2 ticks/side (66.667ms total).
+			"rtt50": up_ticks = 2; down_ticks = 2
+			"rtt100": up_ticks = 3; down_ticks = 3
+			"rtt200": up_ticks = 6; down_ticks = 6
 			"rtt80": up_ticks = 2; down_ticks = 3
 			"rtt150j": up_ticks = 4; down_ticks = 4; jitter_ticks = 2
 		world.add_player(LOCAL)
@@ -109,6 +120,8 @@ class Loop:
 				flush()
 		while not up.is_empty() and int(up[0][0]) <= tick:
 			world.receive_commands(LOCAL, up.pop_front()[1], tick * 16)
+		max_queue = maxi(max_queue, (world.states[LOCAL]["queue"] as Array).size())
+		max_pending = maxi(max_pending, client.pending.size())
 		world.step(func(_peer): return gate_reason, _run_action, func(peer, seq, act, reason): rejections.append({"seq": seq, "action": act, "reason": reason}))
 		if tick % NetSync.SNAPSHOT_INTERVAL_TICKS == 0:
 			last_down = _delay(down_ticks, last_down)
@@ -238,6 +251,13 @@ func _test_duplicates_gaps_and_old_acks() -> void:
 	_step(world, 4)
 	_expect(int(world.states[LOCAL]["last_resolved"]) == 6, "a gap is resolved as lost by the cumulative ACK")
 	_expect((world.states[LOCAL]["position"] as Vector3).distance_to(moved) < 0.2, "lost commands are not invented")
+	# Application-adversarial omission/reordering, not physical TCP packet loss.
+	var resolved_position: Vector3 = world.states[LOCAL]["position"]
+	var simulated_before := int(world.states[LOCAL]["simulated_commands"])
+	var late := world.receive_commands(LOCAL, NetSync.encode_packet(epoch, 3, [[1.0, 0.0, 0.0, 0.0, ["fire", 1]]]), 400)
+	_step(world, 3)
+	_expect(int(late["queued"]) == 0 and int(world.states[LOCAL]["simulated_commands"]) == simulated_before, "omitted command arriving after cumulative ACK is never applied")
+	_expect(world.states[LOCAL]["position"] == resolved_position, "late reordered application input cannot move the server")
 	# Cliente: ACK antigo ou repetido não retrocede nada.
 	var prediction := PlayerPrediction.new()
 	var player := MovementRules.snapshot_state(LOCAL, world.states[LOCAL])
@@ -721,7 +741,9 @@ func _test_convergence_under_delay(profile: String, seed_value: int) -> void:
 			converged_at = loop.tick
 	var seconds := float(converged_at - stop_tick) / 60.0 if converged_at >= 0 else INF
 	_report.append("NETCODE_CONVERGENCE profile=%s seed=%d converged_s=%.3f corrections_small=%d large=%d max_pending=%d" % [
-		profile, seed_value, seconds, loop.client.corrections_small, loop.client.corrections_large, loop.client.pending.size()])
+		profile, seed_value, seconds, loop.client.corrections_small, loop.client.corrections_large, loop.max_pending])
+	_report.append("NETCODE_DELAY profile=%s base_quantized_up_ms=%.6f base_quantized_down_ms=%.6f queue_high_water=%d ack_error_m=%s yaw=%s pitch=%s" % [profile, loop.up_ticks * 1000.0 / 60.0, loop.down_ticks * 1000.0 / 60.0, loop.max_queue, NetStats.describe(loop.client.ack_errors_position), NetStats.describe(loop.client.ack_errors_yaw), NetStats.describe(loop.client.ack_errors_pitch)])
+	_expect(loop.max_queue <= 32 and loop.max_pending <= 90, "delay queues remain bounded")
 	_expect(seconds <= NetSync.CONVERGENCE_DEADLINE_SECONDS, "%s: the presentation converges within %.1f s after input stops (%.3f s)" % [profile, NetSync.CONVERGENCE_DEADLINE_SECONDS, seconds])
 	_expect(loop.client.corrections_small >= 1, "%s: the server correction was seen and smoothed" % profile)
 
@@ -768,3 +790,82 @@ func _expect(condition: bool, description: String) -> void:
 		return
 	failures += 1
 	push_error("NETCODE_CHECK_FAILED %s" % description)
+
+func _test_epoch_reset_discards_pending_action() -> void:
+	var prediction := PlayerPrediction.new()
+	var player := {"position": Vector3(13.5, 1, 12), "yaw": 0.0, "pitch": 0.0}
+	prediction.reconcile({"seq": 0, "epoch": 1}, player)
+	prediction.queue_action({"kind": "fire", "id": 1})
+	prediction.build_command(Vector2.ZERO)
+	prediction.add_look(0.1, 0.1, 123)
+	prediction.queue_action({"kind": "fire", "id": 2})
+	prediction.add_look(0.2, 0.2, 124)
+	prediction.position_offset = Vector3.ONE
+	prediction.look_offset = Vector2.ONE
+	var result := prediction.reconcile({"seq": 0, "epoch": 2}, player)
+	_expect(result.has("reset") and prediction.pending.is_empty(), "new epoch accepts equal cumulative ACK and retires old pending action")
+	_expect(prediction.queued_action.is_empty() and prediction.look_pending_since_usec == 0, "epoch reset clears queued action and look timestamp")
+	_expect(prediction.raw_yaw == 0 and prediction.raw_pitch == 0 and prediction.split_yaw == 0 and prediction.split_pitch == 0, "epoch reset clears raw and split look")
+	_expect(prediction.position_offset == Vector3.ZERO and prediction.look_offset == Vector2.ZERO, "epoch reset clears old visual offsets")
+	var command := prediction.build_command(Vector2.ZERO)
+	_expect(command["action"].is_empty() and command["yaw_delta"] == 0 and command["pitch_delta"] == 0, "pre-reset fire and look never enter a new epoch command")
+
+func _test_out_of_order_ack_does_not_rewind() -> void:
+	var prediction := PlayerPrediction.new()
+	var player := {"position": Vector3(13.5, 1, 12), "yaw": 0.0, "pitch": 0.0}
+	prediction.reconcile({"seq": 20, "epoch": 2}, player)
+	prediction.build_command(Vector2.ZERO)
+	var before := [prediction.state.duplicate(true), prediction.official.duplicate(true), prediction.pending.duplicate(true)]
+	var stale_player := player.duplicate()
+	stale_player["position"] = Vector3(3, 1, 2.5)
+	for seq in [20, 21]:
+		var result := prediction.reconcile({"seq": seq, "epoch": 1}, stale_player)
+		_expect(result.has("stale") and prediction.epoch == 2 and prediction.last_ack == 20, "older epoch ACK cannot rewind even with equal/higher sequence")
+		_expect([prediction.state, prediction.official, prediction.pending] == before, "stale epoch snapshot has no state or pending mutation")
+	prediction.reset_all()
+	_expect(prediction.reconcile({"seq": 0, "epoch": 1}, player).has("reset"), "reset_all permits a new session with lower epoch")
+
+func _test_metrics_precision() -> void:
+	var description := NetStats.describe([0.001234, 0.001234])
+	_expect(description.contains("0.001234"), "metrics retain micrometer/radian precision rather than rounding millimeter error to zero")
+	var stats := NetStats.new()
+	for i in 600:
+		stats.pending_observed(3, 1234)
+	_expect(stats.pending_age_ms.size() == 512 and stats.max_pending == 3 and stats.max_pending_age_ms == 1.234, "pending age percentiles are bounded and preserve fractional milliseconds")
+	var prediction := PlayerPrediction.new()
+	var player := {"position": Vector3(13.5, 1, 12), "yaw": 0.0, "pitch": 0.0}
+	prediction.reconcile({"seq": 0, "epoch": 1}, player)
+	prediction.build_command(Vector2.ZERO)
+	player["yaw"] = 0.001234
+	player["pitch"] = 0.002345
+	prediction.reconcile({"seq": 1, "epoch": 1}, player)
+	_expect(absf(float(prediction.ack_errors_yaw[0]) - 0.001234) < 1e-9 and absf(float(prediction.ack_errors_pitch[0]) - 0.002345) < 1e-9, "ACK yaw and pitch errors are recorded separately")
+
+func _test_pending_limit_recovers() -> void:
+	var prediction := PlayerPrediction.new()
+	var player := {"position": Vector3(13.5, 1, 12), "yaw": 0.0, "pitch": 0.0}
+	prediction.reconcile({"seq": 0, "epoch": 1}, player)
+	for i in 91:
+		prediction.build_command(Vector2(1, 0))
+		_expect(prediction.pending.size() <= 90, "pending stays within 90 on every build")
+	_expect(prediction.recoveries == 1 and prediction.pending.is_empty(), "91 builds cause exactly one explicit recovery")
+	_expect(prediction.state["position"] == player["position"] and prediction.state["position"].is_finite(), "recovery restores finite official position")
+	prediction.reconcile({"seq": 91, "epoch": 1}, player)
+	_expect(prediction.last_ack == 91 and prediction.pending.is_empty(), "subsequent ACK converges after recovery")
+
+func _test_duplicate_input_single_step() -> void:
+	var world := AuthoritativeWorld.new()
+	world.add_player(LOCAL)
+	world.teleport(LOCAL, Vector3(13.5, 1, 12))
+	var epoch_value := int(world.states[LOCAL]["epoch"])
+	var packet := NetSync.encode_packet(epoch_value, 1, [[1.0, 0.0, 0.0, 0.0, ["fire", 1]]])
+	world.receive_commands(LOCAL, packet, 100)
+	world.receive_commands(LOCAL, packet, 101)
+	var actions: Array = []
+	world.step(func(_p): return "", func(_p, action, _seq): actions.append(action), func(_p, _s, _a, _r): pass)
+	var expected := PlayerPrediction.official_from(MovementRules.snapshot_state(LOCAL, world.states[LOCAL]), world.ack_for(LOCAL))
+	expected["position"] = Vector3(13.5, 1, 12)
+	expected["velocity"] = Vector3.ZERO
+	MovementRules.simulate_command(expected, Vector2(1, 0), 0.0, 0.0)
+	_expect(actions.size() == 1 and int(world.states[LOCAL]["simulated_commands"]) == 1, "duplicate command executes exactly one movement tick and one action")
+	_expect(world.states[LOCAL]["position"] == expected["position"], "duplicate command position equals one shared simulation step")

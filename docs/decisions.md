@@ -1067,3 +1067,17 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
 - **Sonda de produção**
   - Sob demanda, depois de criar a sala da sonda, a sonda espera 40 s e tenta entrar pelo mesmo código.
   - Precisa receber `room_not_found`, o que prova que a sala vazia foi removida. Nenhuma partida é iniciada.
+
+## SPEC 01 — parametrização compatível do movimento (2026-10-21)
+
+- Um `MovementConfig` Resource empacotado define velocidade 5, aceleração 18 e desaceleração 18; valores finitos e positivos, tetos conservadores 5/60/60. Servidor e previsão usam o integrador compartilhado, com cópia escalar validada somente leitura; não se instala configuração do cliente ou de RPC.
+- Desaceleração aplica-se apenas à entrada zero. Defaults preservam o movimento atual, colisão XZ, Y=1, constantes de compatibilidade, controles e protocolo 11. Configuração inválida é recusada explicitamente antes de simular, sem fallback.
+- Pela autorização da missão autônoma, a etapa compatível prossegue e a extensão vertical (salto, gravidade, ar, rampas, grounded), sprint e alterações de payload ficam adiados. Não há valores de design aprovados para essas capacidades e elas não são consideradas entregues. Uma extensão futura deverá definir regras e migrar todos os consumidores caso mude protocolo.
+- Evidências, API e limites: `docs/gameplay-research/01-movement.md`. Referência FirstPersonStarter MIT estudada conceitualmente no SHA do registro; nenhum código copiado.
+
+## SPEC 04 — precisão no estado do inventário (2026-10-21)
+
+- Movimento e bloom são parâmetros opcionais validados no catálogo; defaults zero preservam a pistola. Bloom pertence ao inventário por jogador, usando o último tempo de disparo servidor para recuperação preguiçosa. Reset/saída/fim de sala descartam esse estado junto ao inventário.
+- A ação recebe velocidade oficial anterior ao movimento do comando. Recusas não alteram estado/RNG; não se aceita seed/velocidade do cliente. Nenhum DTO/protocolo ou yaw/pitch oficial mudou.
+- O cone estático já aceitava até PI, mas a projeção com tangente não respeitava essa faixa. Calota esférica uniforme independente corrige toda a faixa, mantendo dois sorteios por cone positivo e zero por cone zero. Seeds reproduzem a nova distribuição; a distribuição anterior não zero muda intencionalmente.
+- Cena `tests/scenes/gunplay_lab.tscn` apresenta eventos do CombatAuthority real e geometria pública procedural; seus parâmetros não são tuning de produção. Fórmulas, evidências e limites: `docs/gameplay-research/04-calibration.md`.

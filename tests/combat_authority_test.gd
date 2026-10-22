@@ -13,11 +13,14 @@ func _initialize() -> void:
 	_test_raycast_and_death()
 	_test_action_rate_limit_boundaries()
 	_test_inactive_and_cleanup()
+	_test_duplicate_shot_consumes_once()
+	_test_trusted_catalogue()
+	_test_same_tick_shots_order()
 	if failures: quit(1); return
 	print("COMBAT_AUTHORITY_TEST_OK checks=%d" % checks)
 	quit(0)
 
-func _setup() -> void:
+func _setup(definitions: Dictionary = {}) -> void:
 	rounds = RoundAuthority.new()
 	world = AuthoritativeWorld.new()
 	for peer_id in range(1, 5):
@@ -27,7 +30,7 @@ func _setup() -> void:
 	rounds.participants = {1: true, 2: true, 3: true, 4: true}
 	rounds.alive = {1: true, 2: true, 3: true, 4: true}
 	rounds._roles = {1: Role.ASSASSIN, 2: Role.DETECTIVE, 3: Role.VICTIM, 4: Role.VICTIM}
-	authority = CombatAuthority.new(rounds, world)
+	authority = CombatAuthority.new(rounds, world) if definitions.is_empty() else CombatAuthority.new(rounds, world, definitions)
 	authority.begin_round(1, [1, 2, 3, 4])
 
 func _arm(peer_id: int, position: Vector3, item := "weapon_0") -> void:
@@ -155,3 +158,53 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		failures += 1
 		push_error(message)
+
+func _test_duplicate_shot_consumes_once() -> void:
+	_setup()
+	_arm(1, Vector3(12, 0, 15.5))
+	world.states[1]["yaw"] = 0.0
+	world.states[2]["position"] = Vector3(12, 0, 10.5)
+	var events: Array = []
+	authority.shot_resolved.connect(func(event: Dictionary): events.append(event))
+	_expect(authority.request_fire(1, 1, 1000)["accepted"], "first shot accepted")
+	var before := authority.inventory.get_inventory(1)
+	_expect(authority.request_fire(1, 1, 1500)["reason"] == "replay", "duplicate rejected")
+	_expect(authority.health[2] == 66 and authority.private_state(1)["magazine"] == 5, "duplicate damage and ammo once")
+	_expect(authority.inventory.get_inventory(1) == before and events.size() == 1, "duplicate has no state or event effects")
+
+func _test_trusted_catalogue() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3003
+	var composed := CombatAuthority.new(RoundAuthority.new(), AuthoritativeWorld.new(), {}, rng)
+	_expect(composed.combat_rules._rng == rng, "trusted RNG forwarded to existing combat rules")
+	var definition := WeaponDefinition.new("common_pistol", 12, 3, 9, 800, 3.0, 500, 0.0)
+	_setup({"common_pistol": definition})
+	definition.damage = -1
+	_arm(1, Vector3(12, 0, 15.5))
+	world.states[1]["yaw"] = 0.0
+	world.states[2]["position"] = Vector3(12, 0, 10.5)
+	_expect(authority.private_state(1)["magazine"] == 3, "trusted capacity governs map pickup clamp")
+	_expect(authority.request_fire(1, 1, 1000)["accepted"] and authority.health[2] == 100, "trusted range prevents distant hit")
+	world.states[2]["position"] = Vector3(12, 0, 13.5)
+	_expect(authority.request_fire(1, 2, 1400)["reason"] == "fire_rate", "trusted cadence used")
+	_expect(authority.request_fire(1, 2, 1800)["accepted"] and authority.health[2] == 88, "trusted validated damage survives caller mutation")
+	_setup({"common_pistol": WeaponDefinition.new("common_pistol", -1)})
+	_expect(authority.inventory.definitions.is_empty(), "invalid nonempty catalogue fails closed")
+	_expect(not authority.inventory.ground_items.has("weapon_0"), "no silent default weapon pickup")
+	_expect(authority.request_fire(1, 1, 1000)["reason"] == "no_equipped_weapon", "invalid catalogue cannot fire")
+
+func _test_same_tick_shots_order() -> void:
+	for first in [1, 2]:
+		_setup({"common_pistol": WeaponDefinition.new("common_pistol", 100, 6, 18, 400, 20.0, 1200, 0.0)})
+		rounds._roles = {1: Role.VICTIM, 2: Role.VICTIM, 3: Role.ASSASSIN, 4: Role.DETECTIVE}
+		_arm(1, Vector3(12, 0, 15.5))
+		world.states[1]["yaw"] = 0.0
+		_arm(2, Vector3(12, 0, 10.5), "weapon_1")
+		world.states[2]["yaw"] = PI
+		var second := 3 - int(first)
+		var events: Array = []
+		authority.shot_resolved.connect(func(event: Dictionary): events.append(event))
+		_expect(authority.request_fire(first, 1, 1000)["accepted"], "first same-tick shooter accepted")
+		_expect(authority.health[second] == 0 and not rounds.is_alive(second), "first processed lethal shot wins")
+		_expect(authority.request_fire(second, 1, 1000)["reason"] == "player_dead", "later same-tick dead shooter blocked")
+		_expect(authority.private_state(second)["magazine"] == 6 and authority.health[first] == 100 and events.size() == 1, "blocked shooter consumes nothing")

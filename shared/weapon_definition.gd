@@ -11,6 +11,10 @@ var fire_interval_msec: Variant
 var range_meters: Variant
 var reload_time_msec: Variant
 var spread_radians: Variant
+var movement_spread_radians: Variant
+var bloom_per_shot_radians: Variant
+var max_bloom_radians: Variant
+var bloom_recovery_radians_per_second: Variant
 
 func _init(
 	weapon_id: Variant = "",
@@ -20,7 +24,11 @@ func _init(
 	interval_msec: Variant = 0,
 	weapon_range: Variant = 0.0,
 	reload_msec: Variant = 0,
-	spread: Variant = 0.0
+	spread: Variant = 0.0,
+	movement_spread_radians: Variant = 0.0,
+	bloom_per_shot_radians: Variant = 0.0,
+	max_bloom_radians: Variant = 0.0,
+	bloom_recovery_radians_per_second: Variant = 0.0
 ) -> void:
 	id = weapon_id
 	damage = weapon_damage
@@ -30,3 +38,8 @@ func _init(
 	range_meters = weapon_range
 	reload_time_msec = reload_msec
 	spread_radians = spread
+
+	self.movement_spread_radians = movement_spread_radians
+	self.bloom_per_shot_radians = bloom_per_shot_radians
+	self.max_bloom_radians = max_bloom_radians
+	self.bloom_recovery_radians_per_second = bloom_recovery_radians_per_second

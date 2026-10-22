@@ -81,8 +81,11 @@ static func _build_head_pivot(model: Node3D) -> void:
 	for part in parts:
 		var mesh_node := part as MeshInstance3D
 		var local := mesh_node.transform
+		var original_owner := mesh_node.owner
+		mesh_node.owner = null
 		mesh_node.get_parent().remove_child(mesh_node)
 		pivot.add_child(mesh_node)
+		mesh_node.owner = original_owner
 		mesh_node.transform = Transform3D(local.basis, local.origin - pivot.position)
 
 ## Rotação da cabeça (no pivô) para um pitch oficial. O modelo olha para +Z

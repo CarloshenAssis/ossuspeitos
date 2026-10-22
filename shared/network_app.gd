@@ -301,6 +301,8 @@ func _use_room(room: MatchRoom) -> void:
 ## Liga os sinais das autoridades da sala; cada callback entra na própria sala
 ## antes de agir, então nada de uma sala é tratado no contexto de outra.
 func _wire_room(room: MatchRoom) -> void:
+	net_stats_interval_msec = NetworkConfig.integer_argument(arguments, "net-stats", 0)
+	room.world.set_telemetry_enabled(net_stats_interval_msec > 0)
 	var links: Array = []
 	var ra := room.round_authority
 	links.append([ra.state_changed, func(s: int, r: int): _use_room(room); _on_round_state_changed(s, r)])
@@ -462,6 +464,10 @@ func _start_combat_network_test() -> void:
 	add_child(combat_network_test)
 
 func _process(_delta: float) -> void:
+	if mode in ["server", "dedicated"] and net_stats_interval_msec > 0 and Time.get_ticks_msec() - net_stats_last_msec >= net_stats_interval_msec:
+		net_stats_last_msec = Time.get_ticks_msec()
+		for room in _active_rooms():
+			print("SERVER_NET_STATS room=%d variant_payload_estimate=%s rejections=%s" % [room.room_id, JSON.stringify(room.world.telemetry_snapshot()), JSON.stringify(room.world.rejection_counts)])
 	if mode == "menu":
 		_poll_hosting()
 		return
@@ -1282,6 +1288,9 @@ func _queue_local_action(kind: String, pickup_id: String = "") -> bool:
 
 ## Teste: ação com identificador escolhido pelo coordenador, pelo mesmo fluxo.
 func queue_test_action(kind: String, id: int, pickup_id: String = "") -> bool:
+	# O coordenador repete após a sincronização; reconcile descarta ações antigas.
+	if not _commands_enabled():
+		return false
 	var action := {"kind": kind, "id": id}
 	if kind == NetSync.ACTION_PICKUP:
 		action["pickup_id"] = pickup_id
@@ -2726,6 +2735,9 @@ func _menu_open(panel_id: String) -> void:
 		desktop_menu.press(panel_id)
 
 func _apply_menu_settings(settings: MenuSettings) -> void:
+	if arena_view != null:
+		arena_view.set_presentation_motion(not settings.reduce_motion)
+		arena_view.set_graphics_profile(settings.graphics_profile)
 	mouse_sensitivity = MOUSE_SENSITIVITY * MenuSettings.clamp_sensitivity(settings.sensitivity)
 	print("MENU_SETTINGS_APPLIED volume=%.2f sensitivity=%.2f" % [settings.volume, settings.sensitivity])
 

@@ -40,6 +40,9 @@ const MAX_SAMPLES := 4096
 ## Perfis nomeados (RTT-alvo = ida + volta; o jitter é somado por sentido).
 const PROFILES := {
 	"local": {"up": 0.0, "down": 0.0, "jitter": 0.0},
+	"rtt50": {"up": 25.0, "down": 25.0, "jitter": 0.0},
+	"rtt100": {"up": 50.0, "down": 50.0, "jitter": 0.0},
+	"rtt200": {"up": 100.0, "down": 100.0, "jitter": 0.0},
 	"rtt80": {"up": 40.0, "down": 40.0, "jitter": 0.0},
 	"rtt150j": {"up": 65.0, "down": 65.0, "jitter": 20.0},
 	"rtt150j_stall": {"up": 65.0, "down": 65.0, "jitter": 20.0, "stall_at": 4000.0, "stall": 400.0},

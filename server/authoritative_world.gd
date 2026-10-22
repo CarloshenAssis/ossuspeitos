@@ -12,6 +12,28 @@ extends RefCounted
 ## controle muda na entrada da rodada, na eliminação e em reposicionamento;
 ## comando de época antiga é recusado sem efeito.
 
+const REJECTION_CATEGORIES := ["packet_rate", "malformed", "empty_batch", "batch_too_large", "invalid_sequence", "malformed_action", "sequence_jump", "queue_full", "duplicate", "stale_epoch", "non_finite", "move_magnitude", "yaw_delta", "pitch_delta", "yaw_rate", "pitch_rate", "round_not_active", "player_dead", "not_participant", "other"]
+const TELEMETRY_MAX_SAMPLES := 128
+const TELEMETRY_COUNTER_MAX := 2147483647
+var _telemetry_enabled := false
+var _telemetry := _empty_telemetry()
+
+static func _empty_telemetry() -> Dictionary:
+	return {"validated_packets": 0, "variant_payload_bytes": 0, "payload_samples": [], "queued": 0, "duplicates": 0, "queue_high_water": 0}
+
+## Opt-in diagnostic only: never serializes an unvalidated packet. Counts are
+## saturating; samples contain sizes only, never command or private contents.
+func set_telemetry_enabled(enabled: bool) -> void:
+	_telemetry_enabled = enabled
+	_telemetry = _empty_telemetry()
+
+func telemetry_snapshot() -> Dictionary:
+	return _telemetry.duplicate(true)
+
+func _metric(key: String, amount: int) -> void:
+	if _telemetry_enabled:
+		_telemetry[key] = mini(TELEMETRY_COUNTER_MAX, int(_telemetry[key]) + amount)
+
 var states: Dictionary = {}
 var occupied_spawns: Dictionary = {}
 ## Contagem de recusas por motivo (instrumentação; sem dados de papel).
@@ -54,6 +76,8 @@ func remove_player(peer_id: int) -> void:
 func clear() -> void:
 	states.clear()
 	occupied_spawns.clear()
+	rejection_counts.clear()
+	_telemetry = _empty_telemetry()
 
 ## Nova época: o que estava na fila passa a ser recusado quando chegar a vez
 ## (com resultado explícito para as ações) e a velocidade zera.
@@ -115,6 +139,14 @@ func receive_commands(peer_id: int, payload: Variant, now_msec: int) -> Dictiona
 	var packet := NetSync.parse_packet(payload)
 	if not str(packet["reason"]).is_empty():
 		return _packet_rejected(str(packet["reason"]))
+	if _telemetry_enabled:
+		var size := var_to_bytes(payload).size()
+		_metric("validated_packets", 1)
+		_metric("variant_payload_bytes", size)
+		var samples: Array = _telemetry["payload_samples"]
+		if samples.size() >= TELEMETRY_MAX_SAMPLES:
+			samples.pop_front()
+		samples.append(size)
 	var first_seq := int(packet["first_seq"])
 	var commands: Array = packet["commands"]
 	var dropped_actions: Array = []
@@ -124,6 +156,7 @@ func receive_commands(peer_id: int, payload: Variant, now_msec: int) -> Dictiona
 		var seq := first_seq + index
 		if seq <= int(state["last_received"]):
 			duplicates += 1
+			_metric("duplicates", 1)
 			continue
 		if seq - int(state["last_received"]) > NetSync.MAX_SEQUENCE_ADVANCE:
 			_count("sequence_jump")
@@ -139,6 +172,9 @@ func receive_commands(peer_id: int, payload: Variant, now_msec: int) -> Dictiona
 		command["epoch"] = int(packet["epoch"])
 		(state["queue"] as Array).append(command)
 		queued += 1
+		_metric("queued", 1)
+		if _telemetry_enabled:
+			_telemetry["queue_high_water"] = maxi(int(_telemetry["queue_high_water"]), (state["queue"] as Array).size())
 	if duplicates > 0:
 		_count("duplicate", duplicates)
 	return {"reason": "", "dropped_actions": dropped_actions, "queued": queued, "duplicates": duplicates}
@@ -213,7 +249,8 @@ func _reject(reject: Callable, peer_id: int, command: Dictionary, reason: String
 	reject.call(peer_id, int(command["seq"]), command["action"], reason)
 
 func _count(reason: String, amount: int = 1) -> void:
-	rejection_counts[reason] = int(rejection_counts.get(reason, 0)) + amount
+	var category := reason if reason in REJECTION_CATEGORIES else "other"
+	rejection_counts[category] = mini(TELEMETRY_COUNTER_MAX, int(rejection_counts.get(category, 0)) + maxi(0, amount))
 
 ## Estados públicos (mesmo conteúdo para todos): sem fila, baldes ou ACK.
 func snapshot() -> Array:

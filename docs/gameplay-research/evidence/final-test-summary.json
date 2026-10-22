@@ -1,0 +1,816 @@
+{
+  "metadata": {
+    "source_commit": "3e40dbacec985d8ff53adfd667f13963cb191984",
+    "runtime_test_sha256": "3d6a92a21be423b9232910037039a0b5a9710cea1a1bb5ed1060a6b848f304f7",
+    "godot": "4.4.1.stable.official.49a5bc7b6",
+    "time_utc": "2026-10-21T23:27:52.234703+00:00",
+    "gpu_benchmark": "Mesa llvmpipe software only"
+  },
+  "runtime_identity_confirmed": true,
+  "gd_tests": [
+    {
+      "test": "tests/arena_layout_test.gd",
+      "exit": 0,
+      "seconds": 4.18,
+      "markers": [
+        "ARENA_LAYOUT_TEST_OK checks=5117 blockers=182 spawns=8 pickups=20 rooms=9"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/arena_visuals_test.gd",
+      "exit": 0,
+      "seconds": 1.22,
+      "markers": [
+        "ARENA_VISUALS_TEST_OK checks=151"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": [
+        "WARNING: ObjectDB instances leaked at exit (run with --verbose for details)."
+      ]
+    },
+    {
+      "test": "tests/avatar_facing_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "markers": [
+        "AVATAR_FACING_TEST_OK checks=27"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": [
+        "WARNING: ObjectDB instances leaked at exit (run with --verbose for details)."
+      ]
+    },
+    {
+      "test": "tests/camera_effects_test.gd",
+      "exit": 0,
+      "seconds": 2.17,
+      "markers": [
+        "CAMERA_EFFECTS_TEST_OK"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/character_animation_test.gd",
+      "exit": 0,
+      "seconds": 1.22,
+      "markers": [
+        "CHARACTER_ANIMATION_TEST_OK checks=472"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/character_appearance_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "markers": [
+        "CHARACTER_APPEARANCE_TEST_OK checks=142"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/combat_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "COMBAT_AUTHORITY_TEST_OK checks=86"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/combat_feedback_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "COMBAT_FEEDBACK_TEST_OK checks=84"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": [
+        "WARNING: ObjectDB instances leaked at exit (run with --verbose for details)."
+      ]
+    },
+    {
+      "test": "tests/combat_network_coordinator_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "COMBAT_NETWORK_COORDINATOR_TEST_OK checks=37"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/combat_rules_test.gd",
+      "exit": 0,
+      "seconds": 1.22,
+      "markers": [
+        "COMBAT_RULES_TEST_OK checks=25"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/dedicated_config_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "markers": [
+        "DEDICATED_CONFIG_TEST_OK checks=49"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/desktop_session_test.gd",
+      "exit": 0,
+      "seconds": 1.18,
+      "markers": [
+        "DESKTOP_SESSION_TEST_OK checks=247"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/gameplay_integration_test.gd",
+      "exit": 0,
+      "seconds": 1.22,
+      "markers": [
+        "GAMEPLAY_INTEGRATION_SCENE_OK checks=96"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/graphics_profiles_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "markers": [
+        "GRAPHICS_PROFILES_TEST_OK"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/gunplay_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "markers": [
+        "GUNPLAY_TEST_OK checks=6216"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/hud_presentation_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "markers": [
+        "HUD_PRESENTATION_TEST_OK checks=19 layout=skipped"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/inventory_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "INVENTORY_AUTHORITY_TEST_OK checks=23"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/mansion_art_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "MANSION_ART_TEST_OK checks=44135 items=1653 meshes=248 lights=24 materials=40"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/match_hud_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "markers": [
+        "MATCH_HUD_TEST_OK checks=39"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/menu_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "MENU_TEST_OK checks=194"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/movement_config_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "MOVEMENT_CONFIG_TEST_OK"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/movement_rules_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "MOVEMENT_RULES_TEST_OK"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/netcode_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "markers": [
+        "NETCODE_TEST_OK checks=266"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/network_telemetry_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "NETWORK_TELEMETRY_TEST_OK"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/player_messages_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "PLAYER_MESSAGES_TEST_OK checks=676 messages=29"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/rooms_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "ROOMS_TEST_OK checks=2626"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/round_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "ROUND_AUTHORITY_TEST_OK checks=192"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/round_hud_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "ROUND_HUD_TEST_OK checks=98"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/round_reset_bodies_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "ROUND_RESET_BODIES_TEST_OK checks=259"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/round_rules_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "markers": [
+        "ROUND_RULES_TEST_OK checks=63"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/shutdown_handshake_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "SHUTDOWN_HANDSHAKE_TEST_OK checks=47"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/spectator_reveal_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "markers": [
+        "SPECTATOR_REVEAL_AUTHORITY_TEST_OK checks=60"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/spectator_reveal_client_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "SPECTATOR_REVEAL_CLIENT_TEST_OK checks=16"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/transition_metrics_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "markers": [
+        "TRANSITION_METRICS_TEST_OK checks=30"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/vertical_aim_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "VERTICAL_AIM_TEST_OK checks=81"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/weapon_catalog_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "markers": [
+        "WEAPON_CATALOG_TEST_OK checks=9"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    },
+    {
+      "test": "tests/weapon_rules_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "markers": [
+        "WEAPON_RULES_TEST_OK checks=27"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "warnings": []
+    }
+  ],
+  "multiprocess": [
+    {
+      "test": "tests/network_smoke_test.sh",
+      "variant": "network_smoke",
+      "env": {},
+      "expected_marker": "NETWORK_SMOKE_OK server=1 clients=4",
+      "exit": 0,
+      "seconds": 2.27,
+      "markers": [
+        "NETWORK_SMOKE_OK server=1 clients=4"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/combat_network_test.sh",
+      "variant": "combat_network",
+      "env": {},
+      "expected_marker": "COMBAT_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 5.23,
+      "markers": [
+        "COMBAT_NETWORK_TEST_OK server=1 clients=4 extended=false"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/combat_network_test.sh",
+      "variant": "combat_network8",
+      "env": {
+        "COMBAT_CLIENTS": "8",
+        "COMBAT_EXTENDED": "true"
+      },
+      "expected_marker": "COMBAT_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 27.31,
+      "markers": [
+        "COMBAT_NETWORK_TEST_OK server=1 clients=8 extended=true"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/round_network_test.sh",
+      "variant": "round_network",
+      "env": {},
+      "expected_marker": "ROUND_NETWORK_OK",
+      "exit": 0,
+      "seconds": 4.33,
+      "markers": [
+        "ROUND_NETWORK_OK server=1 clients=5 participants=4 late=1"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/round_adversarial_test.sh",
+      "variant": "round_adversarial",
+      "env": {},
+      "expected_marker": "ROUND_ADVERSARIAL_OK",
+      "exit": 0,
+      "seconds": 4.28,
+      "markers": [
+        "ROUND_ADVERSARIAL_OK server=1 participants=4 hostile=1"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/spectator_reveal_network_test.sh",
+      "variant": "spectator_reveal_network",
+      "env": {},
+      "expected_marker": "SPECTATOR_REVEAL_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 3.78,
+      "markers": [
+        "SPECTATOR_REVEAL_NETWORK_TEST_OK clients=4"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/desktop_local_match_test.sh",
+      "variant": "desktop_local_match",
+      "env": {},
+      "expected_marker": "DESKTOP_LOCAL_MATCH_TEST_OK",
+      "exit": 0,
+      "seconds": 19.07,
+      "markers": [
+        "DESKTOP_LOCAL_MATCH_TEST_OK clients=4 hosted_pid=50179"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/menu_flow_test.sh",
+      "variant": "menu_flow",
+      "env": {},
+      "expected_marker": "MENU_FLOW_TEST_OK",
+      "exit": 0,
+      "seconds": null,
+      "markers": [
+        "MENU_FLOW_TEST_OK scenes=10"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "original_matrix_run": {
+        "exit": 0,
+        "seconds": 58.45,
+        "markers": [
+          "MENU_FLOW_TEST_OK scenes=10"
+        ],
+        "status": "PASS"
+      },
+      "source_commit": "f639d83",
+      "measurement_note": "Targeted rerun after exec fix; timing not recorded",
+      "owned_servers_after_normal_exit": 0
+    },
+    {
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_local",
+      "env": {
+        "PROFILE": "local",
+        "SEED": "1",
+        "STALL": "false"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 18.23,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=local seed=1 stall=false"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_rtt50",
+      "env": {
+        "PROFILE": "rtt50",
+        "SEED": "1",
+        "STALL": "false"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 19.22,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=rtt50 seed=1 stall=false"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_rtt100",
+      "env": {
+        "PROFILE": "rtt100",
+        "SEED": "1",
+        "STALL": "false"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 19.17,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=rtt100 seed=1 stall=false"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_rtt200",
+      "env": {
+        "PROFILE": "rtt200",
+        "SEED": "1",
+        "STALL": "false"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 20.22,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=rtt200 seed=1 stall=false"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_rtt80",
+      "env": {
+        "PROFILE": "rtt80",
+        "SEED": "1",
+        "STALL": "false"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 19.22,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=rtt80 seed=1 stall=false"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_rtt150j",
+      "env": {
+        "PROFILE": "rtt150j",
+        "SEED": "3",
+        "STALL": "false"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 19.92,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=rtt150j seed=3 stall=false"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_stall",
+      "env": {
+        "PROFILE": "rtt150j",
+        "SEED": "5",
+        "STALL": "true"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 19.98,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=rtt150j seed=5 stall=true"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/campaign_test.sh",
+      "variant": "campaign_local",
+      "env": {
+        "PROFILE": "local",
+        "SEED": "1"
+      },
+      "expected_marker": "CAMPAIGN_TEST_OK",
+      "exit": 0,
+      "seconds": 81.58,
+      "markers": [
+        "CAMPAIGN_TEST_OK profile=local seed=1 clients=8 rounds=3 run=campaign-local-s1-959dd3f-52454"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/campaign_test.sh",
+      "variant": "campaign_rtt150j",
+      "env": {
+        "PROFILE": "rtt150j",
+        "SEED": "4"
+      },
+      "expected_marker": "CAMPAIGN_TEST_OK",
+      "exit": 0,
+      "seconds": 91.23,
+      "markers": [
+        "CAMPAIGN_TEST_OK profile=rtt150j seed=4 clients=8 rounds=3 run=campaign-rtt150j-s4-959dd3f-53024"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/adverse_cases_test.sh",
+      "variant": "adverse_cases",
+      "env": {
+        "SEED": "1"
+      },
+      "expected_marker": "ADVERSE_CASES_TEST_OK",
+      "exit": 0,
+      "seconds": 161.89,
+      "markers": [
+        "ADVERSE_CASES_TEST_OK cases=13 seed=1 run=adverse-s1-959dd3f-53595"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/rooms_network_test.sh",
+      "variant": "rooms_network",
+      "env": {},
+      "expected_marker": "ROOMS_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 25.99,
+      "markers": [
+        "ROOMS_NETWORK_TEST_OK"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/rooms_adversarial_test.sh",
+      "variant": "rooms_adversarial",
+      "env": {},
+      "expected_marker": "ROOMS_ADVERSARIAL_TEST_OK",
+      "exit": 0,
+      "seconds": 8.94,
+      "markers": [
+        "ROOMS_ADVERSARIAL_TEST_OK"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/rooms_resilience_test.sh",
+      "variant": "rooms_resilience",
+      "env": {},
+      "expected_marker": "ROOMS_RESILIENCE_TEST_OK",
+      "exit": 0,
+      "seconds": 15.76,
+      "markers": [
+        "ROOMS_RESILIENCE_TEST_OK"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    },
+    {
+      "test": "tests/phase10_mutation_test.sh",
+      "variant": "phase10_mutation",
+      "env": {},
+      "expected_marker": "PHASE10_MUTATION_TEST_OK",
+      "exit": 0,
+      "seconds": 77.32,
+      "markers": [
+        "PHASE10_MUTATION_TEST_OK caught=4"
+      ],
+      "script_errors": [],
+      "status": "PASS"
+    }
+  ],
+  "integration": {
+    "exit": 0,
+    "scene_checks": 96,
+    "clients": 4
+  },
+  "wrapper_lifecycle": {
+    "exit": 0,
+    "original_exit_37": true,
+    "termination_cases": [
+      "scene",
+      "combat",
+      "campaign"
+    ]
+  },
+  "import": {
+    "exit": 0,
+    "script_parse_errors": [],
+    "mode": "warm headless --editor --quit; not a complete fresh scan"
+  },
+  "live_owned_godot_processes_after": [],
+  "independent_review": {
+    "reviewed_commit": "959dd3f",
+    "verdict": "PASS",
+    "important_findings": 0
+  },
+  "hosted_ci": {
+    "checkpoint_commit": "6ff4bed",
+    "run": 39691608678,
+    "jobs_success": 5,
+    "final": "Consult current PR checks; not inferred from local tests"
+  },
+  "clean_import": {
+    "source_commit": "6484f54",
+    "headless_full": {
+      "engine_exit": 0,
+      "strict_gate_exit": 1,
+      "errors": 8,
+      "reason": "Godot 4.4.1 dummy-renderer GLB editor previews"
+    },
+    "software_graphics_full": {
+      "exit": 0,
+      "gated_errors": 0,
+      "imported_scenes": 8
+    },
+    "fresh_affected_suites_passed": 7,
+    "workflow_fix_commit": "8e880f4",
+    "independent_review": "PASS",
+    "ubuntu_xvfb_confirmation": "Consult current PR checks"
+  },
+  "runtime_identity_scope": "Production files unchanged since3e40dba; sole test delta menu_flow server exec retested atf639d83",
+  "test_tree_delta_after_matrix": [
+    "tests/menu_flow_test.sh"
+  ]
+}
