@@ -66,10 +66,17 @@ jobs:
           godot --version 2>&1 | tee "$RUNNER_TEMP/godot-web-logs/version.log"
 
       - name: Validate project
+        shell: bash
         run: |
-          set -o pipefail
-          godot --headless --path . --editor --quit 2>&1 \
+          set -euo pipefail
+          sudo apt-get update && sudo apt-get install -y xvfb xauth libgl1-mesa-dri mesa-vulkan-drivers
+          LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a godot --path . --display-driver x11 \
+            --audio-driver Dummy --rendering-method gl_compatibility \
+            --rendering-driver opengl3 --import 2>&1 \
             | tee "$RUNNER_TEMP/godot-web-logs/parser.log"
+          if grep -Eq 'SCRIPT ERROR|Parse Error|^ERROR:' "$RUNNER_TEMP/godot-web-logs/parser.log"; then
+            exit 1
+          fi
 
       - name: Validate offline demo
         run: |
