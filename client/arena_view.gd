@@ -564,8 +564,11 @@ func show_shot(payload: Dictionary) -> void:
 	mesh.size = Vector3(0.025, 0.025, start.distance_to(finish))
 	tracer.mesh = mesh
 	tracer.position = (start + finish) * 0.5
-	tracer.look_at(finish, Vector3.UP)
 	add_child(tracer)
+	tracer.global_position = (start + finish) * 0.5
+	if not start.is_equal_approx(finish):
+		var direction := (finish - start).normalized()
+		tracer.look_at(finish, Vector3.RIGHT if absf(direction.dot(Vector3.UP)) > 0.999 else Vector3.UP)
 	var timer := get_tree().create_timer(0.08)
 	timer.timeout.connect(tracer.queue_free)
 	# Quem atirou vem no evento público; o alvo não. O próprio disparo tem som

@@ -408,9 +408,11 @@ func _combat(yaw: float = 0.0) -> Dictionary:
 	var shots: Array = []
 	combat.shot_resolved.connect(func(event): shots.append(event))
 	var results: Array = []
+	# Loop owns the callable; capture a weak reference to avoid Loop -> callable -> Loop.
+	var weak_loop: WeakRef = weakref(loop)
 	loop.action_runner = func(peer_id: int, action: Dictionary, _seq: int):
 		if str(action["kind"]) == "fire":
-			results.append(combat.request_fire(peer_id, int(action["id"]), 100000 + loop.tick * 16))
+			results.append(combat.request_fire(peer_id, int(action["id"]), 100000 + (weak_loop.get_ref() as Loop).tick * 16))
 	loop.settle(12)
 	return {"loop": loop, "combat": combat, "shots": shots, "results": results}
 

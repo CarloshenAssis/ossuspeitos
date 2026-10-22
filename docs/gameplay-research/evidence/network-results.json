@@ -1,0 +1,265 @@
+[
+  {
+    "test": "tests/network_smoke_test.sh",
+    "variant": "network_smoke",
+    "env": {},
+    "exit": 0,
+    "seconds": 2.28,
+    "markers": [
+      "SERVER_MOVEMENT_TEST_OK players=4 max_speed=3.300 rejected_impossible=1",
+      "SERVER_TEST_OK clients=4"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/combat_network_test.sh",
+    "variant": "combat_network",
+    "env": {},
+    "exit": 0,
+    "seconds": 5.29,
+    "markers": [
+      "ASSERT_OK name=server-marker-COMBAT_SERVER_TEST_OK",
+      "COMBAT_SERVER_TEST_OK clients=4",
+      "SERVER_TEST_OK clients=4",
+      "COMBAT_NETWORK_TEST_OK server=1 clients=4 extended=false"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/combat_network_test.sh",
+    "variant": "combat_network8",
+    "env": {
+      "COMBAT_CLIENTS": "8",
+      "COMBAT_EXTENDED": "true"
+    },
+    "exit": 0,
+    "seconds": 27.32,
+    "markers": [
+      "ASSERT_OK name=server-marker-COMBAT_SERVER_TEST_OK",
+      "COMBAT_SERVER_TEST_OK clients=8",
+      "SERVER_TEST_OK clients=8",
+      "COMBAT_NETWORK_TEST_OK server=1 clients=8 extended=true"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/round_network_test.sh",
+    "variant": "round_network",
+    "env": {},
+    "exit": 0,
+    "seconds": 4.33,
+    "markers": [
+      "ROUND_NETWORK_OK server=1 clients=5 participants=4 late=1"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/round_adversarial_test.sh",
+    "variant": "round_adversarial",
+    "env": {},
+    "exit": 0,
+    "seconds": 4.33,
+    "markers": [
+      "ROUND_ADVERSARIAL_OK server=1 participants=4 hostile=1"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/spectator_reveal_network_test.sh",
+    "variant": "spectator_reveal_network",
+    "env": {},
+    "exit": 0,
+    "seconds": 3.88,
+    "markers": [
+      "SERVER_TEST_OK clients=4",
+      "SPECTATOR_REVEAL_NETWORK_TEST_OK clients=4"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/desktop_local_match_test.sh",
+    "variant": "desktop_local_match",
+    "env": {},
+    "exit": 0,
+    "seconds": 19.22,
+    "markers": [
+      "DESKTOP_LOCAL_MATCH_TEST_OK clients=4 hosted_pid=9079"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/menu_flow_test.sh",
+    "variant": "menu_flow",
+    "env": {},
+    "exit": 0,
+    "seconds": 58.39,
+    "markers": [
+      "MENU_FLOW_TEST_OK scenes=10"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/sync_network_test.sh",
+    "variant": "sync_network_local",
+    "env": {
+      "PROFILE": "local",
+      "SEED": "1",
+      "STALL": "false"
+    },
+    "exit": 0,
+    "seconds": 18.18,
+    "markers": [
+      "SYNC_NETWORK_TEST_OK profile=local seed=1 stall=false"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/sync_network_test.sh",
+    "variant": "sync_network_rtt80",
+    "env": {
+      "PROFILE": "rtt80",
+      "SEED": "1",
+      "STALL": "false"
+    },
+    "exit": 0,
+    "seconds": 19.22,
+    "markers": [
+      "SYNC_NETWORK_TEST_OK profile=rtt80 seed=1 stall=false"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/sync_network_test.sh",
+    "variant": "sync_network_rtt150j",
+    "env": {
+      "PROFILE": "rtt150j",
+      "SEED": "3",
+      "STALL": "false"
+    },
+    "exit": 0,
+    "seconds": 20.22,
+    "markers": [
+      "SYNC_NETWORK_TEST_OK profile=rtt150j seed=3 stall=false"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/sync_network_test.sh",
+    "variant": "sync_network_stall",
+    "env": {
+      "PROFILE": "rtt150j",
+      "SEED": "5",
+      "STALL": "true"
+    },
+    "exit": 0,
+    "seconds": 20.22,
+    "markers": [
+      "SYNC_NETWORK_TEST_OK profile=rtt150j seed=5 stall=true"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/campaign_test.sh",
+    "variant": "campaign_local",
+    "env": {
+      "PROFILE": "local",
+      "SEED": "1"
+    },
+    "exit": 0,
+    "seconds": 82.19,
+    "markers": [
+      "CAMPAIGN_TEST_OK profile=local seed=1 clients=8 rounds=3 run=campaign-local-s1-dd15ff2-11188"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/campaign_test.sh",
+    "variant": "campaign_rtt150j",
+    "env": {
+      "PROFILE": "rtt150j",
+      "SEED": "4"
+    },
+    "exit": 0,
+    "seconds": 90.56,
+    "markers": [
+      "CAMPAIGN_TEST_OK profile=rtt150j seed=4 clients=8 rounds=3 run=campaign-rtt150j-s4-dd15ff2-12096"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/adverse_cases_test.sh",
+    "variant": "adverse_cases",
+    "env": {
+      "SEED": "1"
+    },
+    "exit": 0,
+    "seconds": 161.55,
+    "markers": [
+      "ADVERSE_CASES_TEST_OK cases=13 seed=1 run=adverse-s1-dd15ff2-12919"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/rooms_network_test.sh",
+    "variant": "rooms_network",
+    "env": {},
+    "exit": 0,
+    "seconds": 25.61,
+    "markers": [
+      "ROOMS_NETWORK_TEST_OK"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/rooms_adversarial_test.sh",
+    "variant": "rooms_adversarial",
+    "env": {},
+    "exit": 0,
+    "seconds": 8.94,
+    "markers": [
+      "ROOMS_ADVERSARIAL_TEST_OK"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/rooms_resilience_test.sh",
+    "variant": "rooms_resilience",
+    "env": {},
+    "exit": 0,
+    "seconds": 25.76,
+    "markers": [
+      "ROOMS_RESILIENCE_TEST_OK"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  },
+  {
+    "test": "tests/phase10_mutation_test.sh",
+    "variant": "phase10_mutation",
+    "env": {},
+    "exit": 0,
+    "seconds": 77.01,
+    "markers": [
+      "PHASE10_MUTATION_TEST_OK caught=4"
+    ],
+    "script_errors": [],
+    "status": "PASS"
+  }
+]
