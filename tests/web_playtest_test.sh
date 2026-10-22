@@ -79,7 +79,7 @@ assert_grep browser-got-role 'WEB_CONSOLE CLIENT_PRIVATE_ROLE_RECEIVED id=Navega
 assert_grep browser-saw-result 'WEB_CONSOLE CLIENT_ROOM_STATE .* phase=lobby round_id=1 .*result=true' "$W"
 assert_grep browser-left 'WEB_CONSOLE MENU_RETURNED reason=left' "$W"
 assert_grep browser-protocol 'WEB_CONSOLE CLIENT_PROTOCOL id=Navegador version=12' "$W"
-if grep -qE 'SCRIPT ERROR|WEB_PAGE_ERROR' "$TMP_DIR"/web-*.log; then bad no-web-script-errors; else ok no-web-script-errors; fi
+if grep -qE 'WEB_CONSOLE ERROR:|SCRIPT ERROR|WEB_PAGE_ERROR' "$TMP_DIR"/web-*.log; then bad no-web-engine-errors; else ok no-web-engine-errors; fi
 
 if [[ "$FAILED" -gt 0 ]]; then
   echo "WEB_PLAYTEST_TEST_FAILED failures=$FAILED logs=$TMP_DIR" >&2

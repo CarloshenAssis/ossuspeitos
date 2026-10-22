@@ -112,7 +112,7 @@ async function main() {
     } else {
       throw new Error(`unknown scenario ${scenario}`);
     }
-    if (lines.some((l) => /SCRIPT ERROR|PAGE_ERROR/.test(l))) throw new Error('script or page error');
+    if (lines.some((l) => /^ERROR:|SCRIPT ERROR|PAGE_ERROR/.test(l))) throw new Error('engine, script or page error');
     console.log(`WEB_TEST_OK scenario=${scenario}`);
     await browser.close();
     server.close();
