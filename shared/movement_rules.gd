@@ -153,7 +153,7 @@ static func _step_with_parameters(state: Dictionary, move: Vector2, delta: float
 	velocity = velocity.move_toward(target_velocity, rate * delta)
 	if velocity.length() > speed:
 		velocity = velocity.normalized() * speed
-	var resolved := resolve_step(state["position"], velocity * delta)
+	var resolved := resolve_step(state["position"], velocity * delta, state.get("environment_blockers", []))
 	var position: Vector3 = resolved["position"]
 	if bool(resolved["blocked_x"]):
 		velocity.x = 0.0
@@ -185,7 +185,7 @@ static func simulate_command(state: Dictionary, move: Vector2, yaw_delta: float,
 ## preso: só é barrado o trecho que entra num bloco a partir de posição livre.
 const MAX_COLLISION_STEP := 0.2
 
-static func resolve_step(from: Vector3, step: Vector3) -> Dictionary:
+static func resolve_step(from: Vector3, step: Vector3, environment: Array = []) -> Dictionary:
 	var position := Vector3(from.x, PLAYER_HEIGHT, from.z)
 	var remaining := Vector2(step.x, step.z)
 	var chunks := maxi(1, int(ceil(remaining.length() / MAX_COLLISION_STEP)))
@@ -193,16 +193,16 @@ static func resolve_step(from: Vector3, step: Vector3) -> Dictionary:
 	var blocked_x := false
 	var blocked_z := false
 	for _index in chunks:
-		var started_inside := ArenaRules.overlaps_blocker(position)
+		var started_inside := ArenaRules.overlaps_blocker(position) or EnvironmentRules.overlaps(position, ArenaRules.PLAYER_HIT_RADIUS, environment)
 		if not blocked_x and chunk.x != 0.0:
 			var candidate := Vector3(clampf(position.x + chunk.x, MAP_MIN_X, MAP_MAX_X), PLAYER_HEIGHT, position.z)
-			if not started_inside and ArenaRules.overlaps_blocker(candidate):
+			if not started_inside and (ArenaRules.overlaps_blocker(candidate) or EnvironmentRules.overlaps(candidate, ArenaRules.PLAYER_HIT_RADIUS, environment)):
 				blocked_x = true
 			else:
 				position = candidate
 		if not blocked_z and chunk.y != 0.0:
 			var candidate := Vector3(position.x, PLAYER_HEIGHT, clampf(position.z + chunk.y, MAP_MIN_Z, MAP_MAX_Z))
-			if not started_inside and ArenaRules.overlaps_blocker(candidate):
+			if not started_inside and (ArenaRules.overlaps_blocker(candidate) or EnvironmentRules.overlaps(candidate, ArenaRules.PLAYER_HIT_RADIUS, environment)):
 				blocked_z = true
 			else:
 				position = candidate

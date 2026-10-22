@@ -5,6 +5,8 @@ var local_peer_id := 0
 var avatars: Dictionary = {}
 var targets: Dictionary = {}
 var camera: Camera3D
+var environment_view: EnvironmentView
+var environment_prompt: Label
 var player_rig: Node3D
 var pickup_nodes: Dictionary = {}
 var pickup_states: Dictionary = {}
@@ -97,6 +99,8 @@ const PREDICTED_SHOT_MARGIN_MSEC := 50
 func _ready() -> void:
 	_ensure_input_actions()
 	_build_arena()
+	environment_view = EnvironmentView.new()
+	add_child(environment_view)
 	set_graphics_profile(MenuSettings.load_saved().graphics_profile)
 	player_rig = Node3D.new()
 	add_child(player_rig)
@@ -165,6 +169,9 @@ func _ready() -> void:
 	overlay_root.add_child(region_chip)
 	HudStyle.anchor_corner(region_chip, Control.PRESET_TOP_LEFT)
 	region_chip.offset_top = region_chip_top
+	environment_prompt = Label.new()
+	environment_prompt.position = Vector2(20, 100)
+	overlay_root.add_child(environment_prompt)
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Oculta (lobby da sala online, fase 9): não prende o mouse.
@@ -272,6 +279,7 @@ func _process(delta: float) -> void:
 			elif animator.amplitude > 0.0 or animator.speed > 0.0:
 				animator.rest()
 	_update_local_view(delta)
+	_update_environment_prompt()
 	_update_presentation_motion(delta)
 	_expire_predicted_shots()
 	_visual_time += delta
@@ -848,3 +856,22 @@ func set_graphics_profile(value: String) -> void:
 			variants[key] = copy
 		mesh_node.material_override = variants[key]
 	# Preserve original light state; quality profiles affect materials only.
+
+func apply_environment(value: Dictionary) -> void:
+	if environment_view != null:
+		environment_view.apply_state(value)
+
+func _update_environment_prompt() -> void:
+	if environment_prompt == null or environment_view == null:
+		return
+	environment_prompt.text = ""
+	if not gameplay_visuals or spectator_target_peer_id != 0 or not bool(_alive_flags.get(local_peer_id, true)):
+		return
+	var held := environment_view.nearest(player_rig.position, local_peer_id, "drop")
+	if not held.is_empty():
+		environment_prompt.text = "Q — Soltar objeto"
+		return
+	var item := environment_view.nearest(player_rig.position, local_peer_id)
+	if not item.is_empty():
+		var def := EnvironmentRules.definition(str(item.id))
+		environment_prompt.text = ("E — Fechar porta" if item.open else "E — Abrir porta") if def.kind == "door" else "F — Pegar objeto   G — Empurrar"

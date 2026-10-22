@@ -168,6 +168,10 @@ func _raycast(shooter: int, origin: Vector3, direction: Vector3, max_distance: f
 		if distance >= 0.0 and distance <= closest:
 			closest = distance
 			result = {"distance": distance, "peer_id": 0}
+	var environment_hit := EnvironmentRules.first_hit(origin, direction, max_distance, world.environment_blockers)
+	if environment_hit >= 0.0 and environment_hit <= closest:
+		closest = environment_hit
+		result = {"distance": environment_hit, "peer_id": 0}
 	for target in health:
 		var peer_id := int(target)
 		if peer_id == shooter or not round_authority.is_alive(peer_id) or not world.states.has(peer_id):

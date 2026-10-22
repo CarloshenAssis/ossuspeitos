@@ -78,7 +78,7 @@ assert_grep browser-pressed-ready 'WEB_CONSOLE MENU_ROOM_READY value=true' "$W"
 assert_grep browser-got-role 'WEB_CONSOLE CLIENT_PRIVATE_ROLE_RECEIVED id=Navegador count=1' "$W"
 assert_grep browser-saw-result 'WEB_CONSOLE CLIENT_ROOM_STATE .* phase=lobby round_id=1 .*result=true' "$W"
 assert_grep browser-left 'WEB_CONSOLE MENU_RETURNED reason=left' "$W"
-assert_grep browser-protocol 'WEB_CONSOLE CLIENT_PROTOCOL id=Navegador version=11' "$W"
+assert_grep browser-protocol 'WEB_CONSOLE CLIENT_PROTOCOL id=Navegador version=12' "$W"
 if grep -qE 'SCRIPT ERROR|WEB_PAGE_ERROR' "$TMP_DIR"/web-*.log; then bad no-web-script-errors; else ok no-web-script-errors; fi
 
 if [[ "$FAILED" -gt 0 ]]; then

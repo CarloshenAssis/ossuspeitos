@@ -34,6 +34,13 @@ func _metric(key: String, amount: int) -> void:
 	if _telemetry_enabled:
 		_telemetry[key] = mini(TELEMETRY_COUNTER_MAX, int(_telemetry[key]) + amount)
 
+var environment_blockers: Array = []
+
+func set_environment_blockers(boxes: Array) -> void:
+	environment_blockers = boxes.duplicate(true)
+	for state in states.values():
+		state["environment_blockers"] = environment_blockers
+
 var states: Dictionary = {}
 var occupied_spawns: Dictionary = {}
 ## Contagem de recusas por motivo (instrumentação; sem dados de papel).
@@ -47,6 +54,7 @@ func add_player(peer_id: int) -> Dictionary:
 	var spawn := MovementRules.SPAWN_POINTS[spawn_index]
 	var state := {
 		"position": spawn,
+		"environment_blockers": environment_blockers,
 		"spawn_position": spawn,
 		"velocity": Vector3.ZERO,
 		"yaw": MansionMap.spawn_yaw_at(spawn_index),

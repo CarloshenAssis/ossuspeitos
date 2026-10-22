@@ -14,6 +14,14 @@ extends RefCounted
 ## Cada comando vale um tick fixo e guarda a mira que carregou, então o replay
 ## reproduz a mesma linha do tempo do servidor (mesmo integrador, mesma ordem).
 
+var environment_blockers: Array = []
+
+func set_environment_blockers(boxes: Array) -> void:
+	environment_blockers = boxes.duplicate(true)
+	if has_state:
+		state["environment_blockers"] = environment_blockers
+		official["environment_blockers"] = environment_blockers
+
 var epoch := 0
 var next_seq := 1
 var last_ack := 0
@@ -51,6 +59,7 @@ var ack_errors_pitch: Array = []
 const MAX_SAMPLES := 512
 
 func reset_all() -> void:
+	environment_blockers = []
 	epoch = 0
 	last_ack = 0
 	pending.clear()
@@ -147,6 +156,7 @@ func reconcile(ack: Dictionary, player: Dictionary) -> Dictionary:
 	if has_state and (ack_epoch < epoch or ack_seq < last_ack):
 		return {"stale": true}
 	official = official_from(player, ack)
+	official["environment_blockers"] = environment_blockers
 	if not has_state or ack_epoch != epoch:
 		if has_state:
 			epoch_resets += 1
@@ -221,7 +231,7 @@ func presented(fraction: float, delta: float) -> Dictionary:
 		look_offset *= exp(-delta / NetSync.LOOK_SMOOTH_TAU)
 	var base := previous_position.lerp(state["position"], clampf(fraction, 0.0, 1.0))
 	var position := base + position_offset
-	if position_offset != Vector3.ZERO and ArenaRules.overlaps_blocker(position, NetSync.CAMERA_CLEARANCE):
+	if position_offset != Vector3.ZERO and (ArenaRules.overlaps_blocker(position, NetSync.CAMERA_CLEARANCE) or EnvironmentRules.overlaps(position, NetSync.CAMERA_CLEARANCE, environment_blockers)):
 		position_offset = Vector3.ZERO
 		position = base
 	var preview: Array = MovementRules.look_intent(state, split_yaw + raw_yaw, split_pitch + raw_pitch)

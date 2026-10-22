@@ -21,6 +21,7 @@ var round_authority: RoundAuthority
 var world := AuthoritativeWorld.new()
 var combat: CombatAuthority
 var bodies := BodyRegistry.new()
+var interactions: InteractionAuthority
 var host_peer_id := 0
 var created_msec := 0
 var last_activity_msec := 0
@@ -40,6 +41,7 @@ func _init(id: int, room_code: String, now_msec: int, ready_gate: bool,
 	round_authority.configure(countdown_seconds, round_end_delay_seconds)
 	round_authority.ready_gate = ready_gate
 	combat = CombatAuthority.new(round_authority, world)
+	interactions = InteractionAuthority.new(round_authority, world)
 
 func member_count() -> int:
 	return lobby.size()
@@ -90,6 +92,7 @@ func add_member(peer_id: int, raw_label: String, now_msec: int) -> Dictionary:
 func remove_member(peer_id: int, now_msec: int) -> bool:
 	if not lobby.has(peer_id):
 		return false
+	interactions.release_peer(peer_id)
 	world.remove_player(peer_id)
 	combat.clear_player(peer_id)
 	round_authority.leave(peer_id, now_msec)
@@ -167,6 +170,7 @@ func destroy_reason(now_msec: int, empty_grace_msec: int, lobby_idle_msec: int) 
 func clear() -> void:
 	combat.clear_round()
 	round_authority.clear()
+	interactions.reset(0)
 	world.clear()
 	bodies.clear()
 	lobby.clear()

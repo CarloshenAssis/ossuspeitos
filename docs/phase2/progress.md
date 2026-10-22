@@ -4,8 +4,9 @@ Base59926cb, branchcodex/gameplay-specs-09-16. PR30/31abertos; maindd15ff2 inalt
 
 - Referências: oito projetos pesquisados independentemente, SHAs/licenças/versões em references.md. Nenhum código/asset externo importado. DialogueManager atual4.6+ e Terrain3D atual4.5 não atendem4.4.1; candidatas antigas documentadas sem instalação.
 - Baseline: concluída em arquivo limpo59926cb: importação0erros,37/37GDScript e5/5harnesses (smoke4,combate4,salas,RTT200,integração96). Software p95 20.979ms; três avisosObjectDB preexistentes. Ver baseline.md.
-- SPEC09: em implementação, TDD e integração.
-- SPEC10–16: pendentes.
+- SPEC09: implementado e validado inicialmente:43checks, movement/netcode266/combat86 e smoke4. Laboratório nativoGodotPhysics e Jolt PASS; sem trocar backendprodução. CorreçãofimrodadacarregandoRED→GREEN. Ver09-physics.md. Integração09–16 completa ainda pendente.
+- SPEC10: em implementação; testeunitário24checks verde em módulos isolados, integração runtimependente.
+- SPEC11–16: pendentes.
 
 Ruling: usar física analítica limitada para bloqueadores competitivos e Physics/Jolt apenas no laboratório — preserva replay e geometria — custo: objetos não terão dinâmica rígida arbitrária.
 Ruling: protocolo12 explícito para ações/snapshots de ambiente sem novos métodos RPC — impede cliente11 ignorar colisões — custo: builds11/12 precisam ser atualizadas juntas.

@@ -33,7 +33,10 @@ const MAX_PLAYERS := RoundRules.MAX_PLAYERS
 ## Os nomes novos ordenam depois de `request_join`: os índices de RPC do
 ## handshake (`join_rejected`, `request_join`) são os mesmos do protocolo 10,
 ## então 10 e 11 se recusam com `protocol_version` legível.
-const PROTOCOL_VERSION := 11
+## 12: deliberate environment extension: interact command [kind,id,object,verb]
+## and sanitized per-room environment in world_snapshot. No new RPC methods;
+## handshake indices unchanged. Version 11 peers are explicitly refused.
+const PROTOCOL_VERSION := 12
 const CONNECT_TIMEOUT_SECONDS := 10.0
 
 ## Versão anunciada/aceita por este processo. Só um binário de

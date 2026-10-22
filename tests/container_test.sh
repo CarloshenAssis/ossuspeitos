@@ -199,7 +199,7 @@ assert_grep ninth-refused 'PROBE_OK .* result=refused detail=room_full' "$TMP_DI
 VERSION_STATUS=0; probe versao-9 --test-protocol-version=9 || VERSION_STATUS=$?
 assert_equal protocol-9-refused-exit "$VERSION_STATUS" 1
 assert_grep protocol-9-reason 'PROBE_FAILED .* reason=join_rejected:protocol_version' "$TMP_DIR/probe-versao-9.log"
-assert_grep protocol-9-server 'JOIN_PROTOCOL_MISMATCH peer_id=[0-9]+ client=9 server=11' <(clog "$MAIN")
+assert_grep protocol-9-server 'JOIN_PROTOCOL_MISMATCH peer_id=[0-9]+ client=9 server=12' <(clog "$MAIN")
 # Cliente adversarial (payloads e RPCs hostis) contra o container.
 timeout 60 "$GODOT_BIN" --headless --path "$ROOT" --script tests/adversarial_client.gd -- \
   --url="ws://127.0.0.1:$PORT" --client-id=invasor --attack=full --quit-after-msec=6000 >"$TMP_DIR/attacker.log" 2>&1 || true
