@@ -36,6 +36,9 @@ const MAX_PLAYERS := RoundRules.MAX_PLAYERS
 ## 12: deliberate environment extension: interact command [kind,id,object,verb]
 ## and sanitized per-room environment in world_snapshot. No new RPC methods;
 ## handshake indices unchanged. Version 11 peers are explicitly refused.
+## Final phase2 encoding: environment=[round,revision,closed-door-mask,props],
+## sounds=[round,first-id,rows]. Build-distributed catalogs define indices;
+## decoded public DTOs and all existing RPC method signatures are unchanged.
 const PROTOCOL_VERSION := 12
 const CONNECT_TIMEOUT_SECONDS := 10.0
 

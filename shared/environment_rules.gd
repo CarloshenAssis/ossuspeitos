@@ -88,3 +88,52 @@ static func first_hit(origin: Vector3, direction: Vector3, distance: float, boxe
   var hit := ArenaRules.ray_aabb(origin,direction,distance,box.center,box.size)
   if hit>=0 and (closest<0 or hit<closest): closest=hit
  return closest
+
+## Protocol12 wire codec. Geometry is bundled, never sent as mutable client
+## definitions: twenty closed-door bits + three bounded dynamic prop states.
+static func encode_wire(snapshot: Dictionary) -> Array:
+ var clean := sanitize(snapshot)
+ if clean.is_empty() or clean.objects.size()!=_definitions.size(): return []
+ var by_id: Dictionary={}
+ for item in clean.objects: by_id[item.id]=item
+ var mask := 0
+ var door_index := 0
+ var props: Array=[]
+ for def in _definitions:
+  if not by_id.has(def.id): return []
+  var item: Dictionary=by_id[def.id]
+  if def.kind=="door":
+   if not item.open: mask|=1<<door_index
+   door_index+=1
+  else:
+   if item.open: return []
+   props.append([item.position,item.velocity,item.holder])
+ return [clean.round_id,clean.revision,mask,props]
+
+static func decode_wire(raw: Variant) -> Dictionary:
+ if typeof(raw)!=TYPE_ARRAY or raw.size()!=4: return {}
+ var wire: Array=raw
+ for index in 3:
+  if typeof(wire[index])!=TYPE_INT or int(wire[index])<0: return {}
+ if int(wire[2])>=(1<<MansionMap.DOORS.size()) or typeof(wire[3])!=TYPE_ARRAY: return {}
+ var count := _definitions.size()-MansionMap.DOORS.size()
+ var props: Array=wire[3]
+ if props.size()!=count: return {}
+ var objects := initial_objects()
+ var prop_index := 0
+ var door_index := 0
+ for item in objects:
+  var def := definition(str(item.id))
+  if def.kind=="door":
+   item.open=(int(wire[2])&(1<<door_index))==0
+   door_index+=1
+  else:
+   var value: Variant=props[prop_index]
+   prop_index+=1
+   if typeof(value)!=TYPE_ARRAY or value.size()!=3: return {}
+   var row: Array=value
+   if typeof(row[0])!=TYPE_VECTOR3 or typeof(row[1])!=TYPE_VECTOR3 or typeof(row[2])!=TYPE_INT: return {}
+   item.position=row[0]
+   item.velocity=row[1]
+   item.holder=row[2]
+ return sanitize({"round_id":wire[0],"revision":wire[1],"objects":objects})

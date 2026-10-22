@@ -591,6 +591,9 @@ func _broadcast_snapshot() -> void:
 	if shutting_down or authoritative_world == null:
 		return
 	var players := authoritative_world.snapshot()
+	# Public state is identical for all room members; encode once per snapshot.
+	var environment_wire := EnvironmentRules.encode_wire(interaction_authority.snapshot())
+	var sound_wire := SoundEventRules.encode_wire(sound_authority.snapshot())
 	for peer_id in lobby.peer_ids():
 		# Conexão já fechando (o cliente caiu e o aviso de desconexão ainda não
 		# chegou): enviar só gera erro do engine no log a cada snapshot.
@@ -598,7 +601,7 @@ func _broadcast_snapshot() -> void:
 			continue
 		world_snapshot.rpc_id(int(peer_id), {"tick": server_tick, "session": session_nonce,
 			"players": players, "ack": authoritative_world.ack_for(int(peer_id)),
-			"environment": interaction_authority.snapshot(), "sounds": sound_authority.snapshot(),
+			"environment": environment_wire, "sounds": sound_wire,
 			"inspection": current_room.investigations.last_for_peer(int(peer_id))})
 
 ## Membros da sala corrente com o socket aberto. Um cliente que caiu fica
@@ -1492,7 +1495,7 @@ func world_snapshot(payload: Dictionary) -> void:
 		if typeof(raw_state) == TYPE_DICTIONARY and typeof((raw_state as Dictionary).get("peer_id")) == TYPE_INT \
 				and typeof((raw_state as Dictionary).get("position")) == TYPE_VECTOR3:
 			states.append(raw_state)
-	var environment := EnvironmentRules.sanitize(payload.get("environment", {}))
+	var environment := EnvironmentRules.decode_wire(payload.get("environment", []))
 	if not environment.is_empty():
 		local_environment = environment
 		prediction.set_environment_blockers(EnvironmentRules.blockers(environment))
@@ -1503,12 +1506,9 @@ func world_snapshot(payload: Dictionary) -> void:
 		local_inspection = {}
 	if arena_view != null: arena_view.apply_inspection(local_inspection)
 	local_sound_events.clear()
-	var raw_sounds: Variant = payload.get("sounds", [])
-	if typeof(raw_sounds) == TYPE_ARRAY and raw_sounds.size() <= SoundEventRules.MAX_EVENTS:
-		for raw_sound in raw_sounds:
-			var sound := SoundEventRules.sanitize(raw_sound)
-			if not sound.is_empty() and int(sound.round_id) == int(local_round_public.get("round_id", 0)):
-				local_sound_events.append(sound)
+	for sound in SoundEventRules.decode_wire(payload.get("sounds", [])):
+		if int(sound.round_id) == int(local_round_public.get("round_id", 0)):
+			local_sound_events.append(sound)
 	if arena_view != null and not environment.is_empty():
 		arena_view.apply_sound_events(local_sound_events, int(environment.round_id), not _sound_bootstrapped)
 	if not environment.is_empty() and int(environment.round_id) > 0:

@@ -10,7 +10,7 @@ Base59926cb, branchcodex/gameplay-specs-09-16. PR30/31abertos; maindd15ff2 inalt
 - SPEC12: implementado,93checks e41/41suítesPASS. Corpooficial/DTOprivado/controleI/LOS e orçamentoúnico deinteract. Testenovoreal4RTT200 comduasinspeções/sigilopassou;8x3emexecução, nãoinferirresultado.
 - SPEC13: integrado à mansão;74checks degeometria/hints/mensagens e42/42suítes PASS. Semtrilhaambientalcontínua nova.
 - SPEC14: concluído documentalmente; semNPC/plugin/runtime novo. APIs09–13 avaliadas; opções/custos/licenças/versões e critérios futuros em14-ai-dialogue.md.
-- SPEC15: benchmark comparativo independente em execução, runtimecongelado.
+- SPEC15: medições comparativas completas; codeccompacto23checks+44/44suítes e novoharness4RTT200 PASS. Oitoativos9978→3332B/snapshot/dest(-66.6%), modelo623.58µs/tick; gráficossoftware variáveis registradosem15-performance.md. HelperNetDelayPeerciclopreexistente corrigidoRED→GREEN42checks,netcode266/legacyRTT200limpos.
 - SPEC16: harnessnovo4local/4RTT200/8×3local e lifecyclePASS; regressãofinal/revisão/CI/PRpendentes.
 
 Ruling: usar física analítica limitada para bloqueadores competitivos e Physics/Jolt apenas no laboratório — preserva replay e geometria — custo: objetos não terão dinâmica rígida arbitrária.
@@ -22,3 +22,5 @@ Ruling: oclusão por AABB fica opcional/desabilitada por padrão — orçamento/
 Revisão independente09: forcedrelease apagava orçamento de ações e bloqueava a conexão apósid65. Teste reproduziuRED (45checks,1falha); release_peer agora preserva orçamento até reset da rodada, GREEN45/45. Três expectativas remanescentesprotocol11 no harnesscontainer corrigidaspara12; assertivas mantidas, execução realcontainer fica noCI final.
 
 Ruling: todos os participantes vivos podem inspecionar apenas fatos públicos do corpo — não define poder especial de detetive nem vaza segredo — custo: exclusividade por papel exigirá uma política futura explícita.
+
+Ruling: catálogo distribuído e ringcontíguo compactam o fio no protocolo12 — elimina geometria/chaves repetidas mantendoDTOs e32eventos — custo: mudança futura de ordem/enum/catálogo exige versionamento explícito e decode acrescenta~0.30ms/snapshot nestehost.
