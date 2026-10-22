@@ -1,32 +1,50 @@
-name: Integration diagnostic log reader
+name: Integration browser backlog reproduction
 on:
   workflow_dispatch:
 permissions:
   contents: read
-  actions: read
 jobs:
-  read-historical-web-log:
+  browser-backlog:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Read completed Web failure artifact without contacting production
+      - uses: actions/checkout@v4
+        with:
+          ref: 6225725
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: true
+      - name: Install browser
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1 >/dev/null
+          npx --yes playwright@1.56.1 install --with-deps chromium
+      - name: Exercise real Web client while polling is stalled
         env:
-          GH_TOKEN: ${{ github.token }}
+          TEST_LOG_DIR: ${{ runner.temp }}/backlog
         shell: bash
         run: |
-          set -euo pipefail
-          gh api repos/CarloshenAssis/ossuspeitos/actions/artifacts/12401410321/zip > "$RUNNER_TEMP/historic-web.zip"
-          python3 - "$RUNNER_TEMP/historic-web.zip" <<'PYLOG'
-          import sys
-          from zipfile import ZipFile
-          def notice(message):
-              message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-              print('::notice title=HISTORIC_WEB_FAILURE_LOG::' + message)
-          with ZipFile(sys.argv[1]) as archive:
-              for name in archive.namelist():
-                  if name not in ['web-playtest/web-room.log', 'web-playtest.log']:
-                      continue
-                  data = archive.read(name).decode('utf-8', errors='replace')
-                  tail = data[-12000:]
-                  for offset in range(0, len(tail), 4000):
-                      notice(name + '\n' + tail[offset:offset+4000])
+          set -o pipefail
+          GODOT_BIN="$(command -v godot)" bash tests/websocket_backlog_test.sh
+      - name: Record diagnostic result
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PYLOG'
+          import os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'backlog'
+          for name in ['import.log','export.log','server.log','browser.log']:
+              p=root/name
+              if not p.exists(): continue
+              text=p.read_text(errors='replace')[-6000:]
+              for start in range(0,len(text),3000):
+                  msg=(name+'\n'+text[start:start+3000]).replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+                  print('::notice title=WEBSOCKET_BACKLOG_DIAGNOSTIC::'+msg)
           PYLOG
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: websocket-backlog-reproduction
+          path: ${{ runner.temp }}/backlog
