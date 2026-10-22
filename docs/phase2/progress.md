@@ -9,7 +9,7 @@ Base59926cb, branchcodex/gameplay-specs-09-16. PR30/31abertos; maindd15ff2 inalt
 - SPEC11: concluído inicialmente,35checksnovos/36gráficos e40/40suítes PASS. Camada procedural, sem simulação/segredos. Ver11-animation.md.
 - SPEC12: implementado,93checks e41/41suítesPASS. Corpooficial/DTOprivado/controleI/LOS e orçamentoúnico deinteract. Testenovoreal4RTT200 comduasinspeções/sigilopassou;8x3emexecução, nãoinferirresultado.
 - SPEC13: integrado à mansão;74checks degeometria/hints/mensagens e42/42suítes PASS. Semtrilhaambientalcontínua nova.
-- SPEC14: avaliação documental em fechamento.
+- SPEC14: concluído documentalmente; semNPC/plugin/runtime novo. APIs09–13 avaliadas; opções/custos/licenças/versões e critérios futuros em14-ai-dialogue.md.
 - SPEC15: benchmark comparativo independente em execução, runtimecongelado.
 - SPEC16: harnessnovo4local/4RTT200/8×3local e lifecyclePASS; regressãofinal/revisão/CI/PRpendentes.
 
