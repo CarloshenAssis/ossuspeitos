@@ -14,13 +14,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh api repos/CarloshenAssis/ossuspeitos/actions/jobs/119637566228/logs > "$RUNNER_TEMP/probe.log"
-          python3 - "$RUNNER_TEMP/probe.log" <<'PYLOG'
+          gh api repos/CarloshenAssis/ossuspeitos/actions/artifacts/12401965715/zip > "$RUNNER_TEMP/probe.zip"
+          python3 - "$RUNNER_TEMP/probe.zip" <<'PYLOG'
           import sys
-          from pathlib import Path
-          lines = Path(sys.argv[1]).read_text().splitlines()
-          for line in lines:
-              if any(key in line for key in ['PROBE_', 'JOIN_REJECTED', 'CLIENT_CONNECTION_FAILED', 'SCRIPT ERROR']):
-                  message = line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-                  print('::notice title=RELEASE_PREFLIGHT_LOG::' + message)
+          from zipfile import ZipFile
+          with ZipFile(sys.argv[1]) as archive:
+              for name in archive.namelist():
+                  if not name.endswith('.log'):
+                      continue
+                  for line in archive.read(name).decode('utf-8', errors='replace').splitlines():
+                      if any(key in line for key in ['JOIN_REJECTED', 'protocol_version', 'WEB_TEST_', 'CONNECTION', 'FAILED', 'Error']):
+                          message = line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                          print('::notice title=RELEASE_PREFLIGHT_LOG::' + message)
           PYLOG
