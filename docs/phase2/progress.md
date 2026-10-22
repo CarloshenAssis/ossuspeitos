@@ -3,7 +3,7 @@
 Base59926cb, branchcodex/gameplay-specs-09-16. PR30/31abertos; maindd15ff2 inalterada. Autonomia de execução explícita prevalece sobre gates de aprovação de skills.
 
 - Referências: em pesquisa independente.
-- Baseline: execução independente em arquivo do commit59926cb.
+- Baseline: concluída em arquivo limpo59926cb: importação0erros,37/37GDScript e5/5harnesses (smoke4,combate4,salas,RTT200,integração96). Software p95 20.979ms; três avisosObjectDB preexistentes. Ver baseline.md.
 - SPEC09: em implementação, TDD e integração.
 - SPEC10–16: pendentes.
 
