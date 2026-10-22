@@ -475,3 +475,28 @@ jobs:
           name: godot-rooms-test-logs
           path: ${{ runner.temp }}/godot-rooms-logs
           if-no-files-found: warn
+
+  inspect-integration-failure:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Read existing failure artifact without changing production
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api repos/CarloshenAssis/ossuspeitos/actions/artifacts/12401330429/zip > "$RUNNER_TEMP/failure.zip"
+          python3 - "$RUNNER_TEMP/failure.zip" <<'PY'
+          import sys
+          from zipfile import ZipFile
+          with ZipFile(sys.argv[1]) as archive:
+              for name in archive.namelist():
+                  if name.endswith(('avatar-facing.log', 'parser.log')):
+                      text = archive.read(name).decode('utf-8', errors='replace')
+                      for offset in range(0, len(text), 3500):
+                          message = (name + '\n' + text[offset:offset+3500]).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                          print('::notice title=INTEGRATION_FAILURE_ARTIFACT::' + message)
+          PY
