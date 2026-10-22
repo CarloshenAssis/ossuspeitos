@@ -1,0 +1,1838 @@
+{
+  "status": "PASS",
+  "source": {
+    "source_commit": "a8e6db62628ccfbbd8b08d0427eb039767e27cfc",
+    "files": 182,
+    "source_fingerprint_sha256": "ddab67570a06b70d07692b7f4d3573c91fd98d589c71c1598ebeefad68b3f8d8",
+    "differences_against_commit": [],
+    "project_configuration_restored_after_import": true,
+    "post_suite_source_diff_empty": true
+  },
+  "godot": "4.4.1.stable.official.49a5bc7b6",
+  "immutable_checkout": "/workspace/phase2-final-tests",
+  "fresh_import": {
+    "exit": 0,
+    "script_parse_engine_errors": [],
+    "warning": "Software X11 driver cannot change V-Sync mode",
+    "log": "/workspace/.ossuspeitos-state/phase2/final/fresh-import.log",
+    "method": "X11 Compatibility software --import, Dummy audio; exact project.godot restored from a8e6db6 after editor autoformat"
+  },
+  "counts": {
+    "gd_pass": 44,
+    "gd_total": 44,
+    "previous_network_pass": 22,
+    "phase2_network_pass": 3,
+    "network_pass": 25,
+    "network_total": 25,
+    "auxiliary_pass": 4,
+    "auxiliary_total": 4
+  },
+  "gd_results": [
+    {
+      "test": "arena_layout_test.gd",
+      "exit": 0,
+      "seconds": 5.132,
+      "errors": [],
+      "markers": [
+        "ARENA_LAYOUT_TEST_OK checks=5117 blockers=182 spawns=8 pickups=20 rooms=9"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "arena_visuals_test.gd",
+      "exit": 0,
+      "seconds": 1.171,
+      "errors": [],
+      "markers": [
+        "ARENA_VISUALS_TEST_OK checks=151"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "avatar_facing_test.gd",
+      "exit": 0,
+      "seconds": 1.217,
+      "errors": [],
+      "markers": [
+        "AVATAR_FACING_TEST_OK checks=27"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "camera_effects_test.gd",
+      "exit": 0,
+      "seconds": 2.171,
+      "errors": [],
+      "markers": [
+        "CAMERA_EFFECTS_TEST_OK"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "character_actions_test.gd",
+      "exit": 0,
+      "seconds": 1.167,
+      "errors": [],
+      "markers": [
+        "CHARACTER_ACTIONS_TEST_OK checks=35 failures=0"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "character_animation_test.gd",
+      "exit": 0,
+      "seconds": 1.118,
+      "errors": [],
+      "markers": [
+        "CHARACTER_ANIMATION_TEST_OK checks=472"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "character_appearance_test.gd",
+      "exit": 0,
+      "seconds": 1.168,
+      "errors": [],
+      "markers": [
+        "CHARACTER_APPEARANCE_TEST_OK checks=142"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "combat_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.171,
+      "errors": [],
+      "markers": [
+        "COMBAT_AUTHORITY_TEST_OK checks=86"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "combat_feedback_test.gd",
+      "exit": 0,
+      "seconds": 1.118,
+      "errors": [],
+      "markers": [
+        "COMBAT_FEEDBACK_TEST_OK checks=84"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "combat_network_coordinator_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "COMBAT_NETWORK_COORDINATOR_TEST_OK checks=37"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "combat_rules_test.gd",
+      "exit": 0,
+      "seconds": 1.22,
+      "errors": [],
+      "markers": [
+        "COMBAT_RULES_TEST_OK checks=25"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "dedicated_config_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "errors": [],
+      "markers": [
+        "DEDICATED_CONFIG_TEST_OK checks=49"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "desktop_session_test.gd",
+      "exit": 0,
+      "seconds": 1.218,
+      "errors": [],
+      "markers": [
+        "DESKTOP_SESSION_TEST_OK checks=271"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "environment_presentation_test.gd",
+      "exit": 0,
+      "seconds": 1.118,
+      "errors": [],
+      "markers": [
+        "ENVIRONMENT_PRESENTATION_TEST_OK checks=74 failures=0"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "environment_wire_test.gd",
+      "exit": 0,
+      "seconds": 1.279,
+      "errors": [],
+      "markers": [
+        "ENVIRONMENT_WIRE_TEST_OK checks=23 failures=0"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "gameplay_integration_test.gd",
+      "exit": 0,
+      "seconds": 3.319,
+      "errors": [],
+      "markers": [
+        "GAMEPLAY_INTEGRATION_SCENE_OK checks=96"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "graphics_profiles_test.gd",
+      "exit": 0,
+      "seconds": 1.217,
+      "errors": [],
+      "markers": [
+        "GRAPHICS_PROFILES_TEST_OK"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "gunplay_test.gd",
+      "exit": 0,
+      "seconds": 1.17,
+      "errors": [],
+      "markers": [
+        "GUNPLAY_TEST_OK checks=6216"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "hud_presentation_test.gd",
+      "exit": 0,
+      "seconds": 1.167,
+      "errors": [],
+      "markers": [
+        "HUD_PRESENTATION_TEST_OK checks=19 layout=skipped"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "interaction_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.168,
+      "errors": [],
+      "markers": [
+        "INTERACTION_AUTHORITY_TEST_OK checks=45 failures=0"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "inventory_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "errors": [],
+      "markers": [
+        "INVENTORY_AUTHORITY_TEST_OK checks=23"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "investigation_test.gd",
+      "exit": 0,
+      "seconds": 1.12,
+      "errors": [],
+      "markers": [
+        "INVESTIGATION_TEST_OK checks=93 failures=0"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "mansion_art_test.gd",
+      "exit": 0,
+      "seconds": 1.175,
+      "errors": [],
+      "markers": [
+        "MANSION_ART_TEST_OK checks=44135 items=1653 meshes=248 lights=24 materials=40"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "match_hud_test.gd",
+      "exit": 0,
+      "seconds": 1.169,
+      "errors": [],
+      "markers": [
+        "MATCH_HUD_TEST_OK checks=39"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "menu_test.gd",
+      "exit": 0,
+      "seconds": 1.218,
+      "errors": [],
+      "markers": [
+        "MENU_TEST_OK checks=198"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "movement_config_test.gd",
+      "exit": 0,
+      "seconds": 1.171,
+      "errors": [],
+      "markers": [
+        "MOVEMENT_CONFIG_TEST_OK"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "movement_rules_test.gd",
+      "exit": 0,
+      "seconds": 1.168,
+      "errors": [],
+      "markers": [
+        "MOVEMENT_RULES_TEST_OK"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "net_delay_lifecycle_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "NET_DELAY_LIFECYCLE_TEST_OK checks=42"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "netcode_test.gd",
+      "exit": 0,
+      "seconds": 1.118,
+      "errors": [],
+      "markers": [
+        "NETCODE_TEST_OK checks=266"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "network_telemetry_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "NETWORK_TELEMETRY_TEST_OK"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "player_messages_test.gd",
+      "exit": 0,
+      "seconds": 1.167,
+      "errors": [],
+      "markers": [
+        "PLAYER_MESSAGES_TEST_OK checks=676 messages=29"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "rooms_test.gd",
+      "exit": 0,
+      "seconds": 1.168,
+      "errors": [],
+      "markers": [
+        "ROOMS_TEST_OK checks=2626"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "round_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "ROUND_AUTHORITY_TEST_OK checks=192"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "round_hud_test.gd",
+      "exit": 0,
+      "seconds": 1.168,
+      "errors": [],
+      "markers": [
+        "ROUND_HUD_TEST_OK checks=98"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "round_reset_bodies_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "ROUND_RESET_BODIES_TEST_OK checks=259"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "round_rules_test.gd",
+      "exit": 0,
+      "seconds": 1.119,
+      "errors": [],
+      "markers": [
+        "ROUND_RULES_TEST_OK checks=63"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "shutdown_handshake_test.gd",
+      "exit": 0,
+      "seconds": 1.169,
+      "errors": [],
+      "markers": [
+        "SHUTDOWN_HANDSHAKE_TEST_OK checks=47"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "spatial_audio_test.gd",
+      "exit": 0,
+      "seconds": 1.125,
+      "errors": [],
+      "markers": [
+        "SPATIAL_AUDIO_TEST_OK checks=30 failures=0"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "spectator_reveal_authority_test.gd",
+      "exit": 0,
+      "seconds": 1.121,
+      "errors": [],
+      "markers": [
+        "SPECTATOR_REVEAL_AUTHORITY_TEST_OK checks=60"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "spectator_reveal_client_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "SPECTATOR_REVEAL_CLIENT_TEST_OK checks=16"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "transition_metrics_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "TRANSITION_METRICS_TEST_OK checks=30"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "vertical_aim_test.gd",
+      "exit": 0,
+      "seconds": 1.168,
+      "errors": [],
+      "markers": [
+        "VERTICAL_AIM_TEST_OK checks=81"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "weapon_catalog_test.gd",
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "WEAPON_CATALOG_TEST_OK checks=9"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test": "weapon_rules_test.gd",
+      "exit": 0,
+      "seconds": 1.122,
+      "errors": [],
+      "markers": [
+        "WEAPON_RULES_TEST_OK checks=27"
+      ],
+      "status": "PASS"
+    }
+  ],
+  "network_and_auxiliary_results": [
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/config-confirmation/network_smoke.log",
+      "port": "44000",
+      "test": "tests/network_smoke_test.sh",
+      "variant": "network_smoke",
+      "env": {},
+      "expected_marker": "NETWORK_SMOKE_OK server=1 clients=4",
+      "exit": 0,
+      "seconds": 3.14,
+      "markers": [
+        "NETWORK_SMOKE_OK server=1 clients=4"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "supersedes_configuration_import_run": true,
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/config-confirmation/combat_network.log",
+      "port": "44010",
+      "test": "tests/combat_network_test.sh",
+      "variant": "combat_network",
+      "env": {},
+      "expected_marker": "COMBAT_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 6.1,
+      "markers": [
+        "COMBAT_NETWORK_TEST_OK server=1 clients=4 extended=false"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "supersedes_configuration_import_run": true,
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/config-confirmation/combat_network8.log",
+      "port": "44020",
+      "test": "tests/combat_network_test.sh",
+      "variant": "combat_network8",
+      "env": {
+        "COMBAT_CLIENTS": "8",
+        "COMBAT_EXTENDED": "true"
+      },
+      "expected_marker": "COMBAT_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 29.04,
+      "markers": [
+        "COMBAT_NETWORK_TEST_OK server=1 clients=8 extended=true"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "supersedes_configuration_import_run": true,
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_network/client-1.log",
+          "line": "ERROR: Attempt to call RPC with unknown peer ID: 31787849."
+        }
+      ],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/round_network.log",
+      "port": "44030",
+      "test": "tests/round_network_test.sh",
+      "variant": "round_network",
+      "env": {},
+      "expected_marker": "ROUND_NETWORK_OK",
+      "exit": 0,
+      "seconds": 4.34,
+      "markers": [
+        "ROUND_NETWORK_OK server=1 clients=5 participants=4 late=1"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_network/client-1.log",
+          "line": "ERROR: Attempt to call RPC with unknown peer ID: 31787849.",
+          "category": "baseline_diagnostic_same_family",
+          "baseline_family_confirmed": true
+        }
+      ]
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/client-1.log",
+          "line": "ERROR: Attempt to call RPC with unknown peer ID: 1804880189."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC - 'Node(network_app.gd)::request_join': Cannot convert argument 1 from String to int"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC - 'Node(network_app.gd)::request_join': Cannot convert argument 2 from Nil to String"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC - 'Node(network_app.gd)::request_join': Cannot convert argument 2 from Array to String"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC - 'Node(network_app.gd)::request_join': Cannot convert argument 2 from Dictionary to String"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'round_public_state' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'round_private_role' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'round_final_reveal' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'round_private_spectator_targets' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'round_roster' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'combat_private_state' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'combat_hit_confirmed' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'combat_public_elimination' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'combat_public_shot' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'pickup_public_state' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'combat_action_rejected' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC - 'Node(network_app.gd)::round_role_acknowledged': Cannot convert argument 1 from Dictionary to int"
+        }
+      ],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial.log",
+      "port": "44040",
+      "test": "tests/round_adversarial_test.sh",
+      "variant": "round_adversarial",
+      "env": {},
+      "expected_marker": "ROUND_ADVERSARIAL_OK",
+      "exit": 0,
+      "seconds": 4.29,
+      "markers": [
+        "ROUND_ADVERSARIAL_OK server=1 participants=4 hostile=1"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/client-1.log",
+          "line": "ERROR: Attempt to call RPC with unknown peer ID: 1804880189.",
+          "category": "baseline_diagnostic_same_family",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC - 'Node(network_app.gd)::request_join': Cannot convert argument 1 from String to int",
+          "category": "expected_malformed_rpc_type_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC - 'Node(network_app.gd)::request_join': Cannot convert argument 2 from Nil to String",
+          "category": "expected_malformed_rpc_type_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC - 'Node(network_app.gd)::request_join': Cannot convert argument 2 from Array to String",
+          "category": "expected_malformed_rpc_type_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC - 'Node(network_app.gd)::request_join': Cannot convert argument 2 from Dictionary to String",
+          "category": "expected_malformed_rpc_type_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'round_public_state' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'round_private_role' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'round_final_reveal' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'round_private_spectator_targets' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'round_roster' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'combat_private_state' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'combat_hit_confirmed' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'combat_public_elimination' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'combat_public_shot' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'pickup_public_state' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC 'combat_action_rejected' is not allowed on node /root/NetworkApp from: 1165429605. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/round_adversarial/server.log",
+          "line": "ERROR: RPC - 'Node(network_app.gd)::round_role_acknowledged': Cannot convert argument 1 from Dictionary to int",
+          "category": "expected_malformed_rpc_type_rejected",
+          "baseline_family_confirmed": true
+        }
+      ]
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/spectator_reveal_network.log",
+      "port": "44050",
+      "test": "tests/spectator_reveal_network_test.sh",
+      "variant": "spectator_reveal_network",
+      "env": {},
+      "expected_marker": "SPECTATOR_REVEAL_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 3.99,
+      "markers": [
+        "SPECTATOR_REVEAL_NETWORK_TEST_OK clients=4"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/desktop_local_match/host.log",
+          "line": "ERROR: Trying to call an RPC via a multiplayer peer which is not connected."
+        }
+      ],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/desktop_local_match.log",
+      "port": "44060",
+      "test": "tests/desktop_local_match_test.sh",
+      "variant": "desktop_local_match",
+      "env": {},
+      "expected_marker": "DESKTOP_LOCAL_MATCH_TEST_OK",
+      "exit": 0,
+      "seconds": 19.04,
+      "markers": [
+        "DESKTOP_LOCAL_MATCH_TEST_OK clients=4 hosted_pid=96459"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/desktop_local_match/host.log",
+          "line": "ERROR: Trying to call an RPC via a multiplayer peer which is not connected.",
+          "category": "baseline_diagnostic_same_family",
+          "baseline_family_confirmed": true
+        }
+      ]
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/menu_flow.log",
+      "port": "44070",
+      "test": "tests/menu_flow_test.sh",
+      "variant": "menu_flow",
+      "env": {},
+      "expected_marker": "MENU_FLOW_TEST_OK",
+      "exit": 0,
+      "seconds": 61.08,
+      "markers": [
+        "MENU_FLOW_TEST_OK scenes=10"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_local/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version"
+        }
+      ],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/sync_network_local.log",
+      "port": "44080",
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_local",
+      "env": {
+        "PROFILE": "local",
+        "SEED": "1",
+        "STALL": "false"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 19.14,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=local seed=1 stall=false"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_local/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version",
+          "category": "expected_negative_join_probe",
+          "baseline_family_confirmed": true
+        }
+      ]
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt50/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version"
+        }
+      ],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt50.log",
+      "port": "44090",
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_rtt50",
+      "env": {
+        "PROFILE": "rtt50",
+        "SEED": "1",
+        "STALL": "false"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 19.23,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=rtt50 seed=1 stall=false"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt50/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version",
+          "category": "expected_negative_join_probe",
+          "baseline_family_confirmed": true
+        }
+      ]
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt100/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version"
+        }
+      ],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt100.log",
+      "port": "44100",
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_rtt100",
+      "env": {
+        "PROFILE": "rtt100",
+        "SEED": "1",
+        "STALL": "false"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 19.24,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=rtt100 seed=1 stall=false"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt100/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version",
+          "category": "expected_negative_join_probe",
+          "baseline_family_confirmed": true
+        }
+      ]
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt200/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version"
+        }
+      ],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt200.log",
+      "port": "44110",
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_rtt200",
+      "env": {
+        "PROFILE": "rtt200",
+        "SEED": "1",
+        "STALL": "false"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 20.2,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=rtt200 seed=1 stall=false"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt200/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version",
+          "category": "expected_negative_join_probe",
+          "baseline_family_confirmed": true
+        }
+      ]
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt80/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version"
+        }
+      ],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt80.log",
+      "port": "44120",
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_rtt80",
+      "env": {
+        "PROFILE": "rtt80",
+        "SEED": "1",
+        "STALL": "false"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 19.2,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=rtt80 seed=1 stall=false"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt80/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version",
+          "category": "expected_negative_join_probe",
+          "baseline_family_confirmed": true
+        }
+      ]
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt150j/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version"
+        }
+      ],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt150j.log",
+      "port": "44130",
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_rtt150j",
+      "env": {
+        "PROFILE": "rtt150j",
+        "SEED": "3",
+        "STALL": "false"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 20.19,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=rtt150j seed=3 stall=false"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_rtt150j/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version",
+          "category": "expected_negative_join_probe",
+          "baseline_family_confirmed": true
+        }
+      ]
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_stall/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version"
+        }
+      ],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/sync_network_stall.log",
+      "port": "44140",
+      "test": "tests/sync_network_test.sh",
+      "variant": "sync_network_stall",
+      "env": {
+        "PROFILE": "rtt150j",
+        "SEED": "5",
+        "STALL": "true"
+      },
+      "expected_marker": "SYNC_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 20.25,
+      "markers": [
+        "SYNC_NETWORK_TEST_OK profile=rtt150j seed=5 stall=true"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/sync_network_stall/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version",
+          "category": "expected_negative_join_probe",
+          "baseline_family_confirmed": true
+        }
+      ]
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/campaign_local.log",
+      "port": "44150",
+      "test": "tests/campaign_test.sh",
+      "variant": "campaign_local",
+      "env": {
+        "PROFILE": "local",
+        "SEED": "1"
+      },
+      "expected_marker": "CAMPAIGN_TEST_OK",
+      "exit": 0,
+      "seconds": 83.35,
+      "markers": [
+        "CAMPAIGN_TEST_OK profile=local seed=1 clients=8 rounds=3 run=campaign-local-s1-unknown-100490"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/campaign_rtt150j.log",
+      "port": "44160",
+      "test": "tests/campaign_test.sh",
+      "variant": "campaign_rtt150j",
+      "env": {
+        "PROFILE": "rtt150j",
+        "SEED": "4"
+      },
+      "expected_marker": "CAMPAIGN_TEST_OK",
+      "exit": 0,
+      "seconds": 92.2,
+      "markers": [
+        "CAMPAIGN_TEST_OK profile=rtt150j seed=4 clients=8 rounds=3 run=campaign-rtt150j-s4-unknown-101204"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/adverse_cases/busy_port/server.log",
+          "line": "ERROR: SERVER_ERROR unable_to_listen"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/adverse_cases/join_ended/client-3-duplicate.log",
+          "line": "ERROR: JOIN_REJECTED id=client-3 reason=name_taken"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/adverse_cases/ninth/client-9.log",
+          "line": "ERROR: JOIN_REJECTED id=client-9 reason=room_unavailable"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/adverse_cases/protocol_bodies/old-9.log",
+          "line": "ERROR: JOIN_REJECTED id=old-9 reason=protocol_version"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/adverse_cases/version_and_crash/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version"
+        }
+      ],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/adverse_cases.log",
+      "port": "44170",
+      "test": "tests/adverse_cases_test.sh",
+      "variant": "adverse_cases",
+      "env": {
+        "SEED": "1"
+      },
+      "expected_marker": "ADVERSE_CASES_TEST_OK",
+      "exit": 0,
+      "seconds": 163.46,
+      "markers": [
+        "ADVERSE_CASES_TEST_OK cases=13 seed=1 run=adverse-s1-unknown-101894"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/adverse_cases/busy_port/server.log",
+          "line": "ERROR: SERVER_ERROR unable_to_listen",
+          "category": "baseline_diagnostic_same_family",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/adverse_cases/join_ended/client-3-duplicate.log",
+          "line": "ERROR: JOIN_REJECTED id=client-3 reason=name_taken",
+          "category": "expected_negative_join_probe",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/adverse_cases/ninth/client-9.log",
+          "line": "ERROR: JOIN_REJECTED id=client-9 reason=room_unavailable",
+          "category": "expected_negative_join_probe",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/adverse_cases/protocol_bodies/old-9.log",
+          "line": "ERROR: JOIN_REJECTED id=old-9 reason=protocol_version",
+          "category": "expected_negative_join_probe",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/adverse_cases/version_and_crash/old-build.log",
+          "line": "ERROR: JOIN_REJECTED id=old-build reason=protocol_version",
+          "category": "expected_negative_join_probe",
+          "baseline_family_confirmed": true
+        }
+      ]
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/rooms_network.log",
+      "port": "44180",
+      "test": "tests/rooms_network_test.sh",
+      "variant": "rooms_network",
+      "env": {},
+      "expected_marker": "ROOMS_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 26.54,
+      "markers": [
+        "ROOMS_NETWORK_TEST_OK"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/rooms_adversarial/server.log",
+          "line": "ERROR: RPC 'room_state' is not allowed on node /root/NetworkApp from: 87290095. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/rooms_adversarial/server.log",
+          "line": "ERROR: RPC 'room_error' is not allowed on node /root/NetworkApp from: 87290095. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/rooms_adversarial/server.log",
+          "line": "ERROR: RPC 'room_welcome' is not allowed on node /root/NetworkApp from: 87290095. Mode is 2, authority is 1."
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/rooms_adversarial/server.log",
+          "line": "ERROR: RPC - 'Node(network_app.gd)::round_role_acknowledged': Cannot convert argument 1 from Dictionary to int"
+        }
+      ],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/rooms_adversarial.log",
+      "port": "44190",
+      "test": "tests/rooms_adversarial_test.sh",
+      "variant": "rooms_adversarial",
+      "env": {},
+      "expected_marker": "ROOMS_ADVERSARIAL_TEST_OK",
+      "exit": 0,
+      "seconds": 9.2,
+      "markers": [
+        "ROOMS_ADVERSARIAL_TEST_OK"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/rooms_adversarial/server.log",
+          "line": "ERROR: RPC 'room_state' is not allowed on node /root/NetworkApp from: 87290095. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/rooms_adversarial/server.log",
+          "line": "ERROR: RPC 'room_error' is not allowed on node /root/NetworkApp from: 87290095. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/rooms_adversarial/server.log",
+          "line": "ERROR: RPC 'room_welcome' is not allowed on node /root/NetworkApp from: 87290095. Mode is 2, authority is 1.",
+          "category": "expected_authority_spoof_rejected",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/rooms_adversarial/server.log",
+          "line": "ERROR: RPC - 'Node(network_app.gd)::round_role_acknowledged': Cannot convert argument 1 from Dictionary to int",
+          "category": "expected_malformed_rpc_type_rejected",
+          "baseline_family_confirmed": true
+        }
+      ]
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/rooms_resilience.log",
+      "port": "44200",
+      "test": "tests/rooms_resilience_test.sh",
+      "variant": "rooms_resilience",
+      "env": {},
+      "expected_marker": "ROOMS_RESILIENCE_TEST_OK",
+      "exit": 0,
+      "seconds": 26.87,
+      "markers": [
+        "ROOMS_RESILIENCE_TEST_OK"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A1.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=A1"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A1.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=A1"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A2.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=A2"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A2.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=A2"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A3.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=A3"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A3.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=A3"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A4.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=A4"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A4.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=A4"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B1.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=B1"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B1.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=B1"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B2.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=B2"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B2.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=B2"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B3.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=B3"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B3.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=B3"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B4.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=B4"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/C2.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=C2"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/C2.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=C2"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/C3.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=C3"
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/server.log",
+          "line": "ERROR: ROOMS_TEST_FAILED round_reset room=1 round_id=2 off_spawn=4 stale_epoch=2 bodies=0 pickups_missing=0"
+        }
+      ],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation.log",
+      "port": "44210",
+      "test": "tests/phase10_mutation_test.sh",
+      "variant": "phase10_mutation",
+      "env": {},
+      "expected_marker": "PHASE10_MUTATION_TEST_OK",
+      "exit": 0,
+      "seconds": 79.72,
+      "markers": [
+        "PHASE10_MUTATION_TEST_OK caught=4"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": [
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A1.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=A1",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A1.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=A1",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A2.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=A2",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A2.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=A2",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A3.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=A3",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A3.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=A3",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A4.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=A4",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/A4.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=A4",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B1.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=B1",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B1.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=B1",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B2.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=B2",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B2.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=B2",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B3.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=B3",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B3.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=B3",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/B4.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=B4",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/C2.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=C2",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/C2.log",
+          "line": "ERROR: CLIENT_TIMEOUT id=C2",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/C3.log",
+          "line": "ERROR: CLIENT_SERVER_DISCONNECTED id=C3",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        },
+        {
+          "file": "/workspace/.ossuspeitos-state/phase2/final/phase10_mutation/no_teleport/server.log",
+          "line": "ERROR: ROOMS_TEST_FAILED round_reset room=1 round_id=2 off_spawn=4 stale_epoch=2 bodies=0 pickups_missing=0",
+          "category": "expected_mutant_failure_and_shutdown",
+          "baseline_family_confirmed": true
+        }
+      ]
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/phase2_network_local4.log",
+      "port": "44220",
+      "test": "tests/phase2_network_test.sh",
+      "variant": "phase2_network_local4",
+      "env": {
+        "PHASE2_CLIENTS": "4",
+        "PHASE2_ROUNDS": "1",
+        "PROFILE": "local"
+      },
+      "expected_marker": "PHASE2_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 13.17,
+      "markers": [
+        "PHASE2_NETWORK_TEST_OK clients=4 rounds=1 profile=local logs=/workspace/.ossuspeitos-state/phase2/final/phase2_network_local4"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/phase2_network_rtt200.log",
+      "port": "44230",
+      "test": "tests/phase2_network_test.sh",
+      "variant": "phase2_network_rtt200",
+      "env": {
+        "PHASE2_CLIENTS": "4",
+        "PHASE2_ROUNDS": "1",
+        "PROFILE": "rtt200"
+      },
+      "expected_marker": "PHASE2_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 20.24,
+      "markers": [
+        "PHASE2_NETWORK_TEST_OK clients=4 rounds=1 profile=rtt200 logs=/workspace/.ossuspeitos-state/phase2/final/phase2_network_rtt200"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/phase2_network_local8x3.log",
+      "port": "44240",
+      "test": "tests/phase2_network_test.sh",
+      "variant": "phase2_network_local8x3",
+      "env": {
+        "PHASE2_CLIENTS": "8",
+        "PHASE2_ROUNDS": "3",
+        "PROFILE": "local"
+      },
+      "expected_marker": "PHASE2_NETWORK_TEST_OK",
+      "exit": 0,
+      "seconds": 39.23,
+      "markers": [
+        "PHASE2_NETWORK_TEST_OK clients=8 rounds=3 profile=local logs=/workspace/.ossuspeitos-state/phase2/final/phase2_network_local8x3"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/gameplay_integration.log",
+      "port": "44250",
+      "test": "tests/gameplay_integration_test.sh",
+      "variant": "gameplay_integration",
+      "env": {},
+      "expected_marker": "GAMEPLAY_INTEGRATION_TEST_OK",
+      "exit": 0,
+      "seconds": 6.4,
+      "markers": [
+        "GAMEPLAY_INTEGRATION_TEST_OK clients=4 logs=/workspace/.ossuspeitos-state/phase2/final/gameplay_integration/gameplay-integration-GIQs93"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": []
+    },
+    {
+      "test": "tests/phase2_network_wrapper_test.sh",
+      "variant": "phase2_network_wrapper",
+      "env": {},
+      "expected_marker": "PHASE2_NETWORK_WRAPPER_TEST_OK",
+      "exit": 0,
+      "seconds": 0.17,
+      "markers": [
+        "PHASE2_NETWORK_WRAPPER_TEST_OK"
+      ],
+      "script_errors": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "owned_live_godot_before_external_cleanup": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/phase2_network_wrapper-lifecycle.log",
+      "status": "PASS",
+      "replaces_initial_runner_alias_that_executed_network_fixture": true,
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/gameplay_integration_wrapper.log",
+      "port": "44270",
+      "test": "tests/gameplay_integration_wrapper_test.sh",
+      "variant": "gameplay_integration_wrapper",
+      "env": {},
+      "expected_marker": "GAMEPLAY_INTEGRATION_WRAPPER_TEST_OK",
+      "exit": 0,
+      "seconds": 0.13,
+      "markers": [
+        "GAMEPLAY_INTEGRATION_WRAPPER_TEST_OK exit37=true term=scene,combat,campaign"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": []
+    },
+    {
+      "owned_live_godot_before_external_cleanup": [],
+      "all_engine_errors": [],
+      "resource_warnings": [],
+      "log": "/workspace/.ossuspeitos-state/phase2/final/physics_backend_lab.log",
+      "port": "44280",
+      "test": "tests/physics_backend_lab_test.sh",
+      "variant": "physics_backend_lab",
+      "env": {},
+      "expected_marker": "PHYSICS_BACKEND_LAB_TEST_OK",
+      "exit": 0,
+      "seconds": 2.33,
+      "markers": [
+        "PHYSICS_BACKEND_LAB_TEST_OK"
+      ],
+      "script_errors": [],
+      "status": "PASS",
+      "classified_engine_errors": []
+    }
+  ],
+  "diagnostics": {
+    "engine_error_classification_counts": {
+      "baseline_diagnostic_same_family": 4,
+      "expected_malformed_rpc_type_rejected": 6,
+      "expected_authority_spoof_rejected": 14,
+      "expected_negative_join_probe": 11,
+      "expected_mutant_failure_and_shutdown": 19
+    },
+    "unclassified_or_script_errors": [],
+    "legacy_example_counts": {
+      "round_network": 1,
+      "round_adversarial": 17,
+      "desktop_local_match": 1
+    },
+    "legacy_comparison_root": "/workspace/.ossuspeitos-state/mission-sdd/final",
+    "comparison_method": "Exact ERROR line families compared with prior raw logs, normalizing numeric peer IDs. Negative probes and mutation failures classified explicitly.",
+    "unit_warnings": [
+      {
+        "test": "arena_visuals_test.log",
+        "line": "WARNING: ObjectDB instances leaked at exit (run with --verbose for details)."
+      },
+      {
+        "test": "avatar_facing_test.log",
+        "line": "WARNING: ObjectDB instances leaked at exit (run with --verbose for details)."
+      },
+      {
+        "test": "combat_feedback_test.log",
+        "line": "WARNING: ObjectDB instances leaked at exit (run with --verbose for details)."
+      }
+    ],
+    "native_lab_warnings": [
+      "WARNING: Jolt Physics job system exceeded the maximum number of jobs. This should not happen. Please report this. Waiting for jobs to become available..."
+    ],
+    "network_resource_warnings": []
+  },
+  "process_audit": {
+    "owned_live_godot_before_external_cleanup": [],
+    "method": "Each harness process group inspected via ps pid/ppid/pgid/stat/comm/args after exit and BEFORE best-effort group TERM. Only actual Godot comm matched; wrapper command strings excluded. Final host-wide Godot audit additionally found no live process and no newly created zombie.",
+    "before": [
+      {
+        "pid": 9464,
+        "ppid": 1,
+        "pgid": 6186,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 9633,
+        "ppid": 1,
+        "pgid": 6186,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 9934,
+        "ppid": 1,
+        "pgid": 6186,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 10041,
+        "ppid": 1,
+        "pgid": 6186,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 50538,
+        "ppid": 1,
+        "pgid": 50352,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 50661,
+        "ppid": 1,
+        "pgid": 50352,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 50976,
+        "ppid": 1,
+        "pgid": 50352,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 51071,
+        "ppid": 1,
+        "pgid": 50352,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      }
+    ],
+    "after": [
+      {
+        "pid": 9464,
+        "ppid": 1,
+        "pgid": 6186,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 9633,
+        "ppid": 1,
+        "pgid": 6186,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 9934,
+        "ppid": 1,
+        "pgid": 6186,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 10041,
+        "ppid": 1,
+        "pgid": 6186,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 50538,
+        "ppid": 1,
+        "pgid": 50352,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 50661,
+        "ppid": 1,
+        "pgid": 50352,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 50976,
+        "ppid": 1,
+        "pgid": 50352,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      },
+      {
+        "pid": 51071,
+        "ppid": 1,
+        "pgid": 50352,
+        "stat": "Z",
+        "comm": "Godot_v4.4.1-st",
+        "args": "[Godot_v4.4.1-st] <defunct>"
+      }
+    ],
+    "new_zombie_pids": [],
+    "broad_pkill_used": false
+  },
+  "audio_followup": {
+    "source_commit": "35f219b22becac779256b28712a80ce14268d43c",
+    "scope": "Only runtime delta after archived a8e6db6: local reload category/combat-volume handling. Full network matrix above was NOT rerun on this later commit.",
+    "command": "GODOT_BIN=<pinned4.4.1> --headless --path /workspace/ossuspeitos --script tests/spatial_audio_test.gd",
+    "exit": 0,
+    "marker": "SPATIAL_AUDIO_TEST_OK checks=33 failures=0",
+    "engine_or_resource_errors": [],
+    "log": "/workspace/.ossuspeitos-state/phase2/final/audio-fix-spatial.log"
+  },
+  "record_corrections": [
+    "First three network rows superseded by explicit reruns with exact project.godot restored after graphical import; final44-suite GD run likewise performed after restoration. Initial raw logs retained.",
+    "Runner alias phase2_network_wrapper initially selected the ordinary network script; actual lifecycle script separately executed with exit37/TERM143 assertions. Summary row replaced by explicit lifecycle result; initial extra four-client run retained only as raw supplementary evidence."
+  ],
+  "limits": [
+    "No hosted CI/build/container result is inferred here; coordinator handles remote checks.",
+    "Headless dummy-audio automation does not certify human perception, comfort, physical GPU, Android or remote physical packet loss.",
+    "Native backend lab is one small accelerated case, not a general performance benchmark; Jolt emitted a scheduler maximum-jobs warning despite valid final physics state.",
+    "Three preexisting unit ObjectDB/audio shutdown warnings remain; legacy network diagnostic families remain visible."
+  ],
+  "logs_root": "/workspace/.ossuspeitos-state/phase2/final"
+}

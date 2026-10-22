@@ -26,6 +26,9 @@ static var display_applied := false
 
 var player_name := ""
 var volume := VOLUME_DEFAULT
+var movement_volume := VOLUME_DEFAULT
+var environment_volume := VOLUME_DEFAULT
+var combat_volume := VOLUME_DEFAULT
 var sensitivity := SENSITIVITY_DEFAULT
 var fullscreen := false
 var resolution := Vector2i(960, 540)
@@ -50,6 +53,9 @@ static func load_saved() -> MenuSettings:
 	if not RoundRules.label_problem(settings.player_name).is_empty():
 		settings.player_name = ""
 	settings.volume = clampf(float(file.get_value(SECTION, "volume", VOLUME_DEFAULT)), VOLUME_MIN, VOLUME_MAX)
+	for category in ["movement_volume", "environment_volume", "combat_volume"]:
+		var raw := float(file.get_value(SECTION, category, VOLUME_DEFAULT))
+		settings.set(category, clampf(raw, 0.0, 1.0) if is_finite(raw) else VOLUME_DEFAULT)
 	settings.sensitivity = clamp_sensitivity(float(file.get_value(SECTION, "sensitivity", SENSITIVITY_DEFAULT)))
 	settings.fullscreen = bool(file.get_value(SECTION, "fullscreen", false))
 	var saved: Variant = file.get_value(SECTION, "resolution", Vector2i(960, 540))
@@ -63,6 +69,9 @@ func save() -> int:
 	var file := ConfigFile.new()
 	file.set_value(SECTION, "player_name", player_name if RoundRules.label_problem(player_name).is_empty() else "")
 	file.set_value(SECTION, "volume", clampf(volume, VOLUME_MIN, VOLUME_MAX))
+	for category in ["movement_volume", "environment_volume", "combat_volume"]:
+		var raw := float(get(category))
+		file.set_value(SECTION, category, clampf(raw, 0.0, 1.0) if is_finite(raw) else VOLUME_DEFAULT)
 	file.set_value(SECTION, "sensitivity", clamp_sensitivity(sensitivity))
 	file.set_value(SECTION, "fullscreen", fullscreen)
 	file.set_value(SECTION, "resolution", resolution)

@@ -1,0 +1,65 @@
+name: Gameplay phase 2 checks
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gameplay-phase2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: false
+      - name: Install software graphics for complete asset import
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth libgl1-mesa-dri mesa-vulkan-drivers
+      - name: Import complete project with strict error gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/phase2"
+          LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a godot --path . --display-driver x11 --audio-driver Dummy --rendering-method gl_compatibility --rendering-driver opengl3 --import 2>&1 | tee "$RUNNER_TEMP/phase2/import.log"
+          if grep -Eq 'SCRIPT ERROR|Parse Error|^ERROR:' "$RUNNER_TEMP/phase2/import.log"; then exit 1; fi
+          # Editor import normalizes settings; test the committed configuration.
+          git show HEAD:project.godot > project.godot
+      - name: Run complete unit regression matrix
+        shell: bash
+        run: GODOT_BIN="$(command -v godot)" python3 tests/run_phase2_unit_tests.py --logs "$RUNNER_TEMP/phase2/units"
+      - name: Compare native physics backends in isolated laboratory
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT_BIN="$(command -v godot)" timeout 60 bash tests/physics_backend_lab_test.sh 2>&1 | tee "$RUNNER_TEMP/phase2/physics-lab.log"
+          grep -q '^PHYSICS_BACKEND_LAB_TEST_OK' "$RUNNER_TEMP/phase2/physics-lab.log"
+      - name: Verify network wrapper process cleanup
+        shell: bash
+        run: bash tests/phase2_network_wrapper_test.sh
+      - name: Validate four players locally and with 200 ms application delay
+        shell: bash
+        run: |
+          set -euo pipefail
+          for profile in local rtt200; do
+            GODOT_BIN="$(command -v godot)" PHASE2_CLIENTS=4 PHASE2_ROUNDS=1 PROFILE="$profile" TEST_LOG_DIR="$RUNNER_TEMP/phase2/four-$profile" timeout 210 bash tests/phase2_network_test.sh 2>&1 | tee "$RUNNER_TEMP/phase2/four-$profile.log"
+            grep -q '^PHASE2_NETWORK_TEST_OK clients=4 rounds=1' "$RUNNER_TEMP/phase2/four-$profile.log"
+          done
+      - name: Validate eight players across three authoritative rounds
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT_BIN="$(command -v godot)" PHASE2_CLIENTS=8 PHASE2_ROUNDS=3 PROFILE=local TEST_LOG_DIR="$RUNNER_TEMP/phase2/eight" timeout 210 bash tests/phase2_network_test.sh 2>&1 | tee "$RUNNER_TEMP/phase2/eight.log"
+          grep -q '^PHASE2_NETWORK_TEST_OK clients=8 rounds=3' "$RUNNER_TEMP/phase2/eight.log"
+      - name: Retain test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gameplay-phase2-logs
+          path: ${{ runner.temp }}/phase2
+          if-no-files-found: error

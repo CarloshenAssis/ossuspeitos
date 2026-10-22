@@ -57,7 +57,8 @@ const CONVERGENCE_DEADLINE_SECONDS := 1.0
 const ACTION_FIRE := "fire"
 const ACTION_RELOAD := "reload"
 const ACTION_PICKUP := "pickup"
-const ACTIONS := [ACTION_FIRE, ACTION_RELOAD, ACTION_PICKUP]
+const ACTION_INTERACT := "interact"
+const ACTIONS := [ACTION_FIRE, ACTION_RELOAD, ACTION_PICKUP, ACTION_INTERACT]
 
 ## Um comando no fio: [move_x, move_y, dyaw, dpitch, ação].
 static func encode_command(move: Vector2, yaw_delta: float, pitch_delta: float, action: Array) -> Array:
@@ -116,7 +117,7 @@ static func parse_action(raw: Variant) -> Dictionary:
 	if typeof(values[0]) != TYPE_STRING or str(values[0]) not in ACTIONS:
 		return {"reason": "malformed_action"}
 	var kind := str(values[0])
-	var expected_size := 3 if kind == ACTION_PICKUP else 2
+	var expected_size := 4 if kind == ACTION_INTERACT else (3 if kind == ACTION_PICKUP else 2)
 	if values.size() != expected_size or typeof(values[1]) != TYPE_INT:
 		return {"reason": "malformed_action"}
 	var action := {"kind": kind, "id": int(values[1])}
@@ -124,11 +125,18 @@ static func parse_action(raw: Variant) -> Dictionary:
 		if typeof(values[2]) != TYPE_STRING or str(values[2]).length() > 64:
 			return {"reason": "malformed_action"}
 		action["pickup_id"] = str(values[2])
+	if kind == ACTION_INTERACT:
+		if typeof(values[2]) != TYPE_STRING or str(values[2]).length() > 64 or typeof(values[3]) != TYPE_STRING or str(values[3]) not in EnvironmentRules.VERBS:
+			return {"reason": "malformed_action"}
+		action["object_id"] = str(values[2])
+		action["verb"] = str(values[3])
 	return action
 
 static func encode_action(action: Dictionary) -> Array:
 	if action.is_empty():
 		return []
+	if str(action["kind"]) == ACTION_INTERACT:
+		return [ACTION_INTERACT, int(action["id"]), str(action.get("object_id", "")), str(action.get("verb", ""))]
 	if str(action["kind"]) == ACTION_PICKUP:
 		return [ACTION_PICKUP, int(action["id"]), str(action.get("pickup_id", ""))]
 	return [str(action["kind"]), int(action["id"])]

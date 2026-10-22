@@ -16,6 +16,12 @@ var completed_peers: Dictionary = {}
 var authoritative_world: AuthoritativeWorld
 ## Corpos oficiais da rodada (servidor) e os aceitos pelo cliente (por id).
 var body_registry := BodyRegistry.new()
+var interaction_authority: InteractionAuthority
+var local_environment: Dictionary = {}
+var sound_authority: SoundEventAuthority
+var local_sound_events: Array = []
+var local_inspection: Dictionary = {}
+var _sound_bootstrapped := false
 var local_bodies: Dictionary = {}
 var combat_authority: CombatAuthority
 var arena_view: ArenaView
@@ -30,7 +36,7 @@ var input_rejection_ticks: Dictionary = {}
 var prediction := PlayerPrediction.new()
 var outbox: Array = []
 var ticks_since_send := 0
-var action_ids := {"fire": 0, "reload": 0, "pickup": 0}
+var action_ids := {"fire": 0, "reload": 0, "pickup": 0, "interact": 0}
 var action_round_id := -1
 ## Depois de entrar em ACTIVE, o cliente só comanda com a época que o
 ## servidor abriu para a rodada (o primeiro ACK recebido depois do aviso).
@@ -297,6 +303,8 @@ func _use_room(room: MatchRoom) -> void:
 	authoritative_world = room.world
 	combat_authority = room.combat
 	body_registry = room.bodies
+	interaction_authority = room.interactions
+	sound_authority = room.sounds
 
 ## Liga os sinais das autoridades da sala; cada callback entra na própria sala
 ## antes de agir, então nada de uma sala é tratado no contexto de outra.
@@ -566,7 +574,9 @@ func _physics_process(_delta: float) -> void:
 			metrics_tick_next_msec = now_msec + METRICS_TICK_WINDOW_MSEC
 
 func _tick_room(now_msec: int) -> void:
+	interaction_authority.tick(NetSync.TICK_SECONDS)
 	authoritative_world.step(_command_gate, _run_command_action, _on_command_rejected)
+	sound_authority.observe_movement()
 	combat_authority.tick(now_msec)
 	round_authority.tick(now_msec)
 	if round_authority.consume_countdown_tick(now_msec):
@@ -581,13 +591,18 @@ func _broadcast_snapshot() -> void:
 	if shutting_down or authoritative_world == null:
 		return
 	var players := authoritative_world.snapshot()
+	# Public state is identical for all room members; encode once per snapshot.
+	var environment_wire := EnvironmentRules.encode_wire(interaction_authority.snapshot())
+	var sound_wire := SoundEventRules.encode_wire(sound_authority.snapshot())
 	for peer_id in lobby.peer_ids():
 		# Conexão já fechando (o cliente caiu e o aviso de desconexão ainda não
 		# chegou): enviar só gera erro do engine no log a cada snapshot.
 		if not _peer_socket_open(int(peer_id)):
 			continue
 		world_snapshot.rpc_id(int(peer_id), {"tick": server_tick, "session": session_nonce,
-			"players": players, "ack": authoritative_world.ack_for(int(peer_id))})
+			"players": players, "ack": authoritative_world.ack_for(int(peer_id)),
+			"environment": environment_wire, "sounds": sound_wire,
+			"inspection": current_room.investigations.last_for_peer(int(peer_id))})
 
 ## Membros da sala corrente com o socket aberto. Um cliente que caiu fica
 ## no lobby até o aviso de desconexão chegar; enviar a ele só gera erro do
@@ -634,6 +649,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		var pickup_id: String = arena_view.nearest_available_pickup()
 		if not pickup_id.is_empty():
 			_queue_local_action(NetSync.ACTION_PICKUP, pickup_id)
+		else:
+			queue_environment_interaction("toggle")
+	elif event.is_action_pressed("inspect_body"):
+		queue_environment_interaction("inspect")
+	elif event.is_action_pressed("object_take"):
+		queue_environment_interaction("take")
+	elif event.is_action_pressed("object_push"):
+		queue_environment_interaction("push")
+	elif event.is_action_pressed("object_drop"):
+		queue_environment_interaction("drop")
 
 func _on_peer_connected(peer_id: int) -> void:
 	print("PEER_CONNECTED peer_id=%d" % peer_id)
@@ -1270,7 +1295,7 @@ func _next_action_id(kind: String) -> int:
 	var round_id := int(local_combat_state.get("round_id", 0))
 	if round_id != action_round_id:
 		action_round_id = round_id
-		action_ids = {"fire": 0, "reload": 0, "pickup": 0}
+		action_ids = {"fire": 0, "reload": 0, "pickup": 0, "interact": 0}
 	return int(action_ids[kind]) + 1
 
 func _queue_local_action(kind: String, pickup_id: String = "") -> bool:
@@ -1284,6 +1309,28 @@ func _queue_local_action(kind: String, pickup_id: String = "") -> bool:
 	net_stats.action_started(kind, id)
 	if kind == NetSync.ACTION_FIRE and arena_view != null:
 		arena_view.predict_local_shot(id)
+	return true
+
+
+## Intent helper shared by interactive controls and transport fixtures. The
+## object target is public; no client position, force, damage or role is sent.
+func queue_environment_interaction(verb: String, object_id: String = "") -> bool:
+	if not _commands_enabled():
+		return false
+	var target := object_id
+	if target.is_empty() and verb == "inspect":
+		if arena_view == null: return false
+		target = arena_view.nearest_investigation()
+		if target.is_empty(): return false
+	if target.is_empty():
+		if arena_view == null: return false
+		var item: Dictionary = arena_view.environment_view.nearest(prediction.state.get("position", Vector3.ZERO), multiplayer.get_unique_id(), verb)
+		if item.is_empty(): return false
+		target = str(item.id)
+	var id := _next_action_id(NetSync.ACTION_INTERACT)
+	if not prediction.queue_action({"kind": NetSync.ACTION_INTERACT, "id": id, "object_id": target, "verb": verb}):
+		return false
+	action_ids[NetSync.ACTION_INTERACT] = id
 	return true
 
 ## Teste: ação com identificador escolhido pelo coordenador, pelo mesmo fluxo.
@@ -1369,8 +1416,12 @@ func _run_command_action(peer_id: int, action: Dictionary, _seq: int) -> void:
 		result = combat_authority.request_fire(peer_id, id, now)
 	elif kind == NetSync.ACTION_RELOAD:
 		result = combat_authority.request_reload(peer_id, id, now)
+	elif kind == NetSync.ACTION_INTERACT:
+		result = interaction_authority.request(peer_id, action, now)
 	else:
 		result = combat_authority.request_pickup(peer_id, action.get("pickup_id", ""), id, now)
+	if kind == NetSync.ACTION_RELOAD and bool(result.get("accepted", false)):
+		sound_authority.emit_authorized("reload", authoritative_world.states[peer_id].position, peer_id)
 	_report_action_result(peer_id, kind, id, result)
 
 func _report_action_result(peer_id: int, kind: String, id: int, result: Dictionary) -> void:
@@ -1444,6 +1495,24 @@ func world_snapshot(payload: Dictionary) -> void:
 		if typeof(raw_state) == TYPE_DICTIONARY and typeof((raw_state as Dictionary).get("peer_id")) == TYPE_INT \
 				and typeof((raw_state as Dictionary).get("position")) == TYPE_VECTOR3:
 			states.append(raw_state)
+	var environment := EnvironmentRules.decode_wire(payload.get("environment", []))
+	if not environment.is_empty():
+		local_environment = environment
+		prediction.set_environment_blockers(EnvironmentRules.blockers(environment))
+		if arena_view != null:
+			arena_view.apply_environment(environment)
+	local_inspection = InvestigationRules.sanitize(payload.get("inspection", {}))
+	if not local_inspection.is_empty() and int(local_inspection.round_id) != int(local_round_public.get("round_id", 0)):
+		local_inspection = {}
+	if arena_view != null: arena_view.apply_inspection(local_inspection)
+	local_sound_events.clear()
+	for sound in SoundEventRules.decode_wire(payload.get("sounds", [])):
+		if int(sound.round_id) == int(local_round_public.get("round_id", 0)):
+			local_sound_events.append(sound)
+	if arena_view != null and not environment.is_empty():
+		arena_view.apply_sound_events(local_sound_events, int(environment.round_id), not _sound_bootstrapped)
+	if not environment.is_empty() and int(environment.round_id) > 0:
+		_sound_bootstrapped = true
 	var ack: Dictionary = payload.get("ack", {})
 	if combat_network_test != null: combat_network_test.call("observe_client_event", "snapshot", payload)
 	var own_id := multiplayer.get_unique_id()
@@ -1727,6 +1796,8 @@ func _on_round_state_changed(state: int, round_id: int) -> void:
 		_begin_server_shutdown(lobby.peer_ids())
 
 func _on_round_roles_ready(round_id: int, participant_ids: Array) -> void:
+	interaction_authority.reset(round_id)
+	sound_authority.reset(round_id)
 	combat_authority.begin_round(round_id, participant_ids)
 	# Nova época de controle: comandos da fase anterior (ainda em trânsito)
 	# são recusados sem efeito, com resultado explícito para suas ações.
@@ -1758,6 +1829,7 @@ func _on_round_roles_ready(round_id: int, participant_ids: Array) -> void:
 
 func _on_round_alive_changed(round_id: int, peer_id: int, alive: bool) -> void:
 	if not alive:
+		interaction_authority.release_peer(peer_id)
 		# Eliminado: nova época (fila antiga recusada) e velocidade zerada.
 		authoritative_world.bump_epoch(peer_id)
 	print("ROUND_ALIVE_CHANGED round_id=%d peer_id=%d alive=%s" % [round_id, peer_id, str(alive)])
@@ -2348,7 +2420,7 @@ func _clear_local_bodies() -> void:
 
 func _safe_combat_reason(raw_reason: Variant) -> String:
 	var reason := str(raw_reason)
-	var allowed := ["round_not_active", "unknown_peer", "player_dead", "invalid_sequence", "replay", "sequence_jump", "rate_limited", "invalid_pickup", "item_not_found", "item_unavailable", "out_of_range", "inventory_full", "incompatible_item", "no_equipped_weapon", "reserve_full", "empty_magazine", "reloading", "fire_rate", "invalid_origin", "non_finite", "implausible_origin", "invalid_direction", "direction_not_normalized", "direction_vertical", "direction_yaw_divergence", "direction_pitch_divergence", "invalid_pitch", "magazine_full", "reserve_empty", "already_reloading", "stale_epoch", "not_participant", "input_rejected", "queue_full"]
+	var allowed := ["round_not_active", "unknown_peer", "player_dead", "invalid_sequence", "replay", "sequence_jump", "rate_limited", "invalid_pickup", "item_not_found", "item_unavailable", "out_of_range", "inventory_full", "incompatible_item", "no_equipped_weapon", "reserve_full", "empty_magazine", "reloading", "fire_rate", "invalid_origin", "non_finite", "implausible_origin", "invalid_direction", "direction_not_normalized", "direction_vertical", "direction_yaw_divergence", "direction_pitch_divergence", "invalid_pitch", "magazine_full", "reserve_empty", "already_reloading", "stale_epoch", "not_participant", "input_rejected", "queue_full", "invalid_interaction", "object_unavailable", "interaction_blocked", "object_occupied", "object_too_heavy", "already_carrying", "not_holder", "body_unavailable"]
 	return reason if reason in allowed else "rejected"
 
 # --- Teste local no PC --------------------------------------------------------
@@ -2738,6 +2810,7 @@ func _apply_menu_settings(settings: MenuSettings) -> void:
 	if arena_view != null:
 		arena_view.set_presentation_motion(not settings.reduce_motion)
 		arena_view.set_graphics_profile(settings.graphics_profile)
+		arena_view.configure_audio(settings)
 	mouse_sensitivity = MOUSE_SENSITIVITY * MenuSettings.clamp_sensitivity(settings.sensitivity)
 	print("MENU_SETTINGS_APPLIED volume=%.2f sensitivity=%.2f" % [settings.volume, settings.sensitivity])
 

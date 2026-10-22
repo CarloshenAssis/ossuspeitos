@@ -5,6 +5,10 @@ var local_peer_id := 0
 var avatars: Dictionary = {}
 var targets: Dictionary = {}
 var camera: Camera3D
+var environment_view: EnvironmentView
+var environment_prompt: Label
+var inspection_label: Label
+var _inspection_request := 0
 var player_rig: Node3D
 var pickup_nodes: Dictionary = {}
 var pickup_states: Dictionary = {}
@@ -16,6 +20,7 @@ var motion_pivot: Node3D
 const CameraEffects = preload("res://client/camera_effects.gd")
 var camera_effects := CameraEffects.new()
 var presentation_motion := true
+var spatial_audio: SpatialAudioController
 var fx: CombatFx
 var _muzzle_flash: MeshInstance3D
 var _combat_prev: Dictionary = {}
@@ -72,6 +77,9 @@ const PICKUP_SPIN_SPEED := 0.9
 var _visual_time := 0.0
 ## Animadores de repouso/caminhada por jogador remoto (fase 3).
 var animators: Dictionary = {}
+var _action_round := 0
+var _action_event_id := 0
+var _body_transitions: Dictionary = {}
 ## Liga/desliga a animação procedural (comparação de desempenho e testes).
 var character_animation := true
 ## Distância a partir da qual o corpo remoto salta para a posição oficial em
@@ -97,6 +105,8 @@ const PREDICTED_SHOT_MARGIN_MSEC := 50
 func _ready() -> void:
 	_ensure_input_actions()
 	_build_arena()
+	environment_view = EnvironmentView.new()
+	add_child(environment_view)
 	set_graphics_profile(MenuSettings.load_saved().graphics_profile)
 	player_rig = Node3D.new()
 	add_child(player_rig)
@@ -135,6 +145,9 @@ func _ready() -> void:
 	weapon_model.add_child(_muzzle_flash)
 	fx = CombatFx.new()
 	add_child(fx)
+	spatial_audio = SpatialAudioController.new()
+	add_child(spatial_audio)
+	configure_audio(MenuSettings.load_saved())
 	var overlay := CanvasLayer.new()
 	add_child(overlay)
 	var overlay_root := Control.new()
@@ -165,6 +178,14 @@ func _ready() -> void:
 	overlay_root.add_child(region_chip)
 	HudStyle.anchor_corner(region_chip, Control.PRESET_TOP_LEFT)
 	region_chip.offset_top = region_chip_top
+	environment_prompt = Label.new()
+	environment_prompt.position = Vector2(20, 100)
+	overlay_root.add_child(environment_prompt)
+	inspection_label = Label.new()
+	inspection_label.position = Vector2(20, 132)
+	inspection_label.custom_minimum_size = Vector2(520, 48)
+	inspection_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	overlay_root.add_child(inspection_label)
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Oculta (lobby da sala online, fase 9): não prende o mouse.
@@ -271,7 +292,9 @@ func _process(delta: float) -> void:
 				animator.update(avatar.position, avatar.rotation.y, delta)
 			elif animator.amplitude > 0.0 or animator.speed > 0.0:
 				animator.rest()
+	_update_body_transitions(delta)
 	_update_local_view(delta)
+	_update_environment_prompt()
 	_update_presentation_motion(delta)
 	_expire_predicted_shots()
 	_visual_time += delta
@@ -573,6 +596,19 @@ func nearest_available_pickup() -> String:
 
 func show_shot(payload: Dictionary) -> void:
 	if not payload.has("origin") or not payload.has("end"): return
+	_trigger_remote_action(int(payload.get("shooter_peer_id",0)),"fire")
+	# A cosmetic reaction may only use the already-public endpoint/hit flag.
+	# No target health, instigator secret or victim identity is added to the DTO.
+	if bool(payload.get("hit_player",false)):
+		var closest_peer := 0
+		var closest := 0.75
+		for peer_id in avatars:
+			var at: Vector3=(avatars[peer_id] as Node3D).position+Vector3.UP*ArenaRules.EYE_HEIGHT
+			var distance := at.distance_to(payload["end"])
+			if distance<closest:
+				closest=distance
+				closest_peer=int(peer_id)
+		if closest_peer>0: _trigger_remote_action(closest_peer,"hurt")
 	var tracer := MeshInstance3D.new()
 	var start: Vector3 = payload["origin"]
 	var finish: Vector3 = payload["end"]
@@ -646,12 +682,14 @@ func show_hit_marker() -> void:
 func set_player_alive(peer_id: int, alive: bool) -> void:
 	_alive_flags[peer_id] = alive
 	if peer_id == local_peer_id and not alive:
+		apply_inspection({})
 		_reset_presentation_motion()
 	if avatars.has(peer_id):
 		(avatars[peer_id] as Node3D).visible = alive
 	# Eliminado: pose de repouso; ao voltar, nenhum deslocamento antigo conta.
 	if animators.has(peer_id):
 		(animators[peer_id] as CharacterAnimator).rest()
+		if not alive: (animators[peer_id] as CharacterAnimator).actions.trigger("death")
 
 ## Vivo/eliminado do roster oficial: quem caiu some e, na rodada seguinte,
 ## volta a aparecer quando o servidor o marca vivo de novo.
@@ -751,6 +789,7 @@ func clear_bodies(keep_round: int = -1) -> void:
 			continue
 		node.queue_free()
 		bodies.erase(body_id)
+		_body_transitions.erase(body_id)
 
 func _build_body(dto: Dictionary) -> Node3D:
 	var placement := body_placement(dto["position"], float(dto["yaw"]))
@@ -779,6 +818,11 @@ func _build_body(dto: Dictionary) -> Node3D:
 		lowest = minf(lowest, box.position.y)
 	if is_finite(lowest):
 		fall.position.y = root.global_position.y - lowest + 0.01
+	if presentation_motion:
+		var rig := CharacterRig.build(character.get_node(ArenaModels.CHARACTER_MODEL))
+		_body_transitions[int(dto["body_id"])]= {"root":root,"fall":fall,"elapsed":0.0,
+			"left":rig.pivots.Elbow_L,"right":rig.pivots.Elbow_R,
+			"left_rest":(rig.pivots.Elbow_L as Node3D).rotation,"right_rest":(rig.pivots.Elbow_R as Node3D).rotation}
 	return root
 
 ## Pose determinística e legível de quem caiu: braços abertos, uma perna
@@ -803,7 +847,9 @@ static func _pose_body(character: Node3D) -> void:
 ## One writer for the motion child; reload/recoil continue on WeaponPivot.
 func set_presentation_motion(enabled: bool) -> void:
 	presentation_motion = enabled
-	if not enabled: _reset_presentation_motion()
+	if not enabled:
+		_reset_presentation_motion()
+		_update_body_transitions(0.0)
 
 func _reset_presentation_motion() -> void:
 	camera_effects.reset()
@@ -848,3 +894,101 @@ func set_graphics_profile(value: String) -> void:
 			variants[key] = copy
 		mesh_node.material_override = variants[key]
 	# Preserve original light state; quality profiles affect materials only.
+
+func apply_environment(value: Dictionary) -> void:
+	var round_id := int(value.get("round_id",0))
+	if round_id>_action_round: _reset_visual_actions(round_id)
+	if environment_view != null:
+		environment_view.apply_state(value)
+
+func _update_environment_prompt() -> void:
+	if environment_prompt == null or environment_view == null: return
+	environment_prompt.text = ""
+	if not gameplay_visuals or spectator_target_peer_id != 0 or not bool(_alive_flags.get(local_peer_id, true)): return
+	var messages: Array[String]=[]
+	var held := environment_view.nearest(player_rig.position, local_peer_id, "drop")
+	if not held.is_empty():
+		messages.append(environment_view.hint_for(str(held.id),int(held.holder),local_peer_id))
+	else:
+		var item := environment_view.nearest(player_rig.position, local_peer_id)
+		if not item.is_empty(): messages.append(environment_view.hint_for(str(item.id),int(item.holder),local_peer_id))
+	if not nearest_investigation().is_empty(): messages.append("I — Inspecionar corpo")
+	environment_prompt.text="\n".join(messages)
+
+func configure_audio(settings: MenuSettings) -> void:
+	if spatial_audio != null:
+		spatial_audio.configure(settings.movement_volume, settings.environment_volume, settings.combat_volume)
+	if fx != null:
+		fx.set_category_volume(settings.combat_volume)
+
+func apply_sound_events(events: Array, round_id: int, bootstrap: bool = false) -> void:
+	if round_id<_action_round: return
+	if round_id>_action_round: _reset_visual_actions(round_id)
+	# Visual actions use the authorized event, never the decision to play audio.
+	for raw in events:
+		var event := SoundEventRules.sanitize(raw)
+		if event.is_empty() or int(event.round_id)!=round_id or int(event.id)<=_action_event_id: continue
+		_action_event_id=int(event.id)
+		if bootstrap: continue
+		match str(event.kind):
+			"door", "handle": _trigger_remote_action(int(event.peer_id),"interact")
+			"reload": _trigger_remote_action(int(event.peer_id),"reload")
+	if spatial_audio == null: return
+	if bootstrap:
+		spatial_audio.prime(events, round_id)
+		return
+	spatial_audio.consume(events,round_id,camera_origin(),local_peer_id,EnvironmentRules.blockers(environment_view.snapshot))
+
+func _reset_visual_actions(round_id: int) -> void:
+	_action_round=round_id
+	_action_event_id=0
+	for animator in animators.values(): animator.actions.reset()
+
+func _trigger_remote_action(peer_id: int, kind: String) -> void:
+	if not character_animation or not bool(_alive_flags.get(peer_id,true)) or not animators.has(peer_id): return
+	(animators[peer_id] as CharacterAnimator).actions.trigger(kind)
+
+## Small settling of corpse arms, not a second simulation or falling collider.
+## Root/Fall angle stay authoritative-placement compatible; only visual elbows
+## move and floor support is re-established from the resulting mesh bounds.
+func _update_body_transitions(delta: float) -> void:
+	for id in _body_transitions.keys():
+		var entry: Dictionary=_body_transitions[id]
+		if not is_instance_valid(entry.root):
+			_body_transitions.erase(id)
+			continue
+		entry.elapsed=minf(0.35,float(entry.elapsed)+maxf(delta,0.0))
+		var ratio := float(entry.elapsed)/0.35
+		var offset := 0.12*sin(PI*ratio)*(1.0-ratio) if presentation_motion else 0.0
+		(entry.left as Node3D).rotation=entry.left_rest+Vector3(offset,0,0)
+		(entry.right as Node3D).rotation=entry.right_rest+Vector3(-offset,0,0)
+		var lowest := INF
+		for mesh in (entry.root as Node3D).find_children("*","MeshInstance3D",true,false):
+			var bounds: AABB=(mesh as MeshInstance3D).global_transform*(mesh as MeshInstance3D).get_aabb()
+			lowest=minf(lowest,bounds.position.y)
+		if is_finite(lowest): (entry.fall as Node3D).position.y+=0.01-lowest
+		if ratio>=1.0 or not presentation_motion: _body_transitions.erase(id)
+
+func nearest_investigation() -> String:
+	if player_rig == null: return ""
+	var target := ""
+	var nearest := EnvironmentRules.REACH
+	for id in bodies:
+		var node: Node3D=bodies[id]
+		var official: Vector3=node.get_meta("official_position",node.position)
+		var distance := player_rig.position.distance_to(official)
+		if distance<=nearest:
+			nearest=distance
+			target="body:%d" % int(id)
+	return target
+
+func apply_inspection(raw: Dictionary) -> void:
+	if inspection_label == null: return
+	var info := InvestigationRules.sanitize(raw)
+	if info.is_empty():
+		inspection_label.text=""
+		_inspection_request=0
+		return
+	if int(info.request_id)==_inspection_request: return
+	_inspection_request=int(info.request_id)
+	inspection_label.text="Corpo de %s — eliminação confirmada nesta rodada." % str(info.label)

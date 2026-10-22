@@ -1,0 +1,41 @@
+{
+  "runs": [
+    {
+      "logs": "/workspace/.ossuspeitos-state/phase2/network-dev/local-final",
+      "clients": 4,
+      "rounds": 1,
+      "profile": "local",
+      "assertions": 28,
+      "round_markers": 1,
+      "server_ok": true,
+      "client_markers": 4,
+      "engine_errors": []
+    },
+    {
+      "logs": "/workspace/.ossuspeitos-state/phase2/network-dev/investigation",
+      "clients": 4,
+      "rounds": 1,
+      "profile": "rtt200",
+      "assertions": 28,
+      "round_markers": 1,
+      "server_ok": true,
+      "client_markers": 4,
+      "engine_errors": []
+    },
+    {
+      "logs": "/workspace/.ossuspeitos-state/phase2/network-dev/eight-final",
+      "clients": 8,
+      "rounds": 3,
+      "profile": "local",
+      "assertions": 84,
+      "round_markers": 3,
+      "server_ok": true,
+      "client_markers": 8,
+      "engine_errors": []
+    }
+  ],
+  "owned_live_godot": [],
+  "lifecycle": "PASS original37 and TERM143, children reaped",
+  "head_at_development_verification": "d5c8f97f009214f49518083815d4e9484c6e3b8d",
+  "note": "SPEC12 working-tree changes were present during these development runs; this is not certification of a later final commit."
+}

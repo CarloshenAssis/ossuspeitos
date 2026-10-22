@@ -1081,3 +1081,10 @@ Nota técnica completa, medidas e parâmetros: `docs/netcode.md`.
 - A ação recebe velocidade oficial anterior ao movimento do comando. Recusas não alteram estado/RNG; não se aceita seed/velocidade do cliente. Nenhum DTO/protocolo ou yaw/pitch oficial mudou.
 - O cone estático já aceitava até PI, mas a projeção com tangente não respeitava essa faixa. Calota esférica uniforme independente corrige toda a faixa, mantendo dois sorteios por cone positivo e zero por cone zero. Seeds reproduzem a nova distribuição; a distribuição anterior não zero muda intencionalmente.
 - Cena `tests/scenes/gunplay_lab.tscn` apresenta eventos do CombatAuthority real e geometria pública procedural; seus parâmetros não são tuning de produção. Fórmulas, evidências e limites: `docs/gameplay-research/04-calibration.md`.
+
+## Fase 2 — SPECs 09–16
+
+- Portas/props competitivos usam catálogo e AABBs compartilhados com autoridade por sala; Physics/Jolt ficam no laboratório isolado. Isso preserva previsão/tiros/LOS, sem prometer solver rígido geral.
+- Protocolo12 transporta intenções e snapshots compactos; catálogo/enum são parte da versão. Clientes11 são recusados; cliente e servidor devem ser atualizados juntos em publicação futura autorizada.
+- Sons vêm de ações aceitas e deslocamento oficial, com pool limitado e categorias locais; reload remoto pertence a combate. Animação só altera apresentação. Investigação envia apenas fatos públicos ao solicitante autorizado, sem poder especial de papel inventado.
+- IA/diálogo são avaliação documental; oclusão está experimental desligada. Não importar engines/plugins/assets externos. Decisões, custos e evidências: [relatório da Fase2](phase2/final-report.md) e [contratos](phase2/architecture-contracts.md).
