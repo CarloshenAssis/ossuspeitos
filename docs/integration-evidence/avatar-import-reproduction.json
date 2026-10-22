@@ -1,0 +1,116 @@
+{
+  "source_commit": "d49a27abf3ab5d70393006cbf08aedabd0a2d733",
+  "godot": "4.4.1.stable.official.49a5bc7b6",
+  "source_identity": {
+    "files": 284,
+    "mismatches": [],
+    "sha256_manifest": "08467a6108a732248c59911cad3bedbd83a25d3f5f1f72a0030e3aaf31fe358e"
+  },
+  "red_command": "godot4.4.1 --headless --path FRESH_ARCHIVE --editor --quit; godot4.4.1 --headless --path FRESH_ARCHIVE --script tests/avatar_facing_test.gd",
+  "red_runs": [
+    {
+      "iteration": 0,
+      "import_exit": 0,
+      "import_warning": "Scan thread aborted",
+      "avatar_exit": 1,
+      "failure": "AVATAR_FACING_TEST_FAILED failures=19 checks=27",
+      "first_error": "ERROR: Cannot open file 'res://.godot/imported/mystery_character_ember.glb-794801586c4935f879a25333677e5f45.scn'.",
+      "import_log": "/workspace/.ossuspeitos-state/integration/avatar-debug/headless-0-import.log",
+      "avatar_log": "/workspace/.ossuspeitos-state/integration/avatar-debug/headless-0-avatar.log"
+    },
+    {
+      "iteration": 1,
+      "import_exit": 0,
+      "import_warning": "Scan thread aborted",
+      "avatar_exit": 1,
+      "failure": "AVATAR_FACING_TEST_FAILED failures=19 checks=27",
+      "first_error": "ERROR: Cannot open file 'res://.godot/imported/mystery_character_ember.glb-794801586c4935f879a25333677e5f45.scn'.",
+      "import_log": "/workspace/.ossuspeitos-state/integration/avatar-debug/headless-1-import.log",
+      "avatar_log": "/workspace/.ossuspeitos-state/integration/avatar-debug/headless-1-avatar.log"
+    },
+    {
+      "iteration": 2,
+      "import_exit": 0,
+      "import_warning": "Scan thread aborted",
+      "avatar_exit": 1,
+      "failure": "AVATAR_FACING_TEST_FAILED failures=19 checks=27",
+      "first_error": "ERROR: Cannot open file 'res://.godot/imported/mystery_character_ember.glb-794801586c4935f879a25333677e5f45.scn'.",
+      "import_log": "/workspace/.ossuspeitos-state/integration/avatar-debug/headless-2-import.log",
+      "avatar_log": "/workspace/.ossuspeitos-state/integration/avatar-debug/headless-2-avatar.log"
+    },
+    {
+      "iteration": 3,
+      "import_exit": 0,
+      "import_warning": "Scan thread aborted",
+      "avatar_exit": 1,
+      "failure": "AVATAR_FACING_TEST_FAILED failures=19 checks=27",
+      "first_error": "ERROR: Cannot open file 'res://.godot/imported/mystery_character_ember.glb-794801586c4935f879a25333677e5f45.scn'.",
+      "import_log": "/workspace/.ossuspeitos-state/integration/avatar-debug/headless-3-import.log",
+      "avatar_log": "/workspace/.ossuspeitos-state/integration/avatar-debug/headless-3-avatar.log"
+    },
+    {
+      "iteration": 4,
+      "import_exit": 0,
+      "import_warning": "Scan thread aborted",
+      "avatar_exit": 1,
+      "failure": "AVATAR_FACING_TEST_FAILED failures=19 checks=27",
+      "first_error": "ERROR: Cannot open file 'res://.godot/imported/mystery_character_ember.glb-794801586c4935f879a25333677e5f45.scn'.",
+      "import_log": "/workspace/.ossuspeitos-state/integration/avatar-debug/headless-4-import.log",
+      "avatar_log": "/workspace/.ossuspeitos-state/integration/avatar-debug/headless-4-avatar.log"
+    }
+  ],
+  "green_command": "DISPLAY=:99 LIBGL_ALWAYS_SOFTWARE=1 VK_DRIVER_FILES=.../lvp_icd.json LD_LIBRARY_PATH=.../vulkan/root/usr/lib/x86_64-linux-gnu godot4.4.1 --path SAME_FAILED_ARCHIVE --display-driver x11 --audio-driver Dummy --rendering-method gl_compatibility --rendering-driver opengl3 --import; restore project.godot; run avatar_facing three times",
+  "green_import_log": "/workspace/.ossuspeitos-state/integration/avatar-debug/repaired-full-import.log",
+  "green_import_exit": "not separately persisted by first shell; no ERROR/SCRIPT/Parse lines",
+  "green_runs": [
+    {
+      "log": "/workspace/.ossuspeitos-state/integration/avatar-debug/repaired-avatar-1.log",
+      "marker": [
+        "AVATAR_FACING_TEST_OK checks=27"
+      ],
+      "errors": []
+    },
+    {
+      "log": "/workspace/.ossuspeitos-state/integration/avatar-debug/repaired-avatar-2.log",
+      "marker": [
+        "AVATAR_FACING_TEST_OK checks=27"
+      ],
+      "errors": []
+    },
+    {
+      "log": "/workspace/.ossuspeitos-state/integration/avatar-debug/repaired-avatar-3.log",
+      "marker": [
+        "AVATAR_FACING_TEST_OK checks=27"
+      ],
+      "errors": []
+    }
+  ],
+  "single_variable_headless_import_contrast": {
+    "full-headless-import": {
+      "exit": 0,
+      "seconds": 7.138,
+      "errors": [
+        "ERROR: Parameter \"t\" is null.",
+        "ERROR: Parameter \"t\" is null.",
+        "ERROR: Parameter \"t\" is null.",
+        "ERROR: Parameter \"t\" is null.",
+        "ERROR: Parameter \"t\" is null.",
+        "ERROR: Parameter \"t\" is null.",
+        "ERROR: Parameter \"t\" is null.",
+        "ERROR: Parameter \"t\" is null."
+      ],
+      "markers": [],
+      "scan_aborted": false
+    },
+    "full-headless-avatar": {
+      "exit": 0,
+      "seconds": 1.117,
+      "errors": [],
+      "markers": [
+        "AVATAR_FACING_TEST_OK checks=27"
+      ],
+      "scan_aborted": false
+    }
+  },
+  "causal_conclusion": "--editor --quit aborts initial filesystem scan before GLB import despite exit0. Full --import generates missing asset and same test passes. Headless full import additionally emits eight dummy texture errors; software graphics full import avoids those errors. No runtime source fix justified."
+}

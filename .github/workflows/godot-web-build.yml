@@ -299,7 +299,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update && sudo apt-get install -y xvfb xauth libgl1-mesa-dri
+          sudo apt-get update && sudo apt-get install -y xvfb xauth libgl1-mesa-dri mesa-vulkan-drivers
           LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a godot --path . --display-driver x11 --audio-driver Dummy --rendering-method gl_compatibility --rendering-driver opengl3 --import 2>&1 | tee "$RUNNER_TEMP/pages-import.log"
           if grep -Eq 'SCRIPT ERROR|Parse Error|^ERROR:' "$RUNNER_TEMP/pages-import.log"; then exit 1; fi
           git show HEAD:project.godot > project.godot

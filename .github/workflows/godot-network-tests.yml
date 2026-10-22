@@ -11,7 +11,7 @@ permissions:
 jobs:
   network-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -32,11 +32,14 @@ jobs:
           set -o pipefail
           godot --version 2>&1 | tee "$RUNNER_TEMP/godot-network-logs/version.log"
 
-      - name: Validate project
+      - name: Complete graphical asset import before model tests
+        shell: bash
         run: |
-          set -o pipefail
-          godot --headless --path . --editor --quit 2>&1 \
-            | tee "$RUNNER_TEMP/godot-network-logs/parser.log"
+          set -euo pipefail
+          sudo apt-get update && sudo apt-get install -y xvfb xauth libgl1-mesa-dri mesa-vulkan-drivers
+          LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a godot --path . --display-driver x11 --audio-driver Dummy --rendering-method gl_compatibility --rendering-driver opengl3 --import 2>&1 | tee "$RUNNER_TEMP/godot-network-logs/parser.log"
+          if grep -Eq 'SCRIPT ERROR|Parse Error|^ERROR:' "$RUNNER_TEMP/godot-network-logs/parser.log"; then exit 1; fi
+          git show HEAD:project.godot > project.godot
 
       - name: Validate movement rules
         run: |
