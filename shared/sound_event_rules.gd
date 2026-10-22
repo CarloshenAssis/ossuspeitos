@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Public, role-free events derived exclusively from accepted server actions.
 const MAX_EVENTS := 32
-const KINDS := ["step_walk", "step_run", "door", "impact", "reload"]
+const KINDS := ["step_walk", "step_run", "door", "impact", "reload", "handle"]
 const KEYS := ["id", "round_id", "kind", "position", "peer_id"]
 static func make(id: int, round_id: int, kind: String, position: Vector3, peer_id: int) -> Dictionary:
 	return {"id":id,"round_id":round_id,"kind":kind,"position":position,"peer_id":peer_id}

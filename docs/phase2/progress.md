@@ -6,7 +6,9 @@ Base59926cb, branchcodex/gameplay-specs-09-16. PR30/31abertos; maindd15ff2 inalt
 - Baseline: concluída em arquivo limpo59926cb: importação0erros,37/37GDScript e5/5harnesses (smoke4,combate4,salas,RTT200,integração96). Software p95 20.979ms; três avisosObjectDB preexistentes. Ver baseline.md.
 - SPEC09: implementado e validado inicialmente:43checks, movement/netcode266/combat86 e smoke4. Laboratório nativoGodotPhysics e Jolt PASS; sem trocar backendprodução. CorreçãofimrodadacarregandoRED→GREEN. Ver09-physics.md. Integração09–16 completa ainda pendente.
 - SPEC10: implementado/integradopor sala;39/39suítes incluindo30checksaudio e smoke4 PASS. Occlusãoexperimental desligada; corrida nãoinventada. Ver10-audio.md.
-- SPEC11–16: pendentes.
+- SPEC11: concluído inicialmente,35checksnovos/36gráficos e40/40suítes PASS. Camada procedural, sem simulação/segredos. Ver11-animation.md.
+- SPEC12: iniciando integração de investigação genérica.
+- SPEC13–16: pendentes.
 
 Ruling: usar física analítica limitada para bloqueadores competitivos e Physics/Jolt apenas no laboratório — preserva replay e geometria — custo: objetos não terão dinâmica rígida arbitrária.
 Ruling: protocolo12 explícito para ações/snapshots de ambiente sem novos métodos RPC — impede cliente11 ignorar colisões — custo: builds11/12 precisam ser atualizadas juntas.

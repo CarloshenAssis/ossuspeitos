@@ -51,6 +51,9 @@ const BREATH_PERIOD := 3.8
 const BREATH_ANGLE := 0.014
 const IDLE_ARM := 0.03
 
+const ActionState = preload("res://client/character_action_state.gd")
+var actions := ActionState.new()
+
 var rig: Dictionary
 var model: Node3D
 var base_y := 0.0
@@ -124,9 +127,11 @@ func is_valid() -> bool:
 ## não conta deslocamento.
 func reset(position: Vector3 = Vector3.INF) -> void:
 	_last_position = position
+	actions.reset()
 
 ## Volta à pose de repouso na hora (corpo oculto, eliminado).
 func rest() -> void:
+	actions.reset()
 	speed = 0.0
 	amplitude = 0.0
 	_last_position = Vector3.INF
@@ -164,6 +169,11 @@ func update(position: Vector3, yaw: float, delta: float) -> void:
 	var forward_weight := absf(direction.y) / maxf(absf(direction.x) + absf(direction.y), 0.0001) if direction.length() > 0.0001 else 1.0
 	phase = fposmod(phase + step / cycle_length(forward_weight) * TAU, TAU)
 	_apply(amplitude, forward_weight)
+	var pose := actions.advance(delta)
+	for index in 2:
+		(_shoulders[index] as Node3D).rotation.x+=float(pose.shoulder_x)
+		(_elbows[index] as Node3D).rotation.x+=float(pose.elbow_x)
+	_torso.rotation.x+=float(pose.torso_x)
 
 ## Onda de uma perna na fase `leg_phase`: devolve (posição do pé para frente,
 ## em fração de sen(amplitude), e dobra do joelho em 0..1). Metade do ciclo é

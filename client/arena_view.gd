@@ -75,6 +75,9 @@ const PICKUP_SPIN_SPEED := 0.9
 var _visual_time := 0.0
 ## Animadores de repouso/caminhada por jogador remoto (fase 3).
 var animators: Dictionary = {}
+var _action_round := 0
+var _action_event_id := 0
+var _body_transitions: Dictionary = {}
 ## Liga/desliga a animação procedural (comparação de desempenho e testes).
 var character_animation := true
 ## Distância a partir da qual o corpo remoto salta para a posição oficial em
@@ -282,6 +285,7 @@ func _process(delta: float) -> void:
 				animator.update(avatar.position, avatar.rotation.y, delta)
 			elif animator.amplitude > 0.0 or animator.speed > 0.0:
 				animator.rest()
+	_update_body_transitions(delta)
 	_update_local_view(delta)
 	_update_environment_prompt()
 	_update_presentation_motion(delta)
@@ -585,6 +589,19 @@ func nearest_available_pickup() -> String:
 
 func show_shot(payload: Dictionary) -> void:
 	if not payload.has("origin") or not payload.has("end"): return
+	_trigger_remote_action(int(payload.get("shooter_peer_id",0)),"fire")
+	# A cosmetic reaction may only use the already-public endpoint/hit flag.
+	# No target health, instigator secret or victim identity is added to the DTO.
+	if bool(payload.get("hit_player",false)):
+		var closest_peer := 0
+		var closest := 0.75
+		for peer_id in avatars:
+			var at: Vector3=(avatars[peer_id] as Node3D).position+Vector3.UP*ArenaRules.EYE_HEIGHT
+			var distance := at.distance_to(payload["end"])
+			if distance<closest:
+				closest=distance
+				closest_peer=int(peer_id)
+		if closest_peer>0: _trigger_remote_action(closest_peer,"hurt")
 	var tracer := MeshInstance3D.new()
 	var start: Vector3 = payload["origin"]
 	var finish: Vector3 = payload["end"]
@@ -664,6 +681,7 @@ func set_player_alive(peer_id: int, alive: bool) -> void:
 	# Eliminado: pose de repouso; ao voltar, nenhum deslocamento antigo conta.
 	if animators.has(peer_id):
 		(animators[peer_id] as CharacterAnimator).rest()
+		if not alive: (animators[peer_id] as CharacterAnimator).actions.trigger("death")
 
 ## Vivo/eliminado do roster oficial: quem caiu some e, na rodada seguinte,
 ## volta a aparecer quando o servidor o marca vivo de novo.
@@ -763,6 +781,7 @@ func clear_bodies(keep_round: int = -1) -> void:
 			continue
 		node.queue_free()
 		bodies.erase(body_id)
+		_body_transitions.erase(body_id)
 
 func _build_body(dto: Dictionary) -> Node3D:
 	var placement := body_placement(dto["position"], float(dto["yaw"]))
@@ -791,6 +810,11 @@ func _build_body(dto: Dictionary) -> Node3D:
 		lowest = minf(lowest, box.position.y)
 	if is_finite(lowest):
 		fall.position.y = root.global_position.y - lowest + 0.01
+	if presentation_motion:
+		var rig := CharacterRig.build(character.get_node(ArenaModels.CHARACTER_MODEL))
+		_body_transitions[int(dto["body_id"])]= {"root":root,"fall":fall,"elapsed":0.0,
+			"left":rig.pivots.Elbow_L,"right":rig.pivots.Elbow_R,
+			"left_rest":(rig.pivots.Elbow_L as Node3D).rotation,"right_rest":(rig.pivots.Elbow_R as Node3D).rotation}
 	return root
 
 ## Pose determinística e legível de quem caiu: braços abertos, uma perna
@@ -815,7 +839,9 @@ static func _pose_body(character: Node3D) -> void:
 ## One writer for the motion child; reload/recoil continue on WeaponPivot.
 func set_presentation_motion(enabled: bool) -> void:
 	presentation_motion = enabled
-	if not enabled: _reset_presentation_motion()
+	if not enabled:
+		_reset_presentation_motion()
+		_update_body_transitions(0.0)
 
 func _reset_presentation_motion() -> void:
 	camera_effects.reset()
@@ -862,6 +888,8 @@ func set_graphics_profile(value: String) -> void:
 	# Preserve original light state; quality profiles affect materials only.
 
 func apply_environment(value: Dictionary) -> void:
+	var round_id := int(value.get("round_id",0))
+	if round_id>_action_round: _reset_visual_actions(round_id)
 	if environment_view != null:
 		environment_view.apply_state(value)
 
@@ -887,8 +915,49 @@ func configure_audio(settings: MenuSettings) -> void:
 		fx.set_category_volume(settings.combat_volume)
 
 func apply_sound_events(events: Array, round_id: int, bootstrap: bool = false) -> void:
+	if round_id<_action_round: return
+	if round_id>_action_round: _reset_visual_actions(round_id)
+	# Visual actions use the authorized event, never the decision to play audio.
+	for raw in events:
+		var event := SoundEventRules.sanitize(raw)
+		if event.is_empty() or int(event.round_id)!=round_id or int(event.id)<=_action_event_id: continue
+		_action_event_id=int(event.id)
+		if bootstrap: continue
+		match str(event.kind):
+			"door", "handle": _trigger_remote_action(int(event.peer_id),"interact")
+			"reload": _trigger_remote_action(int(event.peer_id),"reload")
 	if spatial_audio == null: return
 	if bootstrap:
 		spatial_audio.prime(events, round_id)
 		return
 	spatial_audio.consume(events,round_id,camera_origin(),local_peer_id,EnvironmentRules.blockers(environment_view.snapshot))
+
+func _reset_visual_actions(round_id: int) -> void:
+	_action_round=round_id
+	_action_event_id=0
+	for animator in animators.values(): animator.actions.reset()
+
+func _trigger_remote_action(peer_id: int, kind: String) -> void:
+	if not character_animation or not bool(_alive_flags.get(peer_id,true)) or not animators.has(peer_id): return
+	(animators[peer_id] as CharacterAnimator).actions.trigger(kind)
+
+## Small settling of corpse arms, not a second simulation or falling collider.
+## Root/Fall angle stay authoritative-placement compatible; only visual elbows
+## move and floor support is re-established from the resulting mesh bounds.
+func _update_body_transitions(delta: float) -> void:
+	for id in _body_transitions.keys():
+		var entry: Dictionary=_body_transitions[id]
+		if not is_instance_valid(entry.root):
+			_body_transitions.erase(id)
+			continue
+		entry.elapsed=minf(0.35,float(entry.elapsed)+maxf(delta,0.0))
+		var ratio := float(entry.elapsed)/0.35
+		var offset := 0.12*sin(PI*ratio)*(1.0-ratio) if presentation_motion else 0.0
+		(entry.left as Node3D).rotation=entry.left_rest+Vector3(offset,0,0)
+		(entry.right as Node3D).rotation=entry.right_rest+Vector3(-offset,0,0)
+		var lowest := INF
+		for mesh in (entry.root as Node3D).find_children("*","MeshInstance3D",true,false):
+			var bounds: AABB=(mesh as MeshInstance3D).global_transform*(mesh as MeshInstance3D).get_aabb()
+			lowest=minf(lowest,bounds.position.y)
+		if is_finite(lowest): (entry.fall as Node3D).position.y+=0.01-lowest
+		if ratio>=1.0 or not presentation_motion: _body_transitions.erase(id)

@@ -51,5 +51,6 @@ func observe_movement() -> void:
 
 func observe_interaction(event: Dictionary) -> void:
 	var kind := str(event.get("kind",""))
-	if kind in ["door","impact"]:
+	if kind=="object": kind="handle"
+	if kind in ["door","impact","handle"]:
 		emit_authorized(kind,event.get("position",Vector3.ZERO),int(event.get("peer_id",0)))
