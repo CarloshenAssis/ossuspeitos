@@ -1,5 +1,5 @@
 extends RefCounted
-## Greybox do Salão Central, da Biblioteca, da Cozinha, da Sala de Jantar, do Quarto de Hóspedes e do Lavabo. Todas as coordenadas de piso estão em XZ.
+## Greybox do Salão Central, da Biblioteca, da Cozinha, da Sala de Jantar, do Quarto de Hóspedes do Lavabo e do Banheiro de Mármore. Todas as coordenadas de piso estão em XZ.
 
 const CELL := MansionMap.CELL
 const WALL_TOP := 7.0 + MansionMap.SLAB_THICKNESS
@@ -9,7 +9,8 @@ const SPACES := [
 	{"id": "biblioteca", "name": "Biblioteca", "kind": "room", "min": Vector2(MIN_X, 5), "max": Vector2(-0.5, 14), "ceiling": 3.5},
 	{"id": "hospedes", "name": "Quarto de Hóspedes", "kind": "room", "min": Vector2(MIN_X, 14.5), "max": Vector2(-4.5, 19.5), "ceiling": 3.5},
 	{"id": "lavabo", "name": "Lavabo", "kind": "corridor", "min": Vector2(-4, 16), "max": Vector2(5, 19.5), "ceiling": 3.5},
-	{"id": "banheiro_marmore_stub", "name": "Acesso ao Banheiro de Mármore", "kind": "corridor", "min": Vector2(0.5, 20), "max": Vector2(2.5, 21.5), "ceiling": 3.0},
+	{"id": "banheiro_marmore", "name": "Banheiro de Mármore", "kind": "room", "min": Vector2(-4, 20), "max": Vector2(5, 26), "ceiling": 3.5},
+	{"id": "jardim_inverno_stub", "name": "Acesso ao Jardim de Inverno", "kind": "corridor", "min": Vector2(0.5, 26.5), "max": Vector2(2.5, 28), "ceiling": 3.0},
 	{"id": "cozinha", "name": "Cozinha", "kind": "room", "min": Vector2(16.5, 5), "max": Vector2(26.5, 14), "ceiling": 3.5},
 	{"id": "jantar", "name": "Sala de Jantar", "kind": "room", "min": Vector2(5.5, 14.5), "max": Vector2(19.5, 22.5), "ceiling": 3.5},
 ]
@@ -18,7 +19,8 @@ const DOORS := [
 	{"id": "porta_hospedes", "room": "biblioteca", "corridor": "hospedes", "min": Vector2(-9.5, 14), "max": Vector2(-7.5, 14.5)},
 	{"id": "porta_lavabo", "room": "hospedes", "corridor": "lavabo", "min": Vector2(-4.5, 16.5), "max": Vector2(-4, 18.5)},
 	{"id": "porta_lavabo_jantar", "room": "lavabo", "corridor": "jantar", "min": Vector2(5, 16.5), "max": Vector2(5.5, 18.5)},
-	{"id": "porta_banheiro_marmore", "room": "lavabo", "corridor": "banheiro_marmore_stub", "min": Vector2(0.5, 19.5), "max": Vector2(2.5, 20)},
+	{"id": "porta_banheiro_marmore", "room": "lavabo", "corridor": "banheiro_marmore", "min": Vector2(0.5, 19.5), "max": Vector2(2.5, 20)},
+	{"id": "porta_jardim_inverno", "room": "banheiro_marmore", "corridor": "jardim_inverno_stub", "min": Vector2(0.5, 26), "max": Vector2(2.5, 26.5)},
 	{"id": "porta_cozinha", "room": "salao", "corridor": "cozinha", "min": Vector2(16, 7), "max": Vector2(16.5, 9)},
 	{"id": "porta_jantar", "room": "salao", "corridor": "jantar", "min": Vector2(7, 14), "max": Vector2(9, 14.5)},
 	{"id": "porta_cozinha_jantar", "room": "cozinha", "corridor": "jantar", "min": Vector2(16.5, 14), "max": Vector2(18.5, 14.5)},
@@ -41,6 +43,8 @@ const FURNITURE := [
 	{"id": "cama", "space": "hospedes", "min": Vector2(-10.5, 16.5), "max": Vector2(-8.5, 18.5), "height": 1.0},
 	{"id": "guarda_roupa", "space": "hospedes", "min": Vector2(-5.5, 14.5), "max": Vector2(-4.5, 16.5), "height": 2.5},
 	{"id": "pia", "space": "lavabo", "min": Vector2(-3, 18.5), "max": Vector2(-1, 19.5), "height": 1.0},
+	{"id": "banheira", "space": "banheiro_marmore", "min": Vector2(-4, 21.5), "max": Vector2(-1.5, 24), "height": 1.0},
+	{"id": "divisoria", "space": "banheiro_marmore", "min": Vector2(3, 21), "max": Vector2(3.5, 24.5), "height": 2.5},
 ]
 const GALLERY := {"id": "galeria_fechada", "name": "Galeria", "min": Vector2(6, 0), "max": Vector2(10, 0.5)}
 const SPAWNS := [
@@ -54,7 +58,7 @@ const WEAPONS := [
 ]
 const AMMO := [
 	Vector2(19, 10), Vector2(25.5, 13.5), Vector2(11, 4.5), Vector2(6, 5.75), Vector2(15.5, 13.5),
-	Vector2(0.5, 0.5), Vector2(1.5, 13.5), Vector2(-0.75, 17.75), Vector2(17.5, 22),
+	Vector2(1, 24.25), Vector2(1.5, 13.5), Vector2(-0.75, 17.75), Vector2(17.5, 22),
 	Vector2(-1.5, 9.75), Vector2(-5.25, 19), Vector2(-5.5, 13.5),
 ]
 

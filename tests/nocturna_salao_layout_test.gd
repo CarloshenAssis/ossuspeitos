@@ -39,7 +39,7 @@ func _run() -> void:
 
 	var free := {}
 	for x in range(int(salao_map.MIN_X / GRID), int(26.5 / GRID) + 1):
-		for z in range(int(22.5 / GRID) + 1):
+		for z in range(int(28.0 / GRID) + 1):
 			var cell := Vector2i(x, z)
 			var point := Vector2(cell) * GRID
 			if not salao_map.space_at(point).is_empty() and not arena_rules.overlaps_blocker(_body(point)):
@@ -50,6 +50,7 @@ func _run() -> void:
 	_check_dining_room()
 	_check_guest_room()
 	_check_lavatory()
+	_check_marble_bathroom()
 
 	if failures == 0:
 		print("NOCTURNA_SALAO_LAYOUT_TEST_OK checks=%d blockers=%d spawns=%d pickups=%d" % [
@@ -104,7 +105,11 @@ func _check_items(free: Dictionary) -> void:
 			"spawn inside a room with capsule clearance")
 		for other in range(index + 1, salao_map.SPAWNS.size()):
 			_expect(spawn.distance_to(salao_map.SPAWNS[other]) >= arena_rules.PLAYER_HIT_RADIUS * 2.0, "spawns do not overlap")
-	rooms.append(_room("lavabo"))
+	var lavatory := _room("lavabo")
+	var bathroom := _room("banheiro_marmore")
+	_expect(salao_map.AMMO.any(lavatory.has_point), "lavatory keeps its ammo")
+	_expect(salao_map.AMMO.any(bathroom.has_point), "marble bathroom has ammo")
+	rooms.append_array([lavatory, bathroom])
 	for index in pickups.size():
 		var point: Vector2 = pickups[index]
 		var pickup: Vector3 = arena_rules.PICKUP_POSITIONS[index]
@@ -253,10 +258,8 @@ func _check_guest_room() -> void:
 
 func _check_lavatory() -> void:
 	var lavatory := _room("lavabo")
-	var stub := _room("banheiro_marmore_stub")
 	_expect(lavatory == Rect2(-4, 16, 9, 3.5), "lavatory footprint")
-	_expect(stub == Rect2(0.5, 20, 2, 1.5), "marble bathroom recess footprint")
-	if not lavatory.has_area() or not stub.has_area():
+	if not lavatory.has_area():
 		return
 
 	var east_door := Rect2(5, 16.5, 0.5, 2)
@@ -267,8 +270,8 @@ func _check_lavatory() -> void:
 	), "east doorway connects the lavatory and dining room")
 	_expect(salao_map.DOORS.any(func(door: Dictionary) -> bool:
 		return (door["id"] == "porta_banheiro_marmore" and door["room"] == "lavabo"
-			and door["corridor"] == "banheiro_marmore_stub" and salao_map.rect(door) == south_door)
-	), "south doorway connects the lavatory and marble bathroom recess")
+			and door["corridor"] == "banheiro_marmore" and salao_map.rect(door) == south_door)
+	), "south doorway connects the lavatory and marble bathroom")
 
 	var center := lavatory.get_center()
 	var dining := _room("jantar").get_center()
@@ -289,16 +292,6 @@ func _check_lavatory() -> void:
 	_expect(east_wall["blocked_x"] and east_wall["position"].x <= lavatory.end.x - radius,
 		"solid east wall separates the lavatory and dining room beside the doorway")
 
-	var recess := _body(stub.get_center())
-	var recess_start := _body(Vector2(stub.get_center().x, 17.5))
-	var passage: Dictionary = movement_rules.resolve_step(recess_start, recess - recess_start)
-	_expect(passage["position"].is_equal_approx(recess), "capsule crosses the south doorway into the recess")
-	var recess_end: Dictionary = movement_rules.resolve_step(recess, Vector3.BACK * 3)
-	_expect(recess_end["blocked_z"] and recess_end["position"].z <= stub.end.y - radius,
-		"solid south wall closes the marble bathroom recess")
-	_expect(is_equal_approx(arena_rules.first_blocker_distance(recess, Vector3.UP, 10.0), 2.0),
-		"marble bathroom recess ceiling seals at 3 m")
-
 	var sink_start := _body(Vector2(-2, 17.5))
 	var sink: Dictionary = movement_rules.resolve_step(sink_start, Vector3.BACK * 1.5)
 	_expect(sink["blocked_z"] and sink["position"].z <= 18.5 - radius, "sink blocks the capsule")
@@ -306,6 +299,52 @@ func _check_lavatory() -> void:
 	_expect(arena_rules.first_blocker_distance(eye, Vector3.BACK, 1.5) < 0.0, "shots pass over the sink")
 	_expect(is_equal_approx(arena_rules.first_blocker_distance(_body(center), Vector3.UP, 10.0), 2.5),
 		"lavatory ceiling seals at 3.5 m")
+
+func _check_marble_bathroom() -> void:
+	var bathroom := _room("banheiro_marmore")
+	var stub := _room("jardim_inverno_stub")
+	_expect(bathroom == Rect2(-4, 20, 9, 6), "marble bathroom footprint")
+	_expect(stub == Rect2(0.5, 26.5, 2, 1.5), "winter garden recess footprint")
+	_expect(salao_map.DOORS.any(func(door: Dictionary) -> bool:
+		return (door["id"] == "porta_jardim_inverno" and door["room"] == "banheiro_marmore"
+			and door["corridor"] == "jardim_inverno_stub" and salao_map.rect(door) == Rect2(0.5, 26, 2, 0.5))
+	), "bathroom south doorway leads into the winter garden recess")
+
+	var position := _body(_room("lavabo").get_center())
+	for waypoint in [Vector2(1.5, position.z), Vector2(1.5, 19.75), Vector2(1.5, 23), bathroom.get_center()]:
+		var target := _body(waypoint)
+		position = movement_rules.resolve_step(position, target - position)["position"]
+		_expect(position.is_equal_approx(target), "capsule crosses from lavatory to bathroom at %s" % waypoint)
+
+	var radius: float = arena_rules.PLAYER_HIT_RADIUS
+	for x in [-3.0, 4.0]:
+		var south_wall: Dictionary = movement_rules.resolve_step(_body(Vector2(x, 25)), Vector3.BACK * 3)
+		_expect(south_wall["blocked_z"] and south_wall["position"].z <= bathroom.end.y - radius,
+			"solid bathroom south wall beside the doorway at x=%s" % x)
+
+	var recess := _body(stub.get_center())
+	var recess_start := _body(Vector2(stub.get_center().x, 25.0))
+	var passage: Dictionary = movement_rules.resolve_step(recess_start, recess - recess_start)
+	_expect(passage["position"].is_equal_approx(recess), "capsule crosses the south doorway into the winter garden recess")
+	var recess_end: Dictionary = movement_rules.resolve_step(recess, Vector3.BACK * 3)
+	_expect(recess_end["blocked_z"] and recess_end["position"].z <= stub.end.y - radius,
+		"solid south wall closes the winter garden recess")
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(recess, Vector3.UP, 10.0), 2.0),
+		"winter garden recess ceiling seals at 3 m")
+
+	var tub_start := _body(Vector2(-2.5, 20.75))
+	var tub: Dictionary = movement_rules.resolve_step(tub_start, Vector3.BACK * 2)
+	_expect(tub["blocked_z"] and tub["position"].z <= 21.5 - radius, "bathtub blocks the capsule")
+	var tub_eye := Vector3(tub_start.x, 1.7, tub_start.z)
+	_expect(arena_rules.first_blocker_distance(tub_eye, Vector3.BACK, 2.0) < 0.0, "shots pass over the bathtub")
+
+	var partition: Dictionary = movement_rules.resolve_step(_body(bathroom.get_center()), Vector3.RIGHT * 4)
+	_expect(partition["blocked_x"] and partition["position"].x <= 3.0 - radius, "partition blocks the capsule")
+	var partition_eye := Vector3(bathroom.get_center().x, 1.7, bathroom.get_center().y)
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(partition_eye, Vector3.RIGHT, 4.0), 2.5),
+		"partition blocks shots at eye height")
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(_body(bathroom.get_center()), Vector3.UP, 10.0), 2.5),
+		"marble bathroom ceiling seals at 3.5 m")
 
 func _body(point: Vector2) -> Vector3:
 	return Vector3(point.x, movement_rules.PLAYER_HEIGHT, point.y)
