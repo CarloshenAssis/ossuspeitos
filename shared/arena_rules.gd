@@ -19,6 +19,8 @@ extends RefCounted
 ## O movimento só considera volumes cuja base fica abaixo do topo do corpo
 ## (`PLAYER_HIT_HEIGHT`); vergas e tetos ficam acima de qualquer jogador.
 
+const SalaoMap = preload("res://shared/nocturna_salao_map.gd")
+
 const EYE_HEIGHT := 0.7
 const PLAYER_HIT_RADIUS := 0.45
 const PLAYER_HIT_HEIGHT := 2.0
@@ -27,11 +29,11 @@ const PLAYER_HIT_HEIGHT := 2.0
 const BODY_CENTER_HEIGHT := 1.0
 const OFFICIAL_EYE_Y := BODY_CENTER_HEIGHT + EYE_HEIGHT
 
-## Índices 0..3: armas comuns. Índices 4..7: caixas de munição.
-static var PICKUP_POSITIONS: Array = MansionMap.pickup_positions()
+## Índices 0..7: armas comuns. Índices 8..19: caixas de munição.
+static var PICKUP_POSITIONS: Array = SalaoMap.pickup_positions() if SalaoMap.enabled else MansionMap.pickup_positions()
 
 ## Lista única usada por hitscan, colisão e apresentação.
-static var BLOCKERS: Array = MansionMap.blockers()
+static var BLOCKERS: Array = SalaoMap.blockers() if SalaoMap.enabled else MansionMap.blockers()
 
 ## Regiões nomeadas para orientação: um retângulo por cômodo ou trecho de
 ## corredor. `min`/`max` em XZ.
@@ -39,7 +41,7 @@ static var ZONES: Array = _zones()
 
 static func _zones() -> Array:
 	var result: Array = []
-	for entry in MansionMap.SPACES:
+	for entry in SalaoMap.SPACES if SalaoMap.enabled else MansionMap.SPACES:
 		result.append({"id": str(entry["id"]), "name": str(entry["name"]), "kind": str(entry["kind"]),
 			"min": entry["min"], "max": entry["max"]})
 	return result
@@ -140,7 +142,7 @@ static func _circle_hits_box(position: Vector3, radius: float, center: Vector3, 
 	return dx * dx + dz * dz < radius * radius
 
 static func zone_at(position: Vector3) -> Dictionary:
-	var entry := MansionMap.space_at(position)
+	var entry := SalaoMap.space_at(Vector2(position.x, position.z)) if SalaoMap.enabled else MansionMap.space_at(position)
 	if entry.is_empty():
 		return {}
 	for zone in ZONES:

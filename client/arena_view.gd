@@ -328,14 +328,44 @@ func _build_arena() -> void:
 	light.light_energy = 0.25
 	light.shadow_enabled = false
 	add_child(light)
-	art = MansionArt.new()
-	art.build(self)
+	if ArenaRules.SalaoMap.enabled:
+		_build_salao_greybox()
+	else:
+		art = MansionArt.new()
+		art.build(self)
 	for index in MovementRules.SPAWN_POINTS.size():
 		_add_spawn_marker(MovementRules.SPAWN_POINTS[index])
-	for room in MansionMap.rooms():
+	for room in ArenaRules.SalaoMap.SPACES if ArenaRules.SalaoMap.enabled else MansionMap.rooms():
 		_add_room_label(room)
 	set_debug_overlay(debug_overlay)
 	set_show_ceilings(show_ceilings)
+
+func _build_salao_greybox() -> void:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.48, 0.49, 0.5)
+	for blocker in ArenaRules.BLOCKERS:
+		var box := _add_greybox_box(blocker["center"], blocker["size"], material)
+		box.name = blocker["id"]
+		box.set_meta("arena_blocker_id", blocker["id"])
+		box.set_meta("arena_blocker_kind", blocker["kind"])
+	for entry in ArenaRules.SalaoMap.SPACES + ArenaRules.SalaoMap.DOORS:
+		var area := ArenaRules.SalaoMap.rect(entry)
+		var center := area.get_center()
+		_add_greybox_box(Vector3(center.x, -0.05, center.y), Vector3(area.size.x, 0.1, area.size.y), material)
+	var gallery := Label3D.new()
+	gallery.text = ArenaRules.SalaoMap.GALLERY["name"]
+	gallery.position = Vector3(8.0, 4.75, 0.51)
+	add_child(gallery)
+
+func _add_greybox_box(center: Vector3, size: Vector3, material: StandardMaterial3D) -> MeshInstance3D:
+	var box := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mesh.material = material
+	box.mesh = mesh
+	box.position = center
+	add_child(box)
+	return box
 
 ## Liga os recursos de inspeção (nomes, spawns). Só apresentação.
 func set_debug_overlay(enabled: bool) -> void:
