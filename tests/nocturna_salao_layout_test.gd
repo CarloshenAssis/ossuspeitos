@@ -1,7 +1,7 @@
 extends SceneTree
 
 const GRID := 0.25
-const PICKUP_GAP := 2.5
+const PICKUP_GAP := 4.5
 
 var salao_map: GDScript
 var arena_rules: GDScript
@@ -38,7 +38,7 @@ func _run() -> void:
 		_expect(is_equal_approx(lintel, MansionMap.DOOR_HEIGHT - 1.0), "door lintel height")
 
 	var free := {}
-	for x in range(-8, 73):
+	for x in range(int(salao_map.MIN_X / GRID), 73):
 		for z in range(65):
 			var cell := Vector2i(x, z)
 			var point := Vector2(cell) * GRID
@@ -82,17 +82,20 @@ func _check_floor(free: Dictionary) -> void:
 
 func _check_items(free: Dictionary) -> void:
 	var hall: Rect2 = salao_map.rect(salao_map.SPACES[0])
+	var library: Rect2 = salao_map.rect(salao_map.SPACES[1])
 	var pickups: Array = salao_map.WEAPONS + salao_map.AMMO
 	_expect(salao_map.SPAWNS.size() == 8 and salao_map.WEAPONS.size() == 8 and salao_map.AMMO.size() == 12, "eight spawns, eight weapons, twelve ammo")
 	for index in salao_map.SPAWNS.size():
 		var spawn: Vector2 = salao_map.SPAWNS[index]
-		_expect(hall.has_point(spawn) and free.has(Vector2i(spawn / GRID)), "spawn inside hall with capsule clearance")
+		_expect((hall.has_point(spawn) or library.has_point(spawn)) and free.has(Vector2i(spawn / GRID)),
+			"spawn inside a room with capsule clearance")
 		for other in range(index + 1, salao_map.SPAWNS.size()):
 			_expect(spawn.distance_to(salao_map.SPAWNS[other]) >= arena_rules.PLAYER_HIT_RADIUS * 2.0, "spawns do not overlap")
 	for index in pickups.size():
 		var point: Vector2 = pickups[index]
 		var pickup: Vector3 = arena_rules.PICKUP_POSITIONS[index]
-		_expect(hall.has_point(point) and free.has(Vector2i(point / GRID)), "pickup inside hall with capsule clearance")
+		_expect((hall.has_point(point) or library.has_point(point)) and free.has(Vector2i(point / GRID)),
+			"pickup inside a room with capsule clearance")
 		_expect(is_equal_approx(pickup.y, MansionMap.PICKUP_HEIGHT), "pickup height")
 		for door in salao_map.DOORS:
 			_expect(point.distance_to(salao_map.rect(door).get_center()) >= 1.8, "pickup clearance from door")
@@ -106,8 +109,21 @@ func _check_walls() -> void:
 	var south_wall: Dictionary = movement_rules.resolve_step(start + Vector3.LEFT * 2, Vector3.BACK * 8)
 	_expect(south_wall["blocked_z"] and south_wall["position"].z <= 14.0 - arena_rules.PLAYER_HIT_RADIUS,
 		"capsule cannot cross solid south wall in a long step")
-	var west_stub: Dictionary = movement_rules.resolve_step(_body(Vector2(1, 8)), Vector3.LEFT * 6)
-	_expect(west_stub["blocked_x"] and west_stub["position"].x < -0.5, "west stub is open at the door and closed at the end")
+	var library_door: Dictionary = movement_rules.resolve_step(_body(Vector2(1, 8)), Vector3.LEFT * 3)
+	_expect(library_door["position"].is_equal_approx(_body(Vector2(-2, 8))), "capsule crosses the hall and library doorway")
+	var west_wall: Dictionary = movement_rules.resolve_step(_body(Vector2(-9, 13)), Vector3.LEFT * 3)
+	_expect(west_wall["blocked_x"] and west_wall["position"].x >= salao_map.MIN_X + arena_rules.PLAYER_HIT_RADIUS,
+		"solid west wall closes the library")
+	var guest_stub: Dictionary = movement_rules.resolve_step(_body(Vector2(-8.5, 13)), Vector3.BACK * 5)
+	_expect(guest_stub["blocked_z"] and guest_stub["position"].z > 15.0
+		and guest_stub["position"].z <= 16.0 - arena_rules.PLAYER_HIT_RADIUS,
+		"south door opens into a sealed guest room stub")
+	for x in [-10.0, -7.0, -4.0]:
+		var shelf: Dictionary = movement_rules.resolve_step(_body(Vector2(x, 13)), Vector3.FORWARD * 4)
+		_expect(shelf["blocked_z"] and shelf["position"].z > 11.5, "capsule cannot cross a library shelf")
+	var library_center := _body(Vector2(-5.5, 9.5))
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(library_center, Vector3.UP, 10.0), 2.5),
+		"library ceiling seals the room at 3.5 m")
 	_expect(is_equal_approx(arena_rules.first_blocker_distance(start, Vector3.UP, 10.0), 6.0), "hall ceiling seals the hall at 7 m")
 	var gallery := Vector3(8, 4.75, 2)
 	_expect(is_equal_approx(arena_rules.first_blocker_distance(gallery, Vector3.FORWARD, 10.0), 1.5), "gallery opening is sealed")
