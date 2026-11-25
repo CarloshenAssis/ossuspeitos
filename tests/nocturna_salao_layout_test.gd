@@ -48,6 +48,7 @@ func _run() -> void:
 	_check_items(free)
 	_check_walls()
 	_check_dining_room()
+	_check_guest_room()
 
 	if failures == 0:
 		print("NOCTURNA_SALAO_LAYOUT_TEST_OK checks=%d blockers=%d spawns=%d pickups=%d" % [
@@ -89,7 +90,7 @@ func _room(id: String) -> Rect2:
 
 func _check_items(free: Dictionary) -> void:
 	var rooms: Array[Rect2] = []
-	for id in ["salao", "biblioteca", "cozinha", "jantar"]:
+	for id in ["salao", "biblioteca", "cozinha", "jantar", "hospedes"]:
 		var room := _room(id)
 		rooms.append(room)
 		for group in [salao_map.SPAWNS, salao_map.WEAPONS, salao_map.AMMO]:
@@ -125,10 +126,6 @@ func _check_walls() -> void:
 	var west_wall: Dictionary = movement_rules.resolve_step(_body(Vector2(-9, 13)), Vector3.LEFT * 3)
 	_expect(west_wall["blocked_x"] and west_wall["position"].x >= salao_map.MIN_X + arena_rules.PLAYER_HIT_RADIUS,
 		"solid west wall closes the library")
-	var guest_stub: Dictionary = movement_rules.resolve_step(_body(Vector2(-8.5, 13)), Vector3.BACK * 5)
-	_expect(guest_stub["blocked_z"] and guest_stub["position"].z > 15.0
-		and guest_stub["position"].z <= 16.0 - arena_rules.PLAYER_HIT_RADIUS,
-		"south door opens into a sealed guest room stub")
 	for x in [-10.0, -7.0, -4.0]:
 		var shelf: Dictionary = movement_rules.resolve_step(_body(Vector2(x, 13)), Vector3.FORWARD * 4)
 		_expect(shelf["blocked_z"] and shelf["position"].z > 11.5, "capsule cannot cross a library shelf")
@@ -198,6 +195,66 @@ func _check_dining_room() -> void:
 		"sideboard blocks shots at eye height")
 	_expect(is_equal_approx(arena_rules.first_blocker_distance(_body(dining_center), Vector3.UP, 10.0), 2.5),
 		"dining ceiling seals the room at 3.5 m")
+
+func _check_guest_room() -> void:
+	var guest := _room("hospedes")
+	var stub := _room("lavabo_stub")
+	_expect(guest == Rect2(-10.5, 14.5, 6, 5), "guest room footprint")
+	_expect(stub == Rect2(-4, 16.5, 1.5, 2), "lavatory recess footprint")
+	var north_door := Vector2(-8.5, 14.25)
+	var east_door := Vector2(-4.25, 17.5)
+	var guest_doors := []
+	for door in salao_map.DOORS:
+		if "hospedes" in [door["room"], door["corridor"]]:
+			guest_doors.append(door["id"])
+			if door["id"] == "porta_hospedes":
+				_expect(door["room"] == "biblioteca" and door["corridor"] == "hospedes"
+					and salao_map.rect(door).get_center() == north_door, "north door connects library and guest room")
+			if door["id"] == "porta_lavabo":
+				_expect(door["room"] == "hospedes" and door["corridor"] == "lavabo_stub"
+					and salao_map.rect(door).get_center() == east_door, "east door connects guest room and lavatory recess")
+	_expect(guest_doors.size() == 2 and guest_doors.has("porta_hospedes") and guest_doors.has("porta_lavabo"),
+		"guest room has only the library and lavatory doors")
+
+	var center := guest.get_center()
+	var position := _body(_room("biblioteca").get_center())
+	for waypoint in [Vector2(-5.5, 13), Vector2(-8.5, 13), north_door,
+			Vector2(-8.5, 15.5), Vector2(-7.5, 15.5), center,
+			Vector2(-7.5, 17.5), east_door, stub.get_center()]:
+		var target := _body(waypoint)
+		position = movement_rules.resolve_step(position, target - position)["position"]
+		_expect(position.is_equal_approx(target), "capsule follows library through guest room into recess to %s" % waypoint)
+
+	var radius: float = arena_rules.PLAYER_HIT_RADIUS
+	var south_wall: Dictionary = movement_rules.resolve_step(_body(center), Vector3.BACK * 5)
+	_expect(south_wall["blocked_z"] and south_wall["position"].z <= guest.end.y - radius,
+		"solid south wall closes the guest room")
+	var east_wall: Dictionary = movement_rules.resolve_step(_body(stub.get_center()), Vector3.RIGHT * 4)
+	_expect(east_wall["blocked_x"] and east_wall["position"].x <= stub.end.x - radius,
+		"solid east wall closes the lavatory recess")
+
+	var bed: Dictionary = movement_rules.resolve_step(_body(center), Vector3.LEFT * 2.5)
+	_expect(bed["blocked_x"] and bed["position"].x >= -8.5 + radius, "bed blocks the capsule")
+	var eye := Vector3(center.x, 1.7, center.y)
+	_expect(arena_rules.first_blocker_distance(eye, Vector3.LEFT, 2.5) < 0.0, "shots pass over the bed")
+	var wardrobe_start := _body(Vector2(-7.5, 15.5))
+	var wardrobe: Dictionary = movement_rules.resolve_step(wardrobe_start, Vector3.RIGHT * 2.5)
+	_expect(wardrobe["blocked_x"] and wardrobe["position"].x <= -5.5 - radius, "wardrobe blocks the capsule")
+	eye = Vector3(wardrobe_start.x, 1.7, wardrobe_start.z)
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(eye, Vector3.RIGHT, 2.5), 2.0),
+		"wardrobe blocks shots at eye height")
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(_body(center), Vector3.UP, 10.0), 2.5),
+		"guest room ceiling seals at 3.5 m")
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(_body(stub.get_center()), Vector3.UP, 10.0), 2.0),
+		"lavatory recess ceiling seals at 3 m")
+
+	for index in salao_map.SPAWNS.size():
+		var spawn: Vector2 = salao_map.SPAWNS[index]
+		if guest.has_point(spawn):
+			var yaw: float = salao_map.spawn_yaw_at(index)
+			var facing := Vector2(-sin(yaw), -cos(yaw))
+			_expect(facing.is_equal_approx(spawn.direction_to(north_door))
+				or facing.is_equal_approx(spawn.direction_to(center)), "guest spawn faces the north door or the room center")
 
 func _body(point: Vector2) -> Vector3:
 	return Vector3(point.x, movement_rules.PLAYER_HEIGHT, point.y)

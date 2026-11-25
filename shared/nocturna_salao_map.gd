@@ -1,5 +1,5 @@
 extends RefCounted
-## Greybox do Salão Central, da Biblioteca, da Cozinha e da Sala de Jantar. Todas as coordenadas de piso estão em XZ.
+## Greybox do Salão Central, da Biblioteca, da Cozinha, da Sala de Jantar e do Quarto de Hóspedes. Todas as coordenadas de piso estão em XZ.
 
 const CELL := MansionMap.CELL
 const WALL_TOP := 7.0 + MansionMap.SLAB_THICKNESS
@@ -7,13 +7,15 @@ const MIN_X := -10.5
 const SPACES := [
 	{"id": "salao", "name": "Salão Central", "kind": "room", "min": Vector2(0, 0), "max": Vector2(16, 14), "ceiling": 7.0},
 	{"id": "biblioteca", "name": "Biblioteca", "kind": "room", "min": Vector2(MIN_X, 5), "max": Vector2(-0.5, 14), "ceiling": 3.5},
-	{"id": "hospedes_stub", "name": "Quarto de Hóspedes", "kind": "corridor", "min": Vector2(-9.5, 14.5), "max": Vector2(-7.5, 16), "ceiling": 3.0},
+	{"id": "hospedes", "name": "Quarto de Hóspedes", "kind": "room", "min": Vector2(MIN_X, 14.5), "max": Vector2(-4.5, 19.5), "ceiling": 3.5},
+	{"id": "lavabo_stub", "name": "Acesso ao Lavabo", "kind": "corridor", "min": Vector2(-4, 16.5), "max": Vector2(-2.5, 18.5), "ceiling": 3.0},
 	{"id": "cozinha", "name": "Cozinha", "kind": "room", "min": Vector2(16.5, 5), "max": Vector2(26.5, 14), "ceiling": 3.5},
 	{"id": "jantar", "name": "Sala de Jantar", "kind": "room", "min": Vector2(5.5, 14.5), "max": Vector2(19.5, 22.5), "ceiling": 3.5},
 ]
 const DOORS := [
 	{"id": "porta_biblioteca", "room": "salao", "corridor": "biblioteca", "min": Vector2(-0.5, 7), "max": Vector2(0, 9)},
-	{"id": "porta_hospedes", "room": "biblioteca", "corridor": "hospedes_stub", "min": Vector2(-9.5, 14), "max": Vector2(-7.5, 14.5)},
+	{"id": "porta_hospedes", "room": "biblioteca", "corridor": "hospedes", "min": Vector2(-9.5, 14), "max": Vector2(-7.5, 14.5)},
+	{"id": "porta_lavabo", "room": "hospedes", "corridor": "lavabo_stub", "min": Vector2(-4.5, 16.5), "max": Vector2(-4, 18.5)},
 	{"id": "porta_cozinha", "room": "salao", "corridor": "cozinha", "min": Vector2(16, 7), "max": Vector2(16.5, 9)},
 	{"id": "porta_jantar", "room": "salao", "corridor": "jantar", "min": Vector2(7, 14), "max": Vector2(9, 14.5)},
 	{"id": "porta_cozinha_jantar", "room": "cozinha", "corridor": "jantar", "min": Vector2(16.5, 14), "max": Vector2(18.5, 14.5)},
@@ -33,21 +35,23 @@ const FURNITURE := [
 	{"id": "escada_servico", "space": "cozinha", "min": Vector2(23.5, 5), "max": Vector2(26.5, 8), "height": 2.5},
 	{"id": "mesa_jantar", "space": "jantar", "min": Vector2(9, 19.5), "max": Vector2(16, 21), "height": 1.0},
 	{"id": "aparador", "space": "jantar", "min": Vector2(18.5, 16.5), "max": Vector2(19.5, 21.5), "height": 2.0},
+	{"id": "cama", "space": "hospedes", "min": Vector2(-10.5, 16.5), "max": Vector2(-8.5, 18.5), "height": 1.0},
+	{"id": "guarda_roupa", "space": "hospedes", "min": Vector2(-5.5, 14.5), "max": Vector2(-4.5, 16.5), "height": 2.5},
 ]
 const GALLERY := {"id": "galeria_fechada", "name": "Galeria", "min": Vector2(6, 0), "max": Vector2(10, 0.5)}
 const SPAWNS := [
 	Vector2(7, 8.75), Vector2(12.5, 18.5), Vector2(3.5, 0.5),
-	Vector2(-1.5, 12.75), Vector2(-2, 13.5), Vector2(-2.5, 12.75),
+	Vector2(-1.5, 12.75), Vector2(-2, 13.5), Vector2(-8.25, 19),
 	Vector2(17, 5.5), Vector2(17, 6.5),
 ]
 const WEAPONS := [
 	Vector2(21, 5.5), Vector2(13.25, 0.5), Vector2(10.75, 13.5), Vector2(26, 9), Vector2(6, 20.5),
-	Vector2(-9, 5.5), Vector2(-3, 5.5), Vector2(-6, 9),
+	Vector2(-10, 15.25), Vector2(-3, 5.5), Vector2(-6, 9),
 ]
 const AMMO := [
 	Vector2(19, 10), Vector2(25.5, 13.5), Vector2(11, 4.5), Vector2(6, 5.75), Vector2(15.5, 13.5),
 	Vector2(0.5, 0.5), Vector2(1.5, 13.5), Vector2(3, 9.25), Vector2(17.5, 22),
-	Vector2(-1.5, 9.75), Vector2(-10, 12.75), Vector2(-5.5, 13.5),
+	Vector2(-1.5, 9.75), Vector2(-5.25, 19), Vector2(-5.5, 13.5),
 ]
 
 static var enabled := OS.get_environment("OSSUSPEITOS_MAP") == "nocturna_salao"
@@ -83,6 +87,8 @@ static func spawn_yaw_at(index: int) -> float:
 			target = rect(space).get_center()
 		"jantar":
 			target = Vector2(8, 14.25)
+		"hospedes":
+			target = rect(space).get_center()
 	var direction := target - point
 	return atan2(-direction.x, -direction.y)
 
