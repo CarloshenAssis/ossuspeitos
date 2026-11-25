@@ -27,10 +27,11 @@ const SPACES := [
 	{"id": "corredor_oeste", "name": "Corredor Superior", "kind": "corridor", "min": Vector2(16.5, 5), "max": Vector2(18, 10), "floor": GALLERY_FLOOR, "ceiling": 7.0},
 	{"id": "corredor_leste", "name": "Corredor Superior", "kind": "corridor", "min": Vector2(18, 7), "max": Vector2(26.5, 10), "floor": GALLERY_FLOOR, "ceiling": 7.0},
 	{"id": "patamar_servico", "name": "Patamar de Serviço", "kind": "corridor", "min": Vector2(24.5, 5), "max": Vector2(26.5, 7), "floor": GALLERY_FLOOR, "ceiling": 7.0},
-	{"id": "quarto_norte_stub", "name": "Quarto Norte (stub)", "kind": "room", "min": Vector2(-3.5, 0), "max": Vector2(-0.5, 2), "floor": GALLERY_FLOOR, "ceiling": 7.0},
-	{"id": "suite_stub", "name": "Suíte (stub)", "kind": "room", "min": Vector2(-3.5, 3), "max": Vector2(-0.5, 5), "floor": GALLERY_FLOOR, "ceiling": 7.0},
-	{"id": "observatorio_stub", "name": "Observatório (stub)", "kind": "room", "min": Vector2(27, 5), "max": Vector2(30, 8), "floor": GALLERY_FLOOR, "ceiling": 7.0},
-	{"id": "musica_stub", "name": "Sala de Música (stub)", "kind": "room", "min": Vector2(27, 8), "max": Vector2(30, 11), "floor": GALLERY_FLOOR, "ceiling": 7.0},
+	{"id": "quarto_norte", "name": "Quarto Norte", "kind": "room", "min": Vector2(MIN_X, 0), "max": Vector2(-0.5, 3), "floor": GALLERY_FLOOR, "ceiling": 7.0},
+	{"id": "suite", "name": "Suíte", "kind": "room", "min": Vector2(MIN_X, 3.5), "max": Vector2(-0.5, 10), "floor": GALLERY_FLOOR, "ceiling": 7.0},
+	{"id": "observatorio", "name": "Observatório", "kind": "room", "min": Vector2(27, 5), "max": Vector2(34, 8), "floor": GALLERY_FLOOR, "ceiling": 7.0},
+	{"id": "musica", "name": "Sala de Música", "kind": "room", "min": Vector2(27, 8.5), "max": Vector2(34, 14), "floor": GALLERY_FLOOR, "ceiling": 7.0},
+	{"id": "musica_acesso", "name": "Sala de Música", "kind": "room", "min": Vector2(27, 8), "max": Vector2(29, 8.5), "floor": GALLERY_FLOOR, "ceiling": 7.0},
 ]
 const DOORS := [
 	{"id": "porta_biblioteca", "room": "salao", "corridor": "biblioteca", "min": Vector2(-0.5, 7), "max": Vector2(0, 9)},
@@ -45,10 +46,12 @@ const DOORS := [
 	{"id": "porta_jardim_acesso", "room": "jardim_inverno", "corridor": "jardim_acesso", "min": Vector2(5, 26.5), "max": Vector2(5.5, 28.5)},
 	{"id": "porta_jardim_jantar", "room": "jantar", "corridor": "jardim_inverno", "min": Vector2(11.5, 22.5), "max": Vector2(13.5, 23)},
 	{"id": "porta_galeria_corredor", "room": "galeria_leste", "corridor": "corredor_oeste", "min": Vector2(16, 5), "max": Vector2(16.5, 7), "floor": GALLERY_FLOOR},
-	{"id": "porta_quarto_norte", "room": "quarto_norte_stub", "corridor": "galeria", "min": Vector2(-0.5, 0), "max": Vector2(0, 2), "floor": GALLERY_FLOOR},
-	{"id": "porta_suite", "room": "suite_stub", "corridor": "galeria_oeste", "min": Vector2(-0.5, 3), "max": Vector2(0, 5), "floor": GALLERY_FLOOR},
-	{"id": "porta_observatorio", "room": "observatorio_stub", "corridor": "patamar_servico", "min": Vector2(26.5, 5), "max": Vector2(27, 7), "floor": GALLERY_FLOOR},
-	{"id": "porta_musica", "room": "musica_stub", "corridor": "corredor_leste", "min": Vector2(26.5, 8), "max": Vector2(27, 10), "floor": GALLERY_FLOOR},
+	{"id": "porta_quarto_norte", "room": "quarto_norte", "corridor": "galeria", "min": Vector2(-0.5, 0), "max": Vector2(0, 2), "floor": GALLERY_FLOOR},
+	{"id": "porta_suite", "room": "suite", "corridor": "galeria_oeste", "min": Vector2(-0.5, 3), "max": Vector2(0, 5), "floor": GALLERY_FLOOR},
+	{"id": "porta_observatorio", "room": "observatorio", "corridor": "patamar_servico", "min": Vector2(26.5, 5), "max": Vector2(27, 7), "floor": GALLERY_FLOOR},
+	{"id": "porta_musica", "room": "musica", "corridor": "corredor_leste", "min": Vector2(26.5, 8), "max": Vector2(27, 10), "floor": GALLERY_FLOOR},
+	{"id": "porta_suite_norte", "room": "suite", "corridor": "quarto_norte", "min": Vector2(-8, 3), "max": Vector2(-6, 3.5), "floor": GALLERY_FLOOR},
+	{"id": "porta_musica_observatorio", "room": "musica", "corridor": "observatorio", "min": Vector2(29, 8), "max": Vector2(31, 8.5), "floor": GALLERY_FLOOR},
 ]
 const FURNITURE := [
 	{"id": "coluna_no", "min": Vector2(3, 6), "max": Vector2(4, 7), "height": 7.0},
@@ -70,6 +73,13 @@ const FURNITURE := [
 	{"id": "jardineira_s", "space": "jardim_inverno", "min": Vector2(8, 28), "max": Vector2(16, 29), "height": 1.0},
 	{"id": "planta_a", "space": "jardim_inverno", "min": Vector2(8.5, 25), "max": Vector2(9.5, 26), "height": 2.5},
 	{"id": "planta_b", "space": "jardim_inverno", "min": Vector2(15.5, 25), "max": Vector2(16.5, 26), "height": 2.5},
+	{"id": "cama_norte", "space": "quarto_norte", "min": Vector2(MIN_X, 0.5), "max": Vector2(-8, 2.5), "height": 1.0, "floor": GALLERY_FLOOR},
+	{"id": "guarda_norte", "space": "quarto_norte", "min": Vector2(MIN_X, 0), "max": Vector2(-9.5, 1.5), "height": 2.5, "floor": GALLERY_FLOOR},
+	{"id": "cama_suite", "space": "suite", "min": Vector2(MIN_X, 6), "max": Vector2(-8, 9), "height": 1.0, "floor": GALLERY_FLOOR},
+	{"id": "guarda_suite", "space": "suite", "min": Vector2(-1.5, 7), "max": Vector2(-0.5, 9.5), "height": 2.5, "floor": GALLERY_FLOOR},
+	{"id": "pedestal_observatorio", "space": "observatorio", "min": Vector2(32, 6), "max": Vector2(33, 7), "height": 2.5, "floor": GALLERY_FLOOR},
+	{"id": "piano", "space": "musica", "min": Vector2(28, 11.75), "max": Vector2(32, 13.75), "height": 1.0, "floor": GALLERY_FLOOR},
+	{"id": "armario_musica", "space": "musica", "min": Vector2(33, 9), "max": Vector2(34, 12), "height": 2.5, "floor": GALLERY_FLOOR},
 ]
 const RAMPS := [
 	{"id": "lance_oeste", "space": "salao", "min": Vector2(4, 2), "max": Vector2(6, 6),
@@ -232,24 +242,32 @@ static func _append_walls(result: Array, wall_cells: Dictionary, bottom: float, 
 static func blockers() -> Array:
 	var ground := _cells(SPACES + DOORS, 0.0)
 	var ground_walls := _wall_cells(ground)
-	var upper_walls := _wall_cells(_cells(SPACES + DOORS, GALLERY_FLOOR))
+	var upper := _cells(SPACES + DOORS, GALLERY_FLOOR)
+	var upper_walls := _wall_cells(upper)
 	for cell in upper_walls.keys():
 		if ground.has(cell) or ground_walls.has(cell):
 			upper_walls.erase(cell)
 	for cell in _cells(DOORS, GALLERY_FLOOR):
 		ground_walls.erase(cell)
+	# Onde o piso superior cruza uma parede térrea, mantenha só a parte sob a laje.
+	var low_walls := {}
+	for cell in ground_walls.keys():
+		if upper.has(cell):
+			low_walls[cell] = ground_walls[cell]
+			ground_walls.erase(cell)
 	var result: Array = []
+	_append_walls(result, low_walls, 0.0, GALLERY_FLOOR, "wall_ate_galeria")
 	_append_walls(result, ground_walls, 0.0, WALL_TOP, "wall")
 	_append_walls(result, upper_walls, GALLERY_FLOOR, WALL_TOP, "wall_superior")
-	# Os dois stubs leste se tocam em z=8. A divisória fecha o limite comum.
-	result.append(_box("parede_stubs_leste", "wall", Rect2(27, 7.95, 3, 0.1), GALLERY_FLOOR, WALL_TOP, ""))
+	# O piso da Biblioteca suprime a parede gerada no limite sul da Suíte.
+	result.append(_box("parede_suite_sul", "wall", Rect2(MIN_X, 10, 10, 0.5), GALLERY_FLOOR, WALL_TOP, "suite"))
 	for door in DOORS:
 		var floor_y := space_floor(door)
 		if floor_y > 0.0:
 			result.append(_box("base_" + door["id"], "wall", rect(door), 0.0, floor_y, door["room"]))
 		result.append(_box(door["id"], "lintel", rect(door), floor_y + MansionMap.DOOR_HEIGHT, WALL_TOP, door["room"]))
 	for entry in SPACES:
-		if entry["id"] == "cozinha":
+		if entry["id"] in ["cozinha", "biblioteca"]:
 			continue
 		var ceiling: float = entry["ceiling"]
 		var area := rect(entry).grow(CELL * 0.5) if space_floor(entry) == 0.0 else rect(entry)
@@ -257,8 +275,12 @@ static func blockers() -> Array:
 			ceiling + MansionMap.SLAB_THICKNESS, entry["id"]))
 	result.append(_box("teto_cozinha", "ceiling", Rect2(16.5, 10, 10, 4), 3.5, 3.5 + MansionMap.SLAB_THICKNESS, "cozinha"))
 	result.append(_box("teto_vao_cozinha", "ceiling", Rect2(16.5, 5, 10, 5), 7.0, WALL_TOP, "cozinha"))
+	result.append(_box("teto_biblioteca", "ceiling", Rect2(MIN_X, 10, 10, 4), GALLERY_FLOOR,
+		GALLERY_FLOOR + MansionMap.SLAB_THICKNESS, "biblioteca"))
+	result.append(_box("teto_vao_biblioteca", "ceiling", Rect2(MIN_X, 5, 10, 5), 7.0, WALL_TOP, "biblioteca"))
 	for item in FURNITURE:
-		result.append(_box(item["id"], "furniture", rect(item), 0.0, item["height"], item.get("space", "salao")))
+		var bottom: float = item.get("floor", 0.0)
+		result.append(_box(item["id"], "furniture", rect(item), bottom, bottom + item["height"], item.get("space", "salao")))
 	for ramp in RAMPS:
 		result.append(_box(ramp["id"], "furniture", rect(ramp), 0.0,
 			maxf(ramp["y_at_min"], ramp["y_at_max"]), ramp["space"], true))
