@@ -39,7 +39,7 @@ func _run() -> void:
 
 	var free := {}
 	for x in range(int(salao_map.MIN_X / GRID), int(26.5 / GRID) + 1):
-		for z in range(int(16.0 / GRID) + 1):
+		for z in range(int(22.5 / GRID) + 1):
 			var cell := Vector2i(x, z)
 			var point := Vector2(cell) * GRID
 			if not salao_map.space_at(point).is_empty() and not arena_rules.overlaps_blocker(_body(point)):
@@ -47,6 +47,7 @@ func _run() -> void:
 	_check_floor(free)
 	_check_items(free)
 	_check_walls()
+	_check_dining_room()
 
 	if failures == 0:
 		print("NOCTURNA_SALAO_LAYOUT_TEST_OK checks=%d blockers=%d spawns=%d pickups=%d" % [
@@ -87,27 +88,24 @@ func _room(id: String) -> Rect2:
 	return Rect2()
 
 func _check_items(free: Dictionary) -> void:
-	var hall := _room("salao")
-	var library := _room("biblioteca")
-	var kitchen := _room("cozinha")
-	for group in [salao_map.SPAWNS, salao_map.WEAPONS, salao_map.AMMO]:
-		var kitchen_count := 0
-		for point in group:
-			if kitchen.has_point(point):
-				kitchen_count += 1
-		_expect(kitchen_count >= 2, "kitchen has at least two entries of each item type")
+	var rooms: Array[Rect2] = []
+	for id in ["salao", "biblioteca", "cozinha", "jantar"]:
+		var room := _room(id)
+		rooms.append(room)
+		for group in [salao_map.SPAWNS, salao_map.WEAPONS, salao_map.AMMO]:
+			_expect(group.any(room.has_point), "%s has at least one entry of each item type" % id)
 	var pickups: Array = salao_map.WEAPONS + salao_map.AMMO
 	_expect(salao_map.SPAWNS.size() == 8 and salao_map.WEAPONS.size() == 8 and salao_map.AMMO.size() == 12, "eight spawns, eight weapons, twelve ammo")
 	for index in salao_map.SPAWNS.size():
 		var spawn: Vector2 = salao_map.SPAWNS[index]
-		_expect((hall.has_point(spawn) or library.has_point(spawn) or kitchen.has_point(spawn)) and free.has(Vector2i(spawn / GRID)),
+		_expect(rooms.any(func(room: Rect2) -> bool: return room.has_point(spawn)) and free.has(Vector2i(spawn / GRID)),
 			"spawn inside a room with capsule clearance")
 		for other in range(index + 1, salao_map.SPAWNS.size()):
 			_expect(spawn.distance_to(salao_map.SPAWNS[other]) >= arena_rules.PLAYER_HIT_RADIUS * 2.0, "spawns do not overlap")
 	for index in pickups.size():
 		var point: Vector2 = pickups[index]
 		var pickup: Vector3 = arena_rules.PICKUP_POSITIONS[index]
-		_expect((hall.has_point(point) or library.has_point(point) or kitchen.has_point(point)) and free.has(Vector2i(point / GRID)),
+		_expect(rooms.any(func(room: Rect2) -> bool: return room.has_point(point)) and free.has(Vector2i(point / GRID)),
 			"pickup inside a room with capsule clearance")
 		_expect(is_equal_approx(pickup.y, MansionMap.PICKUP_HEIGHT), "pickup height")
 		for door in salao_map.DOORS:
@@ -142,17 +140,9 @@ func _check_walls() -> void:
 	_expect(is_equal_approx(arena_rules.first_blocker_distance(gallery, Vector3.FORWARD, 10.0), 1.5), "gallery opening is sealed")
 
 	var kitchen_center := _body(_room("cozinha").get_center())
-	var position := _body(_room("salao").get_center())
-	for waypoint in [_body(Vector2(8, 8)), _body(Vector2(16.25, 8)), _body(Vector2(21.5, 8)), kitchen_center]:
-		position = movement_rules.resolve_step(position, waypoint - position)["position"]
-		_expect(position.is_equal_approx(waypoint), "capsule crosses from hall center to kitchen center")
 	var east_wall: Dictionary = movement_rules.resolve_step(kitchen_center, Vector3.RIGHT * 7)
 	_expect(east_wall["blocked_x"] and east_wall["position"].x <= 26.5 - arena_rules.PLAYER_HIT_RADIUS,
 		"solid east wall closes the kitchen")
-	var dinner_stub: Dictionary = movement_rules.resolve_step(_body(Vector2(17.5, 12)), Vector3.BACK * 5)
-	_expect(dinner_stub["blocked_z"] and dinner_stub["position"].z > 15.0
-		and dinner_stub["position"].z <= 16.0 - arena_rules.PLAYER_HIT_RADIUS,
-		"kitchen south door opens into a sealed dining room stub")
 	_expect(movement_rules.resolve_step(kitchen_center, Vector3.BACK * 4)["blocked_z"], "island blocks the capsule")
 	_expect(movement_rules.resolve_step(_body(Vector2(25, 9.5)), Vector3.FORWARD * 4)["blocked_z"],
 		"service stairs block the capsule")
@@ -161,6 +151,53 @@ func _check_walls() -> void:
 		"island blocks shots at eye height")
 	_expect(is_equal_approx(arena_rules.first_blocker_distance(kitchen_center, Vector3.UP, 10.0), 2.5),
 		"kitchen ceiling seals the room at 3.5 m")
+
+func _check_dining_room() -> void:
+	var dining := _room("jantar")
+	_expect(dining == Rect2(5.5, 14.5, 14, 8), "dining room footprint")
+	if not dining.has_area():
+		return
+	var door_centers := {}
+	for door in salao_map.DOORS:
+		door_centers[door["id"]] = salao_map.rect(door).get_center()
+		if door["id"] in ["porta_jantar", "porta_cozinha_jantar"]:
+			_expect(door["corridor"] == "jantar", "south doorway connects to the dining room")
+
+	var hall_center := _room("salao").get_center()
+	var kitchen_center := _room("cozinha").get_center()
+	var dining_center := dining.get_center()
+	var position := _body(hall_center)
+	for waypoint in [Vector2(8, 8), door_centers["porta_cozinha"], Vector2(21.5, 8), kitchen_center,
+			Vector2(17.5, 9.5), door_centers["porta_cozinha_jantar"], Vector2(17.5, 18.5), dining_center,
+			Vector2(8, 18.5), door_centers["porta_jantar"], hall_center]:
+		var target := _body(waypoint)
+		position = movement_rules.resolve_step(position, target - position)["position"]
+		_expect(position.is_equal_approx(target), "capsule follows the ground-floor loop to %s" % waypoint)
+
+	for index in salao_map.SPAWNS.size():
+		var spawn: Vector2 = salao_map.SPAWNS[index]
+		if dining.has_point(spawn):
+			var yaw: float = salao_map.spawn_yaw_at(index)
+			var facing := Vector2(-sin(yaw), -cos(yaw))
+			var to_door := spawn.direction_to(door_centers["porta_jantar"])
+			_expect(facing.is_equal_approx(to_door) or facing.is_equal_approx(spawn.direction_to(dining_center)),
+				"dining spawn faces the hall door or the room center")
+
+	var south_wall: Dictionary = movement_rules.resolve_step(_body(Vector2(8, 18.5)), Vector3.BACK * 7)
+	_expect(south_wall["blocked_z"] and south_wall["position"].z <= dining.end.y - arena_rules.PLAYER_HIT_RADIUS,
+		"solid south wall closes the dining room")
+	var table: Dictionary = movement_rules.resolve_step(_body(dining_center), Vector3.BACK * 3)
+	_expect(table["blocked_z"] and table["position"].z <= 19.5 - arena_rules.PLAYER_HIT_RADIUS,
+		"table blocks the capsule")
+	var sideboard: Dictionary = movement_rules.resolve_step(_body(dining_center), Vector3.RIGHT * 7)
+	_expect(sideboard["blocked_x"] and sideboard["position"].x <= 18.5 - arena_rules.PLAYER_HIT_RADIUS,
+		"sideboard blocks the capsule")
+	var eye := Vector3(dining_center.x, 1.7, dining_center.y)
+	_expect(arena_rules.first_blocker_distance(eye, Vector3.BACK, 3.0) < 0.0, "shots pass over the table")
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(eye, Vector3.RIGHT, 7.0), 6.0),
+		"sideboard blocks shots at eye height")
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(_body(dining_center), Vector3.UP, 10.0), 2.5),
+		"dining ceiling seals the room at 3.5 m")
 
 func _body(point: Vector2) -> Vector3:
 	return Vector3(point.x, movement_rules.PLAYER_HEIGHT, point.y)
