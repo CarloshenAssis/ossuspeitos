@@ -189,7 +189,7 @@ static func simulate_command(state: Dictionary, move: Vector2, yaw_delta: float,
 const MAX_COLLISION_STEP := 0.2
 
 static func resolve_step(from: Vector3, step: Vector3, environment: Array = []) -> Dictionary:
-	var position := Vector3(from.x, PLAYER_HEIGHT, from.z)
+	var position := Vector3(from.x, from.y if SalaoMap.enabled else PLAYER_HEIGHT, from.z)
 	var remaining := Vector2(step.x, step.z)
 	var chunks := maxi(1, int(ceil(remaining.length() / MAX_COLLISION_STEP)))
 	var chunk := remaining / float(chunks)
@@ -198,17 +198,19 @@ static func resolve_step(from: Vector3, step: Vector3, environment: Array = []) 
 	for _index in chunks:
 		var started_inside := ArenaRules.overlaps_blocker(position) or EnvironmentRules.overlaps(position, ArenaRules.PLAYER_HIT_RADIUS, environment)
 		if not blocked_x and chunk.x != 0.0:
-			var candidate := Vector3(clampf(position.x + chunk.x, _map_min_x, MAP_MAX_X), PLAYER_HEIGHT, position.z)
+			var candidate := Vector3(clampf(position.x + chunk.x, _map_min_x, MAP_MAX_X), position.y, position.z)
 			if not started_inside and (ArenaRules.overlaps_blocker(candidate) or EnvironmentRules.overlaps(candidate, ArenaRules.PLAYER_HIT_RADIUS, environment)):
 				blocked_x = true
 			else:
 				position = candidate
 		if not blocked_z and chunk.y != 0.0:
-			var candidate := Vector3(position.x, PLAYER_HEIGHT, clampf(position.z + chunk.y, MAP_MIN_Z, MAP_MAX_Z))
+			var candidate := Vector3(position.x, position.y, clampf(position.z + chunk.y, MAP_MIN_Z, MAP_MAX_Z))
 			if not started_inside and (ArenaRules.overlaps_blocker(candidate) or EnvironmentRules.overlaps(candidate, ArenaRules.PLAYER_HIT_RADIUS, environment)):
 				blocked_z = true
 			else:
 				position = candidate
+		if SalaoMap.enabled:
+			position.y = PLAYER_HEIGHT + SalaoMap.walk_height(position.x, position.z, position.y)
 	return {"position": position, "blocked_x": blocked_x, "blocked_z": blocked_z}
 
 static func snapshot_state(peer_id: int, state: Dictionary) -> Dictionary:
