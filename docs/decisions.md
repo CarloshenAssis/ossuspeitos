@@ -1118,3 +1118,19 @@ pessoa, mansão, quatro personagens cosméticos em patrulha e suas animações. 
 não implementa sessão multiplayer, papéis, lobby, ciclo de rodadas, combate,
 inventário ou espectador; esses recursos dependem do cliente e servidor online
 com protocolos compatíveis.
+
+## Variante greybox do Salão Central
+
+A planta aprovada é o padrão. Inicie o servidor e todos os clientes com
+`OSSUSPEITOS_MAP=nocturna_salao` para jogar no Salão. O seletor é local a cada
+processo. Use o mesmo valor em todos os processos da partida.
+
+O Salão tem dimensões provisórias de 16 × 14 m, teto de 7 m e portas de
+2 × 2,4 m. Biblioteca, Cozinha e Sala de Jantar são recuos fechados de
+1,5 m após a soleira de 0,5 m. A Galeria é um vão superior fechado. Os
+dois lances da escadaria e o patamar são volumes sólidos de cobertura.
+O movimento continua no piso térreo.
+
+A distância mínima entre pickups é de 2,5 m nesta variante. As armas
+mantêm 4 m de distância dos spawns, as munições mantêm 3 m, e todos os
+pickups mantêm 1,8 m de distância do centro de cada porta.

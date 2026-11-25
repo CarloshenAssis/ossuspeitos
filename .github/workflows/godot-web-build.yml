@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   build-web-demo:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
       publish_allowed: ${{ steps.release_policy.outputs.allowed }}

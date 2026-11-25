@@ -1,0 +1,122 @@
+extends SceneTree
+
+const GRID := 0.25
+const PICKUP_GAP := 2.5
+
+var salao_map: GDScript
+var arena_rules: GDScript
+var movement_rules: GDScript
+
+var checks := 0
+var failures := 0
+
+static func _static_init() -> void:
+	OS.set_environment("OSSUSPEITOS_MAP", "nocturna_salao")
+
+func _initialize() -> void:
+	call_deferred("_run")
+
+func _run() -> void:
+	# Load the map consumers after the test script has selected the variant.
+	salao_map = load("res://shared/nocturna_salao_map.gd")
+	arena_rules = load("res://shared/arena_rules.gd")
+	movement_rules = load("res://shared/movement_rules.gd")
+	_expect(salao_map.enabled and arena_rules.BLOCKERS == salao_map.blockers(), "active map uses variant geometry")
+	_expect(movement_rules.SPAWN_POINTS == salao_map.spawn_points(), "active spawns")
+	_expect(arena_rules.PICKUP_POSITIONS == salao_map.pickup_positions(), "active pickups")
+
+	var entries: Array = salao_map.SPACES + salao_map.DOORS
+	for index in entries.size():
+		var area: Rect2 = salao_map.rect(entries[index])
+		for other in range(index + 1, entries.size()):
+			_expect(not area.intersects(salao_map.rect(entries[other])), "non-overlapping spaces and doors")
+	for door in salao_map.DOORS:
+		var area: Rect2 = salao_map.rect(door)
+		_expect(minf(area.size.x, area.size.y) == 0.5 and maxf(area.size.x, area.size.y) == 2.0, "door dimensions")
+		var center: Vector2 = area.get_center()
+		var lintel: float = arena_rules.first_blocker_distance(Vector3(center.x, 1.0, center.y), Vector3.UP, 10.0)
+		_expect(is_equal_approx(lintel, MansionMap.DOOR_HEIGHT - 1.0), "door lintel height")
+
+	var free := {}
+	for x in range(-8, 73):
+		for z in range(65):
+			var cell := Vector2i(x, z)
+			var point := Vector2(cell) * GRID
+			if not salao_map.space_at(point).is_empty() and not arena_rules.overlaps_blocker(_body(point)):
+				free[cell] = true
+	_check_floor(free)
+	_check_items(free)
+	_check_walls()
+
+	if failures == 0:
+		print("NOCTURNA_SALAO_LAYOUT_TEST_OK checks=%d blockers=%d spawns=%d pickups=%d" % [
+			checks, arena_rules.BLOCKERS.size(), movement_rules.SPAWN_POINTS.size(), arena_rules.PICKUP_POSITIONS.size()])
+	quit(0 if failures == 0 else 1)
+
+func _check_floor(free: Dictionary) -> void:
+	var start := Vector2i(Vector2(8, 8) / GRID)
+	var queue: Array[Vector2i] = [start]
+	var visited := {start: true}
+	var index := 0
+	while index < queue.size():
+		var cell := queue[index]
+		index += 1
+		var from := _body(Vector2(cell) * GRID)
+		for offset in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+			var next: Vector2i = cell + offset
+			var point := Vector2(next) * GRID
+			var target := _body(point)
+			var resolved: Vector3 = movement_rules.resolve_step(from, target - from)["position"]
+			if salao_map.space_at(point).is_empty():
+				_expect(not resolved.is_equal_approx(target), "capsule stays within sealed floor")
+			if free.has(next) and not visited.has(next) and resolved.is_equal_approx(target):
+				visited[next] = true
+				queue.append(next)
+	_expect(free.has(start) and visited.size() == free.size(), "all capsule-clear floor is connected")
+	for door in salao_map.DOORS:
+		var center: Vector2 = salao_map.rect(door).get_center()
+		_expect(visited.has(Vector2i(center / GRID)), "door center is reachable")
+	for entry in salao_map.SPACES:
+		var center: Vector2 = salao_map.rect(entry).get_center()
+		_expect(visited.has(Vector2i(center / GRID)), "space center is reachable")
+
+func _check_items(free: Dictionary) -> void:
+	var hall: Rect2 = salao_map.rect(salao_map.SPACES[0])
+	var pickups: Array = salao_map.WEAPONS + salao_map.AMMO
+	_expect(salao_map.SPAWNS.size() == 8 and salao_map.WEAPONS.size() == 8 and salao_map.AMMO.size() == 12, "eight spawns, eight weapons, twelve ammo")
+	for index in salao_map.SPAWNS.size():
+		var spawn: Vector2 = salao_map.SPAWNS[index]
+		_expect(hall.has_point(spawn) and free.has(Vector2i(spawn / GRID)), "spawn inside hall with capsule clearance")
+		for other in range(index + 1, salao_map.SPAWNS.size()):
+			_expect(spawn.distance_to(salao_map.SPAWNS[other]) >= arena_rules.PLAYER_HIT_RADIUS * 2.0, "spawns do not overlap")
+	for index in pickups.size():
+		var point: Vector2 = pickups[index]
+		var pickup: Vector3 = arena_rules.PICKUP_POSITIONS[index]
+		_expect(hall.has_point(point) and free.has(Vector2i(point / GRID)), "pickup inside hall with capsule clearance")
+		_expect(is_equal_approx(pickup.y, MansionMap.PICKUP_HEIGHT), "pickup height")
+		for door in salao_map.DOORS:
+			_expect(point.distance_to(salao_map.rect(door).get_center()) >= 1.8, "pickup clearance from door")
+		for spawn in salao_map.SPAWNS:
+			_expect(point.distance_to(spawn) >= (4.0 if index < salao_map.WEAPONS.size() else 3.0), "pickup clearance from spawn")
+		for other in range(index + 1, pickups.size()):
+			_expect(point.distance_to(pickups[other]) >= PICKUP_GAP, "pickup pair clearance")
+
+func _check_walls() -> void:
+	var start := _body(Vector2(8, 12))
+	var south_wall: Dictionary = movement_rules.resolve_step(start + Vector3.LEFT * 2, Vector3.BACK * 8)
+	_expect(south_wall["blocked_z"] and south_wall["position"].z <= 14.0 - arena_rules.PLAYER_HIT_RADIUS,
+		"capsule cannot cross solid south wall in a long step")
+	var west_stub: Dictionary = movement_rules.resolve_step(_body(Vector2(1, 8)), Vector3.LEFT * 6)
+	_expect(west_stub["blocked_x"] and west_stub["position"].x < -0.5, "west stub is open at the door and closed at the end")
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(start, Vector3.UP, 10.0), 6.0), "hall ceiling seals the hall at 7 m")
+	var gallery := Vector3(8, 4.75, 2)
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(gallery, Vector3.FORWARD, 10.0), 1.5), "gallery opening is sealed")
+
+func _body(point: Vector2) -> Vector3:
+	return Vector3(point.x, movement_rules.PLAYER_HEIGHT, point.y)
+
+func _expect(condition: bool, message: String) -> void:
+	checks += 1
+	if not condition:
+		failures += 1
+		push_error(message)

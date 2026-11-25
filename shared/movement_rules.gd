@@ -45,14 +45,17 @@ const MAP_MIN_Z := -1.0
 const MAP_MAX_Z := 29.0
 ## Oito spawns candidatos da mansão (um por cômodo, fora o Salão). O servidor
 ## ocupa do primeiro livre em diante; os dados ficam em `MansionMap.SPAWNS`.
-static var SPAWN_POINTS: Array[Vector3] = MansionMap.spawn_points()
+const SalaoMap = preload("res://shared/nocturna_salao_map.gd")
+static var SPAWN_POINTS: Array[Vector3] = SalaoMap.spawn_points() if SalaoMap.enabled else MansionMap.spawn_points()
+# O recuo oeste passa do limite de segurança da planta aprovada.
+static var _map_min_x := SalaoMap.MIN_X if SalaoMap.enabled else MAP_MIN_X
 
 ## Yaw inicial do spawn: de frente para a porta do próprio cômodo.
 ## Com yaw 0 o jogador olha para -Z; `yaw` gira essa direção em torno de +Y.
 static func spawn_yaw(spawn: Vector3) -> float:
 	for index in SPAWN_POINTS.size():
 		if SPAWN_POINTS[index].is_equal_approx(spawn):
-			return MansionMap.spawn_yaw_at(index)
+			return SalaoMap.spawn_yaw_at(index) if SalaoMap.enabled else MansionMap.spawn_yaw_at(index)
 	return 0.0
 
 static func validate_input(move: Vector2, yaw_delta: float, pitch_delta: float = 0.0) -> String:
@@ -159,7 +162,7 @@ static func _step_with_parameters(state: Dictionary, move: Vector2, delta: float
 		velocity.x = 0.0
 	if bool(resolved["blocked_z"]):
 		velocity.z = 0.0
-	if (position.x <= MAP_MIN_X and velocity.x < 0.0) or (position.x >= MAP_MAX_X and velocity.x > 0.0):
+	if (position.x <= _map_min_x and velocity.x < 0.0) or (position.x >= MAP_MAX_X and velocity.x > 0.0):
 		velocity.x = 0.0
 	if (position.z <= MAP_MIN_Z and velocity.z < 0.0) or (position.z >= MAP_MAX_Z and velocity.z > 0.0):
 		velocity.z = 0.0
@@ -195,7 +198,7 @@ static func resolve_step(from: Vector3, step: Vector3, environment: Array = []) 
 	for _index in chunks:
 		var started_inside := ArenaRules.overlaps_blocker(position) or EnvironmentRules.overlaps(position, ArenaRules.PLAYER_HIT_RADIUS, environment)
 		if not blocked_x and chunk.x != 0.0:
-			var candidate := Vector3(clampf(position.x + chunk.x, MAP_MIN_X, MAP_MAX_X), PLAYER_HEIGHT, position.z)
+			var candidate := Vector3(clampf(position.x + chunk.x, _map_min_x, MAP_MAX_X), PLAYER_HEIGHT, position.z)
 			if not started_inside and (ArenaRules.overlaps_blocker(candidate) or EnvironmentRules.overlaps(candidate, ArenaRules.PLAYER_HIT_RADIUS, environment)):
 				blocked_x = true
 			else:
