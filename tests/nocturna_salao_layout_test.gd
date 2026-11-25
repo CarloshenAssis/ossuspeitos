@@ -39,7 +39,7 @@ func _run() -> void:
 
 	var free := {}
 	for x in range(int(salao_map.MIN_X / GRID), int(26.5 / GRID) + 1):
-		for z in range(int(28.0 / GRID) + 1):
+		for z in range(int(29.0 / GRID) + 1):
 			var cell := Vector2i(x, z)
 			var point := Vector2(cell) * GRID
 			if not salao_map.space_at(point).is_empty() and not arena_rules.overlaps_blocker(_body(point)):
@@ -51,6 +51,7 @@ func _run() -> void:
 	_check_guest_room()
 	_check_lavatory()
 	_check_marble_bathroom()
+	_check_winter_garden()
 
 	if failures == 0:
 		print("NOCTURNA_SALAO_LAYOUT_TEST_OK checks=%d blockers=%d spawns=%d pickups=%d" % [
@@ -109,7 +110,9 @@ func _check_items(free: Dictionary) -> void:
 	var bathroom := _room("banheiro_marmore")
 	_expect(salao_map.AMMO.any(lavatory.has_point), "lavatory keeps its ammo")
 	_expect(salao_map.AMMO.any(bathroom.has_point), "marble bathroom has ammo")
-	rooms.append_array([lavatory, bathroom])
+	var greenhouse := _room("jardim_inverno")
+	_expect(salao_map.AMMO.any(greenhouse.has_point), "greenhouse has ammo")
+	rooms.append_array([lavatory, bathroom, greenhouse])
 	for index in pickups.size():
 		var point: Vector2 = pickups[index]
 		var pickup: Vector3 = arena_rules.PICKUP_POSITIONS[index]
@@ -302,13 +305,11 @@ func _check_lavatory() -> void:
 
 func _check_marble_bathroom() -> void:
 	var bathroom := _room("banheiro_marmore")
-	var stub := _room("jardim_inverno_stub")
 	_expect(bathroom == Rect2(-4, 20, 9, 6), "marble bathroom footprint")
-	_expect(stub == Rect2(0.5, 26.5, 2, 1.5), "winter garden recess footprint")
 	_expect(salao_map.DOORS.any(func(door: Dictionary) -> bool:
 		return (door["id"] == "porta_jardim_inverno" and door["room"] == "banheiro_marmore"
-			and door["corridor"] == "jardim_inverno_stub" and salao_map.rect(door) == Rect2(0.5, 26, 2, 0.5))
-	), "bathroom south doorway leads into the winter garden recess")
+			and door["corridor"] == "jardim_acesso" and salao_map.rect(door) == Rect2(0.5, 26, 2, 0.5))
+	), "bathroom south doorway leads into the winter garden access")
 
 	var position := _body(_room("lavabo").get_center())
 	for waypoint in [Vector2(1.5, position.z), Vector2(1.5, 19.75), Vector2(1.5, 23), bathroom.get_center()]:
@@ -321,16 +322,6 @@ func _check_marble_bathroom() -> void:
 		var south_wall: Dictionary = movement_rules.resolve_step(_body(Vector2(x, 25)), Vector3.BACK * 3)
 		_expect(south_wall["blocked_z"] and south_wall["position"].z <= bathroom.end.y - radius,
 			"solid bathroom south wall beside the doorway at x=%s" % x)
-
-	var recess := _body(stub.get_center())
-	var recess_start := _body(Vector2(stub.get_center().x, 25.0))
-	var passage: Dictionary = movement_rules.resolve_step(recess_start, recess - recess_start)
-	_expect(passage["position"].is_equal_approx(recess), "capsule crosses the south doorway into the winter garden recess")
-	var recess_end: Dictionary = movement_rules.resolve_step(recess, Vector3.BACK * 3)
-	_expect(recess_end["blocked_z"] and recess_end["position"].z <= stub.end.y - radius,
-		"solid south wall closes the winter garden recess")
-	_expect(is_equal_approx(arena_rules.first_blocker_distance(recess, Vector3.UP, 10.0), 2.0),
-		"winter garden recess ceiling seals at 3 m")
 
 	var tub_start := _body(Vector2(-2.5, 20.75))
 	var tub: Dictionary = movement_rules.resolve_step(tub_start, Vector3.BACK * 2)
@@ -345,6 +336,59 @@ func _check_marble_bathroom() -> void:
 		"partition blocks shots at eye height")
 	_expect(is_equal_approx(arena_rules.first_blocker_distance(_body(bathroom.get_center()), Vector3.UP, 10.0), 2.5),
 		"marble bathroom ceiling seals at 3.5 m")
+
+func _check_winter_garden() -> void:
+	var access := _room("jardim_acesso")
+	var greenhouse := _room("jardim_inverno")
+	_expect(access == Rect2(-4, 26.5, 9, 2.5), "winter garden access footprint")
+	_expect(greenhouse == Rect2(5.5, 23, 14, 6), "greenhouse footprint")
+	var east_door := Rect2(5, 26.5, 0.5, 2)
+	var dining_door := Rect2(11.5, 22.5, 2, 0.5)
+	_expect(salao_map.DOORS.any(func(door: Dictionary) -> bool:
+		return (door["id"] == "porta_jardim_acesso" and door["room"] == "jardim_inverno"
+			and door["corridor"] == "jardim_acesso" and salao_map.rect(door) == east_door)
+	), "east doorway connects the access and greenhouse")
+	_expect(salao_map.DOORS.any(func(door: Dictionary) -> bool:
+		return (door["id"] == "porta_jardim_jantar" and door["room"] == "jantar"
+			and door["corridor"] == "jardim_inverno" and salao_map.rect(door) == dining_door)
+	), "north doorway connects the greenhouse and dining room")
+
+	var position := _body(_room("banheiro_marmore").get_center())
+	for waypoint in [Vector2(1.5, 23), Vector2(1.5, 26.25), Vector2(1.5, 27.75), access.get_center(),
+			Vector2(4, 27.75), Vector2(4, 27.5), east_door.get_center(), Vector2(12.5, 27.5),
+			greenhouse.get_center(), dining_door.get_center(), Vector2(12.5, 21.75),
+			Vector2(17, 21.75), Vector2(17, 18.5), _room("jantar").get_center()]:
+		var target := _body(waypoint)
+		position = movement_rules.resolve_step(position, target - position)["position"]
+		_expect(position.is_equal_approx(target), "capsule closes the winter garden loop at %s" % waypoint)
+
+	var radius: float = arena_rules.PLAYER_HIT_RADIUS
+	for point in [access.get_center(), Vector2(18, 27)]:
+		var start := _body(point)
+		var south_wall: Dictionary = movement_rules.resolve_step(start, Vector3.BACK * 4)
+		_expect(south_wall["blocked_z"] and south_wall["position"].z <= 29.0 - radius,
+			"solid winter garden south wall stops the capsule")
+		_expect(is_equal_approx(arena_rules.first_blocker_distance(start, Vector3.BACK, 4.0), 29.0 - start.z),
+			"winter garden south wall starts at z=29")
+	for room in [access, greenhouse]:
+		_expect(is_equal_approx(arena_rules.first_blocker_distance(_body(room.get_center()), Vector3.UP, 10.0), 3.0),
+			"winter garden ceiling seals at 4 m")
+
+	var west_planter := _body(Vector2(7.5, 24.5))
+	var center := _body(greenhouse.get_center())
+	_expect(movement_rules.resolve_step(west_planter, Vector3.LEFT * 1.5)["blocked_x"], "west planter blocks the capsule")
+	_expect(movement_rules.resolve_step(center, Vector3.BACK * 2.5)["blocked_z"], "south planter blocks the capsule")
+	_expect(arena_rules.first_blocker_distance(Vector3(7.5, 1.7, 24.5), Vector3.LEFT, 1.5) < 0.0,
+		"shots pass over the west planter")
+	_expect(arena_rules.first_blocker_distance(Vector3(12.5, 1.7, 26), Vector3.BACK, 2.5) < 0.0,
+		"shots pass over the south planter")
+
+	var plant_start := _body(Vector2(12.5, 25.5))
+	var eye := Vector3(plant_start.x, 1.7, plant_start.z)
+	for direction in [Vector3.LEFT, Vector3.RIGHT]:
+		_expect(movement_rules.resolve_step(plant_start, direction * 4)["blocked_x"], "plant column blocks the capsule")
+		_expect(is_equal_approx(arena_rules.first_blocker_distance(eye, direction, 4.0), 3.0),
+			"plant column blocks shots at eye height")
 
 func _body(point: Vector2) -> Vector3:
 	return Vector3(point.x, movement_rules.PLAYER_HEIGHT, point.y)
