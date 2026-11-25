@@ -95,13 +95,17 @@ static func first_blocker_distance(origin: Vector3, direction: Vector3, max_dist
 
 ## Verdadeiro quando um corpo de raio `radius` centrado em `position` (XZ)
 ## invade algum volume que barra movimento. Esses volumes começam abaixo do
-## topo do corpo e não há pulo, então a altura não entra no teste.
+## topo do corpo. Na Nocturna, o corpo também precisa cruzar a faixa vertical.
 static func overlaps_blocker(position: Vector3, radius: float = PLAYER_HIT_RADIUS) -> bool:
 	var candidates: Array = MOVEMENT_BLOCKERS
 	if radius <= BUCKET_MARGIN:
 		candidates = _movement_buckets.get(_bucket_of(position), [])
 	for blocker in candidates:
-		if _circle_hits_box(position, radius, blocker["center"], blocker["size"]):
+		var center: Vector3 = blocker["center"]
+		var size: Vector3 = blocker["size"]
+		if SalaoMap.enabled and absf(position.y - center.y) >= (PLAYER_HIT_HEIGHT + size.y) * 0.5 - 0.0001:
+			continue
+		if _circle_hits_box(position, radius, center, size):
 			return true
 	return false
 
@@ -110,7 +114,8 @@ static func blocks_movement(blocker: Dictionary) -> bool:
 		return false
 	var center: Vector3 = blocker["center"]
 	var size: Vector3 = blocker["size"]
-	return center.y - size.y * 0.5 < PLAYER_HIT_HEIGHT
+	var max_base := PLAYER_HIT_HEIGHT + (SalaoMap.GALLERY_FLOOR if SalaoMap.enabled else 0.0)
+	return center.y - size.y * 0.5 < max_base
 
 ## Volumes que barram o corpo, e um índice espacial deles em baldes de 4 m. Cada
 ## volume entra em todo balde que seu retângulo, alargado por `BUCKET_MARGIN`,
@@ -144,7 +149,7 @@ static func _circle_hits_box(position: Vector3, radius: float, center: Vector3, 
 	return dx * dx + dz * dz < radius * radius
 
 static func zone_at(position: Vector3) -> Dictionary:
-	var entry := SalaoMap.space_at(Vector2(position.x, position.z)) if SalaoMap.enabled else MansionMap.space_at(position)
+	var entry := SalaoMap.space_at(Vector2(position.x, position.z), position.y) if SalaoMap.enabled else MansionMap.space_at(position)
 	if entry.is_empty():
 		return {}
 	for zone in ZONES:

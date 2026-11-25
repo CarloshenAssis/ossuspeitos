@@ -18,8 +18,11 @@ func _initialize() -> void:
 		and is_equal_approx(side["position"].y, MovementRules.PLAYER_HEIGHT), "west stair rail blocks lateral entry")
 
 	var landing := _at(Vector2(8, 1), 3.5)
-	var drop := MovementRules.resolve_step(landing, Vector3.BACK * 2)
-	_expect(drop["position"].is_equal_approx(_at(Vector2(8, 3), 0.0)), "open gallery edge snaps to ground")
+	var rail := MovementRules.resolve_step(_at(Vector2(8, 3), 3.5), Vector3.BACK * 3)
+	_expect(rail["blocked_z"] and rail["position"].z < 5.0
+		and is_equal_approx(rail["position"].y, landing.y), "gallery south rail keeps the capsule upstairs")
+	var under := MovementRules.resolve_step(_at(Vector2(8, 6), 0.0), Vector3.FORWARD * 5)
+	_expect(under["position"].is_equal_approx(_at(Vector2(8, 1), 0.0)), "ground route stays beneath the gallery")
 
 	var eye := landing + Vector3.UP * ArenaRules.EYE_HEIGHT
 	var distance := ArenaRules.first_blocker_distance(eye, Vector3.DOWN, 10.0)
