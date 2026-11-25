@@ -209,6 +209,8 @@ static func resolve_step(from: Vector3, step: Vector3, environment: Array = []) 
 				blocked_z = true
 			else:
 				position = candidate
+	if SalaoMap.enabled:
+		position.y = PLAYER_HEIGHT + SalaoMap.floor_height(position.x, position.z)
 	return {"position": position, "blocked_x": blocked_x, "blocked_z": blocked_z}
 
 static func snapshot_state(peer_id: int, state: Dictionary) -> Dictionary:

@@ -66,11 +66,11 @@ func _check_floor(free: Dictionary) -> void:
 	while index < queue.size():
 		var cell := queue[index]
 		index += 1
-		var from := _body(Vector2(cell) * GRID)
+		var from := _at(Vector2(cell) * GRID)
 		for offset in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
 			var next: Vector2i = cell + offset
 			var point := Vector2(next) * GRID
-			var target := _body(point)
+			var target := _at(point)
 			var resolved: Vector3 = movement_rules.resolve_step(from, target - from)["position"]
 			if salao_map.space_at(point).is_empty():
 				_expect(not resolved.is_equal_approx(target), "capsule stays within sealed floor")
@@ -144,7 +144,7 @@ func _check_walls() -> void:
 		"library ceiling seals the room at 3.5 m")
 	_expect(is_equal_approx(arena_rules.first_blocker_distance(start, Vector3.UP, 10.0), 6.0), "hall ceiling seals the hall at 7 m")
 	var gallery := Vector3(8, 4.75, 2)
-	_expect(is_equal_approx(arena_rules.first_blocker_distance(gallery, Vector3.FORWARD, 10.0), 1.5), "gallery opening is sealed")
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(gallery, Vector3.FORWARD, 10.0), 2.0), "gallery shot reaches the north wall")
 
 	var kitchen_center := _body(_room("cozinha").get_center())
 	var east_wall: Dictionary = movement_rules.resolve_step(kitchen_center, Vector3.RIGHT * 7)
@@ -152,7 +152,7 @@ func _check_walls() -> void:
 		"solid east wall closes the kitchen")
 	_expect(movement_rules.resolve_step(kitchen_center, Vector3.BACK * 4)["blocked_z"], "island blocks the capsule")
 	_expect(movement_rules.resolve_step(_body(Vector2(25, 9.5)), Vector3.FORWARD * 4)["blocked_z"],
-		"service stairs block the capsule")
+		"service landing south rail blocks the capsule")
 	var eye := Vector3(kitchen_center.x, 1.7, kitchen_center.z)
 	_expect(is_equal_approx(arena_rules.first_blocker_distance(eye, Vector3.BACK, 4.0), 1.0),
 		"island blocks shots at eye height")
@@ -389,6 +389,9 @@ func _check_winter_garden() -> void:
 		_expect(movement_rules.resolve_step(plant_start, direction * 4)["blocked_x"], "plant column blocks the capsule")
 		_expect(is_equal_approx(arena_rules.first_blocker_distance(eye, direction, 4.0), 3.0),
 			"plant column blocks shots at eye height")
+
+func _at(point: Vector2) -> Vector3:
+	return _body(point) + Vector3.UP * salao_map.floor_height(point.x, point.y)
 
 func _body(point: Vector2) -> Vector3:
 	return Vector3(point.x, movement_rules.PLAYER_HEIGHT, point.y)

@@ -29,9 +29,6 @@ const DOORS := [
 	{"id": "porta_jardim_jantar", "room": "jantar", "corridor": "jardim_inverno", "min": Vector2(11.5, 22.5), "max": Vector2(13.5, 23)},
 ]
 const FURNITURE := [
-	{"id": "patamar", "min": Vector2(4, 0), "max": Vector2(12, 1), "height": 3.5},
-	{"id": "lance_oeste", "min": Vector2(4, 1), "max": Vector2(6, 3), "height": 2.0},
-	{"id": "lance_leste", "min": Vector2(10, 1), "max": Vector2(12, 3), "height": 2.0},
 	{"id": "coluna_no", "min": Vector2(3, 6), "max": Vector2(4, 7), "height": 7.0},
 	{"id": "coluna_ne", "min": Vector2(12, 6), "max": Vector2(13, 7), "height": 7.0},
 	{"id": "coluna_so", "min": Vector2(3, 10), "max": Vector2(4, 11), "height": 7.0},
@@ -40,7 +37,6 @@ const FURNITURE := [
 	{"id": "estante_m", "space": "biblioteca", "min": Vector2(-7.5, 5), "max": Vector2(-6.5, 12), "height": 2.5},
 	{"id": "estante_l", "space": "biblioteca", "min": Vector2(-4.5, 5), "max": Vector2(-3.5, 11.5), "height": 2.5},
 	{"id": "ilha", "space": "cozinha", "min": Vector2(19.5, 10.5), "max": Vector2(23, 12.5), "height": 2.0},
-	{"id": "escada_servico", "space": "cozinha", "min": Vector2(23.5, 5), "max": Vector2(26.5, 8), "height": 2.5},
 	{"id": "mesa_jantar", "space": "jantar", "min": Vector2(9, 19.5), "max": Vector2(16, 21), "height": 1.0},
 	{"id": "aparador", "space": "jantar", "min": Vector2(18.5, 16.5), "max": Vector2(19.5, 21.5), "height": 2.0},
 	{"id": "cama", "space": "hospedes", "min": Vector2(-10.5, 16.5), "max": Vector2(-8.5, 18.5), "height": 1.0},
@@ -53,18 +49,40 @@ const FURNITURE := [
 	{"id": "planta_a", "space": "jardim_inverno", "min": Vector2(8.5, 25), "max": Vector2(9.5, 26), "height": 2.5},
 	{"id": "planta_b", "space": "jardim_inverno", "min": Vector2(15.5, 25), "max": Vector2(16.5, 26), "height": 2.5},
 ]
-const GALLERY := {"id": "galeria_fechada", "name": "Galeria", "min": Vector2(6, 0), "max": Vector2(10, 0.5)}
+const GALLERY_FLOOR := 3.5
+const RAMPS := [
+	{"id": "lance_oeste", "space": "salao", "min": Vector2(4, 2), "max": Vector2(6, 6),
+		"axis": "z", "y_at_min": GALLERY_FLOOR, "y_at_max": 0.0},
+	{"id": "lance_leste", "space": "salao", "min": Vector2(10, 2), "max": Vector2(12, 6),
+		"axis": "z", "y_at_min": GALLERY_FLOOR, "y_at_max": 0.0},
+	{"id": "escada_servico", "space": "cozinha", "min": Vector2(18, 5), "max": Vector2(24.5, 7),
+		"axis": "x", "y_at_min": 0.0, "y_at_max": GALLERY_FLOOR},
+]
+const GALLERY := {"id": "patamar_galeria", "name": "Galeria", "space": "salao",
+	"min": Vector2(4, 0), "max": Vector2(12, 2), "y": GALLERY_FLOOR}
+const LANDINGS := [
+	GALLERY,
+	{"id": "patamar_servico", "space": "cozinha", "min": Vector2(24.5, 5), "max": Vector2(26.5, 8), "y": GALLERY_FLOOR},
+]
+const HALL_RAILS := [
+	Rect2(4, 0, 0.1, 2), Rect2(11.9, 0, 0.1, 2),
+	Rect2(4, 2, 0.1, 4), Rect2(5.95, 2, 0.1, 4),
+	Rect2(9.95, 2, 0.1, 4), Rect2(11.9, 2, 0.1, 4),
+]
+const SERVICE_RAILS := [
+	Rect2(18, 6.9, 6.5, 0.1), Rect2(24.5, 6.9, 0.1, 1.1), Rect2(24.5, 7.9, 2, 0.1),
+]
 const SPAWNS := [
 	Vector2(7, 8.75), Vector2(12.5, 18.5), Vector2(3.5, 0.5),
 	Vector2(-1.5, 12.75), Vector2(-2, 13.5), Vector2(-8.25, 19),
 	Vector2(17, 5.5), Vector2(17, 6.5),
 ]
 const WEAPONS := [
-	Vector2(21, 5.5), Vector2(13.25, 0.5), Vector2(10.75, 13.5), Vector2(26, 9), Vector2(6, 20.5),
+	Vector2(25.5, 13.5), Vector2(13.25, 0.5), Vector2(10.75, 13.5), Vector2(26, 9), Vector2(6, 20.5),
 	Vector2(-10, 15.25), Vector2(-3, 5.5), Vector2(-6, 9),
 ]
 const AMMO := [
-	Vector2(19, 10), Vector2(18, 27), Vector2(11, 4.5), Vector2(6, 5.75), Vector2(15.5, 13.5),
+	Vector2(19, 10), Vector2(18, 27), Vector2(8, 2.5), Vector2(0.75, 1.75), Vector2(15.5, 13.5),
 	Vector2(1, 24.25), Vector2(1.5, 13.5), Vector2(-0.75, 17.75), Vector2(17.5, 22),
 	Vector2(-1.5, 9.75), Vector2(-5.25, 19), Vector2(-5.5, 13.5),
 ]
@@ -73,6 +91,20 @@ static var enabled := OS.get_environment("OSSUSPEITOS_MAP") == "nocturna_salao"
 
 static func rect(entry: Dictionary) -> Rect2:
 	return Rect2(entry["min"], (entry["max"] as Vector2) - (entry["min"] as Vector2))
+
+static func floor_height(x: float, z: float) -> float:
+	var point := Vector2(x, z)
+	var height := 0.0
+	for landing in LANDINGS:
+		if rect(landing).has_point(point):
+			height = maxf(height, landing["y"])
+	for ramp in RAMPS:
+		var area := rect(ramp)
+		if area.has_point(point):
+			var axis := 0 if ramp["axis"] == "x" else 1
+			var t := clampf(inverse_lerp(area.position[axis], area.end[axis], point[axis]), 0.0, 1.0)
+			height = maxf(height, lerpf(ramp["y_at_min"], ramp["y_at_max"], t))
+	return height
 
 static func space_at(point: Vector2) -> Dictionary:
 	for entry in SPACES:
@@ -149,11 +181,24 @@ static func blockers() -> Array:
 			ceiling + MansionMap.SLAB_THICKNESS, entry["id"]))
 	for item in FURNITURE:
 		result.append(_box(item["id"], "furniture", rect(item), 0.0, item["height"], item.get("space", "salao")))
-	result.append(_box(GALLERY["id"], "furniture", rect(GALLERY), 3.5, 6.0, "salao"))
+	for ramp in RAMPS:
+		result.append(_box(ramp["id"], "furniture", rect(ramp), 0.0,
+			maxf(ramp["y_at_min"], ramp["y_at_max"]), ramp["space"], true))
+	for landing in LANDINGS:
+		var height: float = landing["y"]
+		result.append(_box(landing["id"], "furniture", rect(landing), height - 0.1, height, landing["space"], true))
+	for index in HALL_RAILS.size():
+		result.append(_box("corrimao_salao_%d" % index, "furniture", HALL_RAILS[index], 0.0, 4.5, "salao"))
+	for index in SERVICE_RAILS.size():
+		result.append(_box("corrimao_servico_%d" % index, "furniture", SERVICE_RAILS[index], 0.0, 4.5, "cozinha"))
 	return result
 
-static func _box(id: String, kind: String, area: Rect2, bottom: float, top: float, space: String) -> Dictionary:
+static func _box(id: String, kind: String, area: Rect2, bottom: float, top: float, space: String,
+		walkable := false) -> Dictionary:
 	var center := area.get_center()
-	return {"id": id, "kind": kind, "space": space,
+	var blocker := {"id": id, "kind": kind, "space": space,
 		"center": Vector3(center.x, (bottom + top) * 0.5, center.y),
 		"size": Vector3(area.size.x, top - bottom, area.size.y)}
+	if walkable:
+		blocker["walkable"] = true
+	return blocker

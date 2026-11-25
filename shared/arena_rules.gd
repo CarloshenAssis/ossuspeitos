@@ -106,6 +106,8 @@ static func overlaps_blocker(position: Vector3, radius: float = PLAYER_HIT_RADIU
 	return false
 
 static func blocks_movement(blocker: Dictionary) -> bool:
+	if blocker.get("walkable", false):
+		return false
 	var center: Vector3 = blocker["center"]
 	var size: Vector3 = blocker["size"]
 	return center.y - size.y * 0.5 < PLAYER_HIT_HEIGHT
