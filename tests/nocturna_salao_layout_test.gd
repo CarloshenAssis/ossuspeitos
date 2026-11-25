@@ -50,6 +50,7 @@ func _run() -> void:
 	_check_items(free)
 	_check_walls()
 	_check_gallery()
+	_check_upper_rooms()
 	_check_dining_room()
 	_check_guest_room()
 	_check_lavatory()
@@ -152,8 +153,8 @@ func _check_walls() -> void:
 	for x in [-10.0, -7.0, -4.0]:
 		var shelf: Dictionary = movement_rules.resolve_step(_body(Vector2(x, 13)), Vector3.FORWARD * 4)
 		_expect(shelf["blocked_z"] and shelf["position"].z > 11.5, "capsule cannot cross a library shelf")
-	var library_center := _body(Vector2(-5.5, 9.5))
-	_expect(is_equal_approx(arena_rules.first_blocker_distance(library_center, Vector3.UP, 10.0), 2.5),
+	var library_south := _body(Vector2(-5.5, 12))
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(library_south, Vector3.UP, 10.0), 2.5),
 		"library ceiling seals the room at 3.5 m")
 	_expect(is_equal_approx(arena_rules.first_blocker_distance(start, Vector3.UP, 10.0), 6.0), "hall ceiling seals the hall at 7 m")
 	var gallery := Vector3(8, 4.75, 2)
@@ -187,21 +188,6 @@ func _check_gallery() -> void:
 			_expect(position.is_equal_approx(target), "upper loop reaches %s from %s" % [waypoint, route.front()])
 		route.reverse()
 
-	for stub in [
-		[Vector2(1, 1), Vector2(-2, 1), Vector3.LEFT],
-		[Vector2(1, 4), Vector2(-2, 4), Vector3.LEFT],
-		[Vector2(25.5, 6), Vector2(28.5, 6), Vector3.RIGHT],
-		[Vector2(25.5, 9), Vector2(28.5, 9), Vector3.RIGHT],
-	]:
-		var start: Vector3 = _body(stub[0]) + Vector3.UP * salao_map.GALLERY_FLOOR
-		var inside: Vector3 = _body(stub[1]) + Vector3.UP * salao_map.GALLERY_FLOOR
-		var reached: Vector3 = movement_rules.resolve_step(start, inside - start)["position"]
-		_expect(reached.is_equal_approx(inside), "capsule enters stub at %s" % inside)
-		var stopped: Dictionary = movement_rules.resolve_step(reached, stub[2] * 4)
-		_expect(stopped["blocked_x"] and is_equal_approx(stopped["position"].y, inside.y), "stub end wall blocks capsule at %s" % inside)
-
-	var divider: Dictionary = movement_rules.resolve_step(Vector3(28.5, 4.5, 6), Vector3.BACK * 3)
-	_expect(divider["blocked_z"] and divider["position"].z < 8.0, "east stubs have no connection")
 	var plug: Dictionary = movement_rules.resolve_step(_body(Vector2(15, 6)), Vector3.RIGHT * 2)
 	_expect(plug["blocked_x"] and plug["position"].x < 16.0, "upper doorway remains sealed at ground level")
 	var balcony := Vector3(8, 4.5, 3)
@@ -218,6 +204,64 @@ func _check_gallery() -> void:
 		"zone name distinguishes the floors at the same XZ")
 	_expect(is_equal_approx(arena_rules.first_blocker_distance(Vector3(25.5, 4.5, 6), Vector3.UP, 10.0), 2.5),
 		"service landing ceiling is at 7 m")
+
+func _check_upper_rooms() -> void:
+	var upstairs: Vector3 = Vector3.UP * salao_map.GALLERY_FLOOR
+	var north := _room("quarto_norte").get_center()
+	var suite := _room("suite").get_center()
+	var observatory := _room("observatorio").get_center()
+	var music := _room("musica").get_center()
+	for route in [
+		[Vector2(1, 1), Vector2(north.x, 1), north, Vector2(-7, north.y),
+			Vector2(-7, suite.y), suite, Vector2(suite.x, 4), Vector2(1, 4), Vector2(1, 1)],
+		[Vector2(25.5, 6), Vector2(observatory.x, 6), observatory, Vector2(30, observatory.y),
+			Vector2(30, music.y), music, Vector2(music.x, 9), Vector2(25.5, 9), Vector2(25.5, 6)],
+	]:
+		for _direction in 2:
+			var position := _body(route.front()) + upstairs
+			for point in route:
+				var target := _body(point) + upstairs
+				position = movement_rules.resolve_step(position, target - position)["position"]
+				_expect(position.is_equal_approx(target), "upper room loop reaches %s from %s" % [point, route.front()])
+			route.reverse()
+
+	for wall in [
+		[Vector2(-7, 2.7), Vector3.LEFT, 3.5],
+		[Vector2(-7, 4.5), Vector3.LEFT, 3.5],
+		[Vector2(31, 7.5), Vector3.RIGHT, 3.0],
+		[Vector2(32.5, 13), Vector3.RIGHT, 1.5],
+		[suite, Vector3.BACK, 10.0 - suite.y],
+	]:
+		var start := _body(wall[0]) + upstairs
+		var direction: Vector3 = wall[1]
+		var distance: float = wall[2]
+		var result: Dictionary = movement_rules.resolve_step(start, direction * (distance + 1.0))
+		_expect(result["blocked_x"] if direction.x != 0 else result["blocked_z"], "upper wall stops capsule from %s" % start)
+		_expect(is_equal_approx(arena_rules.first_blocker_distance(start + Vector3.UP * 0.7, direction, distance + 1.0), distance),
+			"upper wall seals the room at %s" % (start + direction * distance))
+
+	for furniture in [
+		["cama_norte", Vector2(-7, 2), Vector3.LEFT, 1.0, false],
+		["cama_suite", Vector2(-7, 8), Vector3.LEFT, 1.0, false],
+		["piano", Vector2(30, 11), Vector3.BACK, 0.75, false],
+		["guarda_norte", Vector2(-7, 1), Vector3.LEFT, 2.5, true],
+		["guarda_suite", Vector2(-2.5, 8), Vector3.RIGHT, 1.0, true],
+		["pedestal_observatorio", Vector2(31, 6.5), Vector3.RIGHT, 1.0, true],
+		["armario_musica", Vector2(32, 10), Vector3.RIGHT, 1.0, true],
+	]:
+		var start := _body(furniture[1]) + upstairs
+		var direction: Vector3 = furniture[2]
+		var distance: float = furniture[3]
+		var result: Dictionary = movement_rules.resolve_step(start, direction * (distance + 0.25))
+		_expect(result["blocked_x"] if direction.x != 0 else result["blocked_z"], "%s stops the capsule" % furniture[0])
+		var hit: float = arena_rules.first_blocker_distance(start + Vector3.UP * 0.7, direction, distance + 0.25)
+		_expect(is_equal_approx(hit, distance) if furniture[4] else hit < 0.0, "%s eye-height shot behavior" % furniture[0])
+
+	var under_suite := _body(suite)
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(under_suite + upstairs, Vector3.UP, 10.0), 2.5),
+		"suite ceiling seals at 7 m")
+	_expect(is_equal_approx(arena_rules.first_blocker_distance(under_suite, Vector3.UP, 10.0), 2.4),
+		"library ray hits the underside of the suite at 3.4 m")
 
 func _check_dining_room() -> void:
 	var dining := _room("jantar")
