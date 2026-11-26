@@ -329,7 +329,10 @@ func _build_arena() -> void:
 	light.shadow_enabled = false
 	add_child(light)
 	if ArenaRules.SalaoMap.enabled:
+		var paint := preload("res://client/nocturna_paint.gd")
+		paint.apply_night(env, light)
 		_build_salao_greybox()
+		paint.add_lights(self)
 	else:
 		art = MansionArt.new()
 		art.build(self)
@@ -342,18 +345,23 @@ func _build_arena() -> void:
 
 func _build_salao_greybox() -> void:
 	var greyboxes := {}
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0.48, 0.49, 0.5)
+	var paint := preload("res://client/nocturna_paint.gd")
 	for blocker in ArenaRules.BLOCKERS:
-		var box := _add_greybox_box(blocker["center"], blocker["size"], material)
+		var box := _add_greybox_box(blocker["center"], blocker["size"], paint.material_for(blocker))
 		box.name = blocker["id"]
 		box.set_meta("arena_blocker_id", blocker["id"])
 		box.set_meta("arena_blocker_kind", blocker["kind"])
 		greyboxes[blocker["id"]] = box
+	# Piso visual do térreo (o andar de cima já tem lajes walkable oficiais).
 	for entry in ArenaRules.SalaoMap.SPACES + ArenaRules.SalaoMap.DOORS:
+		if float(entry.get("floor", 0.0)) > 0.0:
+			continue
 		var area := ArenaRules.SalaoMap.rect(entry)
 		var center := area.get_center()
-		_add_greybox_box(Vector3(center.x, -0.05, center.y), Vector3(area.size.x, 0.1, area.size.y), material)
+		var space_id := str(entry.get("room", entry.get("id", "")))
+		var floor_box := _add_greybox_box(Vector3(center.x, -0.05, center.y),
+			Vector3(area.size.x, 0.1, area.size.y), paint.floor_material(space_id))
+		floor_box.set_meta("arena_blocker_kind", "floor")
 	var gallery := Label3D.new()
 	gallery.text = ArenaRules.SalaoMap.GALLERY["name"]
 	gallery.position = Vector3(8.0, 4.75, 0.51)
@@ -363,7 +371,7 @@ func _build_salao_greybox() -> void:
 	add_child(furniture)
 	furniture.build(greyboxes)
 
-func _add_greybox_box(center: Vector3, size: Vector3, material: StandardMaterial3D) -> MeshInstance3D:
+func _add_greybox_box(center: Vector3, size: Vector3, material: Material) -> MeshInstance3D:
 	var box := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
 	mesh.size = size
