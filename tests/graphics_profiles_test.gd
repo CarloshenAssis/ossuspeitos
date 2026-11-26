@@ -60,7 +60,26 @@ func run() -> void:
 	MenuSettings.path_override = "user://spec06-test.cfg"
 	DirAccess.remove_absolute(MenuSettings.file_path())
 	var settings := MenuSettings.load_saved()
-	expect(settings.get("graphics_profile") == "baseline", "old/missing settings default baseline")
+	var initial_scale := root.scaling_3d_scale
+	expect(not MenuSettings.touch_device(), "headless does not select the mobile preset")
+	expect(settings.graphics_profile == "baseline", "old/missing settings default baseline")
+	a.apply_graphics_settings(settings)
+	expect(a.graphics_profile == "baseline" and is_equal_approx(root.scaling_3d_scale, initial_scale),
+		"headless preserves baseline shading and scale")
+	expect(settings.save() == OK, "save unrelated preferences")
+	settings = MenuSettings.load_saved()
+	expect(not settings.graphics_profile_saved, "unrelated saves preserve automatic graphics")
+	a.apply_graphics_settings(settings, true)
+	var mobile_material := a.art.meshes[0].material_override as StandardMaterial3D
+	expect(a.graphics_profile == "low" and mobile_material != null
+		and mobile_material.shading_mode == BaseMaterial3D.SHADING_MODE_PER_VERTEX
+		and mobile_material.specular_mode == BaseMaterial3D.SPECULAR_DISABLED,
+		"mobile preset uses low shading")
+	expect(is_equal_approx(root.scaling_3d_scale, 0.7), "mobile preset lowers 3D scale")
+	settings.graphics_profile = "baseline"
+	expect(settings.save() == OK, "save explicit baseline")
+	a.apply_graphics_settings(MenuSettings.load_saved(), true)
+	expect(a.graphics_profile == "baseline", "explicit baseline overrides mobile low shading")
 	settings.set("graphics_profile", "high")
 	expect(settings.save() == OK, "save preference")
 	expect(MenuSettings.load_saved().get("graphics_profile") == "high", "reload preference")
@@ -70,6 +89,7 @@ func run() -> void:
 	DirAccess.remove_absolute(MenuSettings.file_path())
 	MenuSettings.path_override = ""
 	a.free()
+	expect(is_equal_approx(root.scaling_3d_scale, initial_scale), "leaving the mobile arena restores scale")
 	b.free()
 	if failures == 0: print("GRAPHICS_PROFILES_TEST_OK")
 	quit(1 if failures else 0)

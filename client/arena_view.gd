@@ -39,6 +39,8 @@ var current_zone_name := ""
 var region_chip_top := HudStyle.MARGIN
 var gameplay_visuals := true
 var graphics_profile := "baseline"
+var touch_controls: Node
+var _previous_3d_scale := 0.0
 var _alive_flags: Dictionary = {}
 ## Aparência cosmética pública por jogador (roster oficial). Nunca vem de papel.
 var _appearances: Dictionary = {}
@@ -113,7 +115,8 @@ func _ready() -> void:
 	_build_arena()
 	environment_view = EnvironmentView.new()
 	add_child(environment_view)
-	set_graphics_profile(MenuSettings.load_saved().graphics_profile)
+	var settings := MenuSettings.load_saved()
+	apply_graphics_settings(settings)
 	player_rig = Node3D.new()
 	add_child(player_rig)
 	camera = Camera3D.new()
@@ -135,7 +138,7 @@ func _ready() -> void:
 	motion_pivot.name = "PresentationMotion"
 	camera.add_child(motion_pivot)
 	motion_pivot.add_child(weapon_pivot)
-	presentation_motion = not MenuSettings.load_saved().reduce_motion
+	presentation_motion = not settings.reduce_motion
 	weapon_pivot.add_child(weapon_model)
 	# Clarão da própria arma: pequeno, na boca do cano, só por um instante.
 	_muzzle_flash = MeshInstance3D.new()
@@ -155,7 +158,7 @@ func _ready() -> void:
 	spatial_audio = SpatialAudioController.new()
 	add_child(spatial_audio)
 	_ensure_ambient()
-	configure_audio(MenuSettings.load_saved())
+	configure_audio(settings)
 	var overlay := CanvasLayer.new()
 	add_child(overlay)
 	var overlay_root := Control.new()
@@ -194,6 +197,17 @@ func _ready() -> void:
 	inspection_label.custom_minimum_size = Vector2(520, 48)
 	inspection_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	overlay_root.add_child(inspection_label)
+
+	if ResourceLoader.exists("res://client/touch_controls.gd"):
+		touch_controls = (load("res://client/touch_controls.gd") as GDScript).new()
+		add_child(touch_controls)
+		visibility_changed.connect(_refresh_touch_controls)
+		_refresh_touch_controls()
+
+func _refresh_touch_controls() -> void:
+	if touch_controls != null:
+		touch_controls.visible = is_visible_in_tree() and gameplay_visuals and (
+			touch_controls.force_visible or MenuSettings.touch_device())
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Oculta (lobby da sala online, fase 9): não prende o mouse.
@@ -629,6 +643,7 @@ func set_gameplay_visuals(active: bool) -> void:
 	_refresh_gameplay_visuals()
 
 func _refresh_gameplay_visuals() -> void:
+	_refresh_touch_controls()
 	if not gameplay_visuals or not _combat_has_weapon:
 		_reset_presentation_motion()
 	if crosshair != null: crosshair.visible = gameplay_visuals
@@ -934,6 +949,14 @@ func _update_presentation_motion(delta: float) -> void:
 	motion_pivot.transform = camera_effects.sample(Vector2(velocity.x, velocity.z).length(), delta)
 
 ## Cosmetics only: overrides belong to this view, cached mansion resources stay immutable.
+func apply_graphics_settings(settings: MenuSettings, force_mobile: bool = false) -> void:
+	var mobile := force_mobile or MenuSettings.touch_device()
+	var profile := "low" if mobile and not settings.graphics_profile_saved else settings.graphics_profile
+	set_graphics_profile(profile)
+	if mobile and _previous_3d_scale == 0.0:
+		_previous_3d_scale = get_viewport().scaling_3d_scale
+		get_viewport().scaling_3d_scale = minf(_previous_3d_scale, 0.7)
+
 func set_graphics_profile(value: String) -> void:
 	graphics_profile = MenuSettings.sanitize_graphics_profile(value)
 	if art == null: return
@@ -1044,6 +1067,9 @@ func apply_inspection(raw: Dictionary) -> void:
 	inspection_label.text="Corpo de %s — eliminação confirmada nesta rodada." % str(info.label)
 
 func _exit_tree() -> void:
+	if _previous_3d_scale > 0.0:
+		get_viewport().scaling_3d_scale = _previous_3d_scale
+		_previous_3d_scale = 0.0
 	if _ambient != null:
 		_ambient.stop()
 		_ambient.stream = null

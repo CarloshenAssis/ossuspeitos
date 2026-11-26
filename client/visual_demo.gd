@@ -38,6 +38,10 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	elapsed += delta
 	if not test_mode:
+		if arena_view.touch_controls != null:
+			var look: Vector2 = arena_view.touch_controls.consume_look_delta()
+			if look != Vector2.ZERO:
+				_apply_look(look)
 		var move := Input.get_vector("move_left", "move_right", "move_forward", "move_backward")
 		var direction := Vector3(move.x, 0.0, move.y).rotated(Vector3.UP, local_yaw)
 		# Mesma colisão da arena oficial, para a demo não atravessar paredes.
@@ -50,8 +54,11 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		local_yaw = wrapf(local_yaw - event.relative.x * 0.0025, -PI, PI)
-		local_pitch = MovementRules.clamp_pitch(local_pitch - event.relative.y * 0.0025)
+		_apply_look(-event.relative * 0.0025)
+
+func _apply_look(look: Vector2) -> void:
+	local_yaw = wrapf(local_yaw + look.x, -PI, PI)
+	local_pitch = MovementRules.clamp_pitch(local_pitch + look.y)
 
 func _demo_snapshot() -> Array:
 	return _demo_snapshot_at(elapsed)
@@ -139,5 +146,7 @@ func _add_demo_banner() -> void:
 	var label := Label.new()
 	label.position = Vector2(28.0, 24.0)
 	label.text = "MODO DEMONSTRAÇÃO — OFFLINE / SEM SERVIDOR\nWASD: mover · clique: capturar mouse · Esc: liberar"
+	if arena_view.touch_controls != null and arena_view.touch_controls.visible:
+		label.text = "MODO DEMONSTRAÇÃO — OFFLINE / SEM SERVIDOR\nJoystick: mover · arraste à direita: mirar\nAtirar e Pular desativados nesta demo"
 	label.add_theme_font_size_override("font_size", 18)
 	layer.add_child(label)

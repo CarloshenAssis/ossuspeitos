@@ -33,11 +33,20 @@ var sensitivity := SENSITIVITY_DEFAULT
 var fullscreen := false
 var resolution := Vector2i(960, 540)
 var reduce_motion := false
-var graphics_profile := "baseline"
+var graphics_profile_saved := false
+var graphics_profile := "baseline":
+	set(value):
+		graphics_profile = sanitize_graphics_profile(value)
+		graphics_profile_saved = true
 const GRAPHICS_PROFILES := ["low", "baseline", "high"]
 
 static func sanitize_graphics_profile(value: String) -> String:
 	return value if value in GRAPHICS_PROFILES else "baseline"
+
+static func touch_device() -> bool:
+	return DisplayServer.get_name() != "headless" and (
+		DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")
+		or OS.has_feature("web_android") or OS.has_feature("web_ios"))
 ## O arquivo tinha preferência de tela (senão, a janela fica como o projeto abre).
 var display_saved := false
 
@@ -62,7 +71,8 @@ static func load_saved() -> MenuSettings:
 	settings.resolution = saved if typeof(saved) == TYPE_VECTOR2I and saved in RESOLUTIONS else Vector2i(960, 540)
 	settings.display_saved = file.has_section_key(SECTION, "resolution") or file.has_section_key(SECTION, "fullscreen")
 	settings.reduce_motion = bool(file.get_value(SECTION, "reduce_motion", false))
-	settings.graphics_profile = sanitize_graphics_profile(str(file.get_value(SECTION, "graphics_profile", "baseline")))
+	if file.has_section_key(SECTION, "graphics_profile"):
+		settings.graphics_profile = str(file.get_value(SECTION, "graphics_profile"))
 	return settings
 
 func save() -> int:
@@ -76,7 +86,8 @@ func save() -> int:
 	file.set_value(SECTION, "fullscreen", fullscreen)
 	file.set_value(SECTION, "resolution", resolution)
 	file.set_value(SECTION, "reduce_motion", reduce_motion)
-	file.set_value(SECTION, "graphics_profile", sanitize_graphics_profile(graphics_profile))
+	if graphics_profile_saved:
+		file.set_value(SECTION, "graphics_profile", graphics_profile)
 	return file.save(file_path())
 
 static func clamp_sensitivity(value: float) -> float:
