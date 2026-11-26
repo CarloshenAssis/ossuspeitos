@@ -49,8 +49,7 @@ static func build_character(appearance_id: Variant) -> Node3D:
 	root.name = "Character"
 	var clean := CharacterAppearance.sanitize(appearance_id)
 	root.set_meta("appearance", clean)
-	var scene := load(CharacterAppearance.scene_path(clean)) as PackedScene
-	var model := scene.instantiate() as Node3D
+	var model := _instantiate_character(clean)
 	model.name = CHARACTER_MODEL
 	model.position = CHARACTER_OFFSET
 	model.rotation.y = CHARACTER_YAW
@@ -60,6 +59,35 @@ static func build_character(appearance_id: Variant) -> Node3D:
 	model.add_child(pivot)
 	root.add_child(model)
 	return root
+
+## Instancia o GLB importado; se o cache ainda não existir (o `--editor --quit`
+## do CI pode abortar o scan), lê o arquivo-fonte com GLTFDocument.
+static func _instantiate_character(appearance_id: String) -> Node3D:
+	var path := CharacterAppearance.scene_path(appearance_id)
+	if _imported_scene_ready(path):
+		var scene := load(path) as PackedScene
+		if scene != null:
+			var model := scene.instantiate() as Node3D
+			if model != null:
+				return model
+	var document := GLTFDocument.new()
+	var state := GLTFState.new()
+	if document.append_from_file(path, state) == OK:
+		var generated := document.generate_scene(state) as Node3D
+		if generated != null:
+			return generated
+	return Node3D.new()
+
+static func _imported_scene_ready(path: String) -> bool:
+	var import_path := "%s.import" % path
+	if not FileAccess.file_exists(import_path):
+		return false
+	var cfg := ConfigFile.new()
+	if cfg.load(import_path) != OK:
+		return false
+	var dest := str(cfg.get_value("remap", "path", ""))
+	return not dest.is_empty() and FileAccess.file_exists(dest)
+
 
 ## Limites da malha já deformada, em coordenadas globais.
 static func posed_mesh_bounds(mesh: MeshInstance3D) -> AABB:
