@@ -25,6 +25,7 @@ Modelos e texturas de [Poly Haven](https://polyhaven.com/), licença [CC0 1.0](h
 | `assets/furniture/vintage_drawer` | [Vintage wooden drawer 01](https://polyhaven.com/a/vintage_wooden_drawer_01) |
 | `assets/furniture/antique_katana` | [Antique katana 01](https://polyhaven.com/a/antique_katana_01) |
 | `assets/furniture/cannon_01` | [Cannon 01](https://polyhaven.com/a/cannon_01) |
+| `assets/weapons/bolt_action_rifle_7_62` | [Bolt-action rifle 7.62](https://polyhaven.com/a/bolt_action_rifle_7_62) |
 
 ## CC-BY 4.0 (Sketchfab)
 

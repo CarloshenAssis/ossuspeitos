@@ -149,17 +149,38 @@ static func build_aug(model_scale: float = AUG_WORLD_SCALE) -> Node3D:
 	root.add_child(model)
 	return root
 
+const RIFLE_SCENE := "res://assets/weapons/bolt_action_rifle_7_62/bolt_action_rifle_7_62.glb"
+const RIFLE_WORLD_SCALE := 0.75
+const RIFLE_HELD_SCALE := 0.35
+
+static func build_hunting_rifle(model_scale: float = RIFLE_WORLD_SCALE) -> Node3D:
+	var root := Node3D.new()
+	root.name = "HuntingRifle"
+	var scene := load(RIFLE_SCENE) as PackedScene if ResourceLoader.exists(RIFLE_SCENE) else null
+	if scene == null:
+		return build_pistol()
+	var model := scene.instantiate() as Node3D
+	# O eixo longo do glTF é +X; gira para a boca apontar a -Z da visão.
+	model.scale = Vector3.ONE * model_scale
+	model.rotation.y = PI * 0.5
+	root.add_child(model)
+	return root
+
 static func build_held_weapon(weapon_id: String) -> Node3D:
 	if weapon_id == "aug":
 		return build_aug(AUG_HELD_SCALE)
+	if weapon_id == "hunting_rifle":
+		return build_hunting_rifle(RIFLE_HELD_SCALE)
 	return build_pistol()
 
 static func muzzle_offset(weapon_id: String) -> Vector3:
 	if weapon_id == "aug":
 		return Vector3(0.0, 0.02, -0.32)
+	if weapon_id == "hunting_rifle":
+		return Vector3(0.0, 0.02, -0.22)
 	return Vector3(0.0, 0.03, -0.19)
 
-## Arma no chão: pistola procedural ou o AUG, deitada sobre um halo ciano.
+## Arma no chão: pistola procedural, AUG ou rifle, deitada sobre um halo ciano.
 static func build_weapon_pickup(weapon_id: String = "common_pistol") -> Node3D:
 	var root := Node3D.new()
 	root.name = "WeaponPickup"
@@ -170,11 +191,20 @@ static func build_weapon_pickup(weapon_id: String = "common_pistol") -> Node3D:
 	var gun: Node3D
 	if weapon_id == "aug":
 		gun = build_aug(AUG_WORLD_SCALE)
+	elif weapon_id == "hunting_rifle":
+		gun = build_hunting_rifle(RIFLE_WORLD_SCALE)
 	else:
 		gun = build_pistol()
 		gun.scale = Vector3.ONE * 2.4
 	gun.rotation = Vector3(0.0, 0.0, PI * 0.5)
-	gun.position = Vector3(0.0, 0.05, 0.0)
+	# The official pickup point sits 0.25 m above the floor; drop the longer
+	# rifles onto the halo instead of leaving them floating at that height.
+	if weapon_id == "hunting_rifle":
+		gun.position = Vector3(0.0, -0.14, 0.0)
+	elif weapon_id == "aug":
+		gun.position = Vector3(0.0, -0.06, 0.0)
+	else:
+		gun.position = Vector3(0.0, 0.05, 0.0)
 	spin.add_child(gun)
 	_glow_all(gun, WEAPON_GLOW, 0.25)
 	return root
