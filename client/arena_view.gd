@@ -72,6 +72,12 @@ var debug_overlay := false
 var show_ceilings := true
 const VIEWMODEL_OFFSET := Vector3(0.19, -0.16, -0.5)
 const VIEWMODEL_SCALE := 0.8
+
+func _viewmodel_offset() -> Vector3:
+	return ArenaModels.viewmodel_offset(_held_weapon_id)
+
+func _viewmodel_scale() -> float:
+	return ArenaModels.viewmodel_scale(_held_weapon_id)
 ## Giro lento dos pickups disponíveis (só visual; a posição oficial não muda).
 const PICKUP_SPIN_SPEED := 0.9
 var _visual_time := 0.0
@@ -117,14 +123,14 @@ func _ready() -> void:
 	# nem o painel de munição. Só aparece com arma no inventário oficial.
 	_held_weapon_id = "common_pistol"
 	weapon_model = ArenaModels.build_held_weapon(_held_weapon_id)
-	weapon_model.scale = Vector3.ONE * VIEWMODEL_SCALE
+	weapon_model.scale = Vector3.ONE * _viewmodel_scale()
 	weapon_model.rotation = Vector3(0.04, 0.06, 0.0)
 	weapon_model.visible = false
 	weapon_pivot = Node3D.new()
 	weapon_pivot.name = "WeaponPivot"
 	# O pivô fica na própria arma: recuo e recarga são inclinações curtas no
 	# lugar, sem varrer a pistola pela tela.
-	weapon_pivot.position = VIEWMODEL_OFFSET
+	weapon_pivot.position = _viewmodel_offset()
 	motion_pivot = Node3D.new()
 	motion_pivot.name = "PresentationMotion"
 	camera.add_child(motion_pivot)
@@ -488,13 +494,15 @@ func _set_held_weapon(weapon_id: String) -> void:
 	if weapon_id == _held_weapon_id and weapon_model != null:
 		return
 	_held_weapon_id = weapon_id
+	if weapon_pivot != null:
+		weapon_pivot.position = _viewmodel_offset() + (RELOAD_DROP if _reload_pose else Vector3.ZERO)
 	var was_visible := weapon_model != null and weapon_model.visible
 	if _muzzle_flash != null and _muzzle_flash.get_parent() != null:
 		_muzzle_flash.get_parent().remove_child(_muzzle_flash)
 	if weapon_model != null:
 		weapon_model.queue_free()
 	weapon_model = ArenaModels.build_held_weapon(weapon_id)
-	weapon_model.scale = Vector3.ONE * VIEWMODEL_SCALE
+	weapon_model.scale = Vector3.ONE * _viewmodel_scale()
 	weapon_model.rotation = Vector3(0.04, 0.06, 0.0)
 	weapon_model.visible = was_visible
 	weapon_pivot.add_child(weapon_model)
@@ -576,7 +584,7 @@ func _set_reload_pose(active: bool) -> void:
 	if _pose_tween != null: _pose_tween.kill()
 	_pose_tween = weapon_pivot.create_tween().set_parallel(true)
 	_pose_tween.tween_property(weapon_pivot, "rotation", RELOAD_POSE if active else Vector3.ZERO, 0.18)
-	_pose_tween.tween_property(weapon_pivot, "position", VIEWMODEL_OFFSET + (RELOAD_DROP if active else Vector3.ZERO), 0.18)
+	_pose_tween.tween_property(weapon_pivot, "position", _viewmodel_offset() + (RELOAD_DROP if active else Vector3.ZERO), 0.18)
 
 func _recoil() -> void:
 	if not presentation_motion or not gameplay_visuals or not bool(_alive_flags.get(local_peer_id, true)):
@@ -585,9 +593,9 @@ func _recoil() -> void:
 		return
 	if _pose_tween != null: _pose_tween.kill()
 	_pose_tween = weapon_pivot.create_tween()
-	_pose_tween.tween_property(weapon_pivot, "position", VIEWMODEL_OFFSET + RECOIL_BACK, 0.04)
+	_pose_tween.tween_property(weapon_pivot, "position", _viewmodel_offset() + RECOIL_BACK, 0.04)
 	_pose_tween.parallel().tween_property(weapon_pivot, "rotation:x", RECOIL_TILT, 0.04)
-	_pose_tween.tween_property(weapon_pivot, "position", VIEWMODEL_OFFSET, 0.12)
+	_pose_tween.tween_property(weapon_pivot, "position", _viewmodel_offset(), 0.12)
 	_pose_tween.parallel().tween_property(weapon_pivot, "rotation:x", 0.0, 0.12)
 	_muzzle_flash.visible = true
 	get_tree().create_timer(CombatFx.FLASH_SECONDS).timeout.connect(func(): _muzzle_flash.visible = false)
@@ -802,7 +810,9 @@ func _create_pickup(entry: Dictionary) -> Node3D:
 	if kind == "weapon":
 		var weapon_id := "common_pistol"
 		if ArenaRules.SalaoMap.enabled:
-			weapon_id = ArenaRules.SalaoMap.weapon_id_of(str(entry.get("id", "")))
+			# O fio público só tem pickup_id (não "id" nem weapon_id).
+			var pickup_id := str(entry.get("pickup_id", entry.get("id", "")))
+			weapon_id = ArenaRules.SalaoMap.weapon_id_of(pickup_id)
 		node = ArenaModels.build_weapon_pickup(weapon_id)
 	elif kind == "health":
 		node = ArenaModels.build_health_pickup()
@@ -939,7 +949,7 @@ func _reset_presentation_motion() -> void:
 	if motion_pivot != null: motion_pivot.transform = Transform3D.IDENTITY
 	if _pose_tween != null: _pose_tween.kill()
 	if weapon_pivot != null:
-		weapon_pivot.position = VIEWMODEL_OFFSET + (RELOAD_DROP if _reload_pose else Vector3.ZERO)
+		weapon_pivot.position = _viewmodel_offset() + (RELOAD_DROP if _reload_pose else Vector3.ZERO)
 		weapon_pivot.rotation = RELOAD_POSE if _reload_pose else Vector3.ZERO
 	if _kick_tween != null: _kick_tween.kill()
 	if camera != null:

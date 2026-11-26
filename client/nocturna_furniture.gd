@@ -41,7 +41,7 @@ func build(greyboxes: Dictionary) -> void:
 	_model("ceramic_pot", Vector3(13.7, 0, 5.4))
 	_model("ceramic_pot", Vector3(2.7, 0, 10.45))
 
-	# --- Biblioteca (escrivaninha longe dos spawns -1.5,12.75 e -2,13.5).
+	# --- Biblioteca (escrivaninha longe do spawn -1.4,13.3).
 	_table(Vector3(-2.6, 0, 12.2), Vector3(1.2, 0.75, 0.7))
 	_model("lampara_ar", Vector3(-2.9, 0.75, 12.2))
 	_model("book_set", Vector3(-2.3, 0.75, 12.2))

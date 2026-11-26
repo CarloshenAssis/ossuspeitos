@@ -2238,11 +2238,15 @@ func _update_pickup_prompt() -> void:
 	if round_hud == null or arena_view == null:
 		return
 	var pickup_type := ""
+	var weapon_id := ""
 	if _client_can_gameplay():
 		var pickup_id: String = arena_view.nearest_available_pickup()
 		if not pickup_id.is_empty():
 			pickup_type = str((arena_view.pickup_states[pickup_id] as Dictionary).get("type", ""))
-	round_hud.call("set_nearby_pickup", pickup_type)
+			# O fio público não carrega weapon_id; a variante resolve localmente.
+			if ArenaRules.SalaoMap.enabled and pickup_type == "weapon":
+				weapon_id = str(ArenaRules.SalaoMap.weapon_id_of(pickup_id))
+	round_hud.call("set_nearby_pickup", pickup_type, weapon_id)
 
 func _client_can_gameplay() -> bool:
 	return int(local_round_public.get("state", RoundState.WAITING)) == RoundState.ACTIVE \

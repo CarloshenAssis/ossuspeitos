@@ -114,7 +114,7 @@ const UPPER_RAILS := [
 ]
 const SPAWNS := [
 	{"id": "spawn_salao", "space": "salao", "position": Vector2(1.8, 12.6), "floor": 0.0, "face": Vector2(8, 10)},
-	{"id": "spawn_biblioteca", "space": "biblioteca", "position": Vector2(-2.0, 12.4), "floor": 0.0, "face": Vector2(-0.25, 8)},
+	{"id": "spawn_biblioteca", "space": "biblioteca", "position": Vector2(-1.4, 13.3), "floor": 0.0, "face": Vector2(-0.25, 8)},
 	{"id": "spawn_jantar", "space": "jantar", "position": Vector2(7.2, 21.6), "floor": 0.0, "face": Vector2(8, 14.25)},
 	{"id": "spawn_hospedes", "space": "hospedes", "position": Vector2(-6.5, 18.8), "floor": 0.0, "face": Vector2(-8.5, 14.25)},
 	{"id": "spawn_galeria", "space": "galeria_leste", "position": Vector2(14.4, 3.4), "floor": GALLERY_FLOOR, "face": Vector2(8, 1)},

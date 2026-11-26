@@ -255,6 +255,11 @@ func _test_pickup_prompt_matches_server_rules() -> void:
 	var full_health := RoundHud.pickup_prompt("health", armed)
 	_expect(not bool(full_health["key"]) and full_health["text"] == "Vida cheia", "full health: no E (server says health_full)")
 	_expect(RoundHud.rejection_notice("pickup", "health_full") == "Vida cheia", "health_full has a rejection sentence")
+	var take_rifle := RoundHud.pickup_prompt("weapon", unarmed, "hunting_rifle")
+	_expect(bool(take_rifle["key"]) and take_rifle["text"] == "PEGAR RIFLE", "unarmed near a rifle: PEGAR RIFLE")
+	var take_aug := RoundHud.pickup_prompt("weapon", unarmed, "aug")
+	_expect(bool(take_aug["key"]) and take_aug["text"] == "PEGAR AUG", "unarmed near an AUG: PEGAR AUG")
+	_expect(RoundHud.pickup_prompt("weapon", unarmed, "")["text"] == "PEGAR PISTOLA", "empty weapon_id keeps PEGAR PISTOLA")
 
 func _pub(state: int, round_id: int) -> Dictionary:
 	return {"state": state, "round_id": round_id, "countdown_msec": 3000, "connected": 4, "participants": 4, "alive": 4,
