@@ -90,19 +90,21 @@ func _test_spectated_target_hides_its_visor() -> void:
 func _remote_facing(yaw: float) -> Vector3:
 	_arena.apply_snapshot([_state(LOCAL, Vector3(0, 1, 0), 0.0), _state(REMOTE, Vector3(4, 1, -2), yaw)])
 	for _i in 30: _arena._process(0.1)
+	# Compare o mesmo quadro de Idle para isolar o yaw e a arma.
+	(_arena.animators[REMOTE] as CharacterAnimator).rest()
 	return _visible_front(_arena.avatars[REMOTE])
 
-## Direção horizontal para onde o rosto do personagem aponta: do centro da
-## malha `Head` ao centro da malha `Nose`, no mundo. Um corpo sem nariz (a
-## cápsula antiga, ou qualquer modelo sem frente) dá zero e as checagens falham.
+## A frente +Z do osso Head no mundo, projetada no plano horizontal.
 func _visible_front(avatar: Node3D) -> Vector3:
-	var head := avatar.find_child("Head", true, false) as MeshInstance3D
-	var nose := avatar.find_child("Nose", true, false) as MeshInstance3D
-	if head == null or nose == null:
+	var skeleton := avatar.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
 		return Vector3.ZERO
-	var offset := (nose.global_transform * nose.get_aabb()).get_center() - (head.global_transform * head.get_aabb()).get_center()
-	offset.y = 0.0
-	return offset.normalized() if offset.length() > 0.05 else Vector3.ZERO
+	var head := skeleton.find_bone("Head")
+	if head < 0:
+		return Vector3.ZERO
+	var forward := skeleton.global_basis * skeleton.get_bone_global_pose(head).basis.z
+	forward.y = 0.0
+	return forward.normalized()
 
 func _visor(peer_id: int) -> Node3D:
 	var avatar: Node3D = _arena.avatars.get(peer_id)

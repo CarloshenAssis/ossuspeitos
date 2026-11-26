@@ -10,13 +10,14 @@ func _initialize() -> void:
 	call_deferred("run")
 func run() -> void:
 	var action_script=load("res://client/character_action_state.gd")
-	check(action_script!=null,"procedural action state exists")
+	check(action_script!=null,"character action state exists")
 	if action_script==null:
 		quit(1)
 		return
 	var action=action_script.new()
 	check(action.trigger("interact"),"interaction accepted")
-	check(action.advance(0.1).shoulder_x< -0.05,"interaction reaches forward")
+	action.advance(0.1, 1.25)
+	check(action.kind == "interact" and is_equal_approx(action.elapsed, 0.1), "interaction timer advances")
 	check(action.trigger("reload"),"reload interrupts interaction")
 	check(not action.trigger("interact"),"low priority cannot interrupt reload")
 	check(action.trigger("fire"),"shot interrupts reload")
@@ -25,16 +26,15 @@ func run() -> void:
 	check(not action.trigger("fire"),"dead visual cannot resume firing")
 	action.reset()
 	check(action.kind=="" and action.trigger("fire"),"reset permits new round")
-	var reference: Dictionary={}
-	for fps in [30,60,120]:
-		var state=action_script.new()
+	for fps in [30, 60, 120]:
+		var state = action_script.new()
 		state.trigger("reload")
-		var sample: Dictionary={}
-		for frame in int(fps*0.5): sample=state.advance(1.0/fps)
-		if reference.is_empty(): reference=sample
-		check(absf(float(sample.shoulder_x)-float(reference.shoulder_x))<0.00001,"action pose independent of FPS%d" % fps)
-		for frame in fps*2: state.advance(1.0/fps)
-		check(state.kind=="","pose expires at FPS%d" % fps)
+		for frame in int(fps * 0.5):
+			state.advance(1.0 / fps, 1.25)
+		check(is_equal_approx(state.elapsed, 0.5), "action timing independent of FPS %d" % fps)
+		for frame in int(fps):
+			state.advance(1.0 / fps, 1.25)
+		check(state.kind == "", "action expires at FPS %d" % fps)
 	var view:=ArenaView.new()
 	root.add_child(view)
 	view.set_process(false)
@@ -50,7 +50,7 @@ func run() -> void:
 	view.apply_sound_events([SoundEventRules.make(1,1,"door",Vector3(12,1,10),2)],1)
 	check(animator.actions.kind=="interact","authorized door event animates muted remote")
 	animator.update(Vector3(12,1,9.9),0.0,0.1)
-	check((animator.rig.pivots.Shoulder_R as Node3D).rotation.x< -0.1,"real shoulder shows action while moving")
+	check(animator.player.current_animation == "CharacterArmature|PickUp", "interaction plays PickUp while moving")
 	check((view.avatars[2] as Node3D).transform==official_transform and view.camera.global_transform==camera_transform,"action leaves official root and aim untouched")
 	view.apply_sound_events([SoundEventRules.make(1,1,"door",Vector3(12,1,10),2)],1)
 	check(animator.actions.elapsed>0.0,"duplicate event does not restart visual pose")
@@ -70,23 +70,21 @@ func run() -> void:
 	check(animator.actions.kind=="reload","old round event cannot overwrite current pose")
 	animator.reset(Vector3(3,1,2))
 	check(animator.actions.kind=="","epoch/teleport resets transient pose")
-	var body:=BodyRules.make(1,2,2,Vector3(12,1,10),0.0,"night")
-	check(view.add_body(body),"official body added")
-	check(view._body_transitions.size()==1,"death settling transition runs on body")
-	var root_before: Transform3D=(view.bodies[1] as Node3D).transform
-	var left: Node3D=view._body_transitions[1].left
-	var rest_rotation: Vector3=left.rotation
-	view._update_body_transitions(0.1)
-	check(not left.rotation.is_equal_approx(rest_rotation),"death transition visibly settles body arms")
-	for frame in 60: view._update_body_transitions(1.0/120.0)
-	check(view._body_transitions.is_empty(),"death settling completes")
-	check((view.bodies[1] as Node3D).transform==root_before,"death transition preserves official body root")
+	var body := BodyRules.make(1, 2, 2, Vector3(12, 1, 10), 0.0, "ninja")
+	check(view.add_body(body), "official body added")
+	var body_root := view.bodies[1] as Node3D
+	var body_skeleton := body_root.find_children("*", "Skeleton3D", true, false).front() as Skeleton3D
+	var torso := body_skeleton.find_bone("Torso")
+	var pose := body_skeleton.get_bone_global_pose(torso)
+	var root_before := body_root.transform
+	var fall := body_root.get_node_or_null("Fall") as Node3D
+	check(fall != null and is_equal_approx(fall.rotation.x, PI * 0.5), "corpse uses the 90-degree fall tilt")
+	view._process(0.5)
+	check(body_skeleton.get_bone_global_pose(torso).is_equal_approx(pose), "corpse holds the pose")
+	check(body_root.transform == root_before, "corpse animation preserves official body placement")
 	view.clear_bodies()
-	body.body_id=2
-	check(view.add_body(body),"body may be rebuilt after cleanup")
-	view._update_body_transitions(0.1)
-	view.set_presentation_motion(false)
-	check(view._body_transitions.is_empty(),"reduce motion cancels corpse transition immediately")
+	body.body_id = 2
+	check(view.add_body(body), "body may be rebuilt after cleanup")
 	if DisplayServer.get_name()!="headless" and OS.get_cmdline_user_args().has("--capture"):
 		view.set_player_alive(2,true)
 		view.apply_sound_events([SoundEventRules.make(2,2,"reload",Vector3(12,1,10),2)],2)

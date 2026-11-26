@@ -7,7 +7,7 @@ extends RefCounted
 ## `ArenaView` (snapshot, inventário privado, `public_pickups` e roster).
 ##
 ## Personagem: um dos oito GLBs de `res://assets/characters/` (pacote
-## `personagem_3d`), escolhido pela aparência cosmética pública do roster,
+## de Quaternius), escolhido pela aparência cosmética pública do roster,
 ## nunca pelo papel. Pickups têm brilho frio (arma, ciano) ou quente
 ## (munição, cobre; o amarelo segue exclusivo dos caixotes baixos).
 ##
@@ -32,20 +32,13 @@ const BRASS := Color(0.78, 0.6, 0.3)
 
 ## Nome do nó com o GLB dentro da raiz do avatar.
 const CHARACTER_MODEL := "CharacterModel"
-## Os GLBs têm origem nos pés, 1,80 m, +Y para cima e frente em +Z; não têm
-## rig nem animação. No jogo, a posição oficial é o centro do corpo
-## (`MovementRules.PLAYER_HEIGHT` acima do piso) e a frente é -Z (câmera).
-## Só o nó visual é ajustado: desce até o piso e gira meia volta. Escala real.
+## GLBs animados com Skeleton3D, origem nos pés, +Y para cima e frente em +Z.
+## A posição oficial fica acima do piso e a frente da câmera é -Z.
 const CHARACTER_OFFSET := Vector3(0.0, -MovementRules.PLAYER_HEIGHT, 0.0)
 const CHARACTER_YAW := PI
-## Os GLBs não têm ossos: cabeça, nariz, olhos e cabelo são malhas irmãs com
-## transformação identidade (vértices já no lugar). Para a cabeça acompanhar a
-## mira, essas malhas passam a um pivô na base da cabeça (1,57 m no modelo),
-## compensadas para não sair do lugar em repouso. Só o pivô gira; pescoço,
-## tronco e colisão ficam parados.
+## Entrada de pitch aplicada ao osso Head depois de amostrar a animação.
 const HEAD_PIVOT := "HeadPivot"
 const HEAD_PIVOT_HEIGHT := 1.57
-const HEAD_PARTS := ["Head", "Nose", "Eye", "Hair"]
 ## Inclinação natural da cabeça: a mira pode ir além (MAX_PITCH), a cabeça não.
 const HEAD_PITCH_LIMIT := deg_to_rad(40.0)
 
@@ -61,59 +54,49 @@ static func build_character(appearance_id: Variant) -> Node3D:
 	model.name = CHARACTER_MODEL
 	model.position = CHARACTER_OFFSET
 	model.rotation.y = CHARACTER_YAW
-	_apply_authored_colors(model)
-	_build_head_pivot(model)
+	var pivot := Node3D.new()
+	pivot.name = HEAD_PIVOT
+	pivot.position.y = HEAD_PIVOT_HEIGHT
+	model.add_child(pivot)
 	root.add_child(model)
 	return root
 
-static func _build_head_pivot(model: Node3D) -> void:
-	var parts: Array = []
-	for node in model.find_children("*", "MeshInstance3D", true, false):
-		for prefix in HEAD_PARTS:
-			if str(node.name).begins_with(prefix):
-				parts.append(node)
-				break
-	if parts.is_empty():
-		return
-	var parent := (parts[0] as Node).get_parent() as Node3D
-	var pivot := Node3D.new()
-	pivot.name = HEAD_PIVOT
-	pivot.position = Vector3(0.0, HEAD_PIVOT_HEIGHT, 0.0)
-	parent.add_child(pivot)
-	for part in parts:
-		var mesh_node := part as MeshInstance3D
-		var local := mesh_node.transform
-		var original_owner := mesh_node.owner
-		mesh_node.owner = null
-		mesh_node.get_parent().remove_child(mesh_node)
-		pivot.add_child(mesh_node)
-		mesh_node.owner = original_owner
-		mesh_node.transform = Transform3D(local.basis, local.origin - pivot.position)
+## Limites da malha já deformada, em coordenadas globais.
+static func posed_mesh_bounds(mesh: MeshInstance3D) -> AABB:
+	var skeleton := mesh.get_node_or_null(mesh.skeleton) as Skeleton3D
+	if mesh.skin == null or skeleton == null:
+		return mesh.global_transform * mesh.get_aabb()
+	var bind_transforms: Array[Transform3D] = []
+	for bind in mesh.skin.get_bind_count():
+		var bind_name := mesh.skin.get_bind_name(bind)
+		var bone := skeleton.find_bone(bind_name) if bind_name != &"" else mesh.skin.get_bind_bone(bind)
+		bind_transforms.append(skeleton.get_bone_global_pose(bone) * mesh.skin.get_bind_pose(bind))
+	# Calcula a pose também no servidor de renderização dummy dos testes.
+	var bounds := AABB()
+	var has_vertex := false
+	for surface in mesh.mesh.get_surface_count():
+		var arrays := mesh.mesh.surface_get_arrays(surface)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+		@warning_ignore("integer_division")
+		var influences := bones.size() / vertices.size()
+		for index in vertices.size():
+			var vertex := Vector3.ZERO if influences > 0 else vertices[index]
+			for influence in influences:
+				var slot := index * influences + influence
+				if weights[slot] > 0.0:
+					vertex += (bind_transforms[bones[slot]] * vertices[index]) * weights[slot]
+			vertex = mesh.global_transform * vertex
+			bounds = bounds.expand(vertex) if has_vertex else AABB(vertex, Vector3.ZERO)
+			has_vertex = true
+	return bounds
+
 
 ## Rotação da cabeça (no pivô) para um pitch oficial. O modelo olha para +Z
 ## no próprio espaço; girar em X com ângulo negativo levanta o rosto.
 static func head_rotation_for_pitch(pitch: float) -> float:
 	return -clampf(MovementRules.clamp_pitch(pitch), -HEAD_PITCH_LIMIT, HEAD_PITCH_LIMIT)
-
-## O gerador do pacote gravou a paleta sRGB (ex.: tênis #131518 = 0,075)
-## direto em `baseColorFactor`, que o glTF trata como linear; importado ao pé
-## da letra, tudo fica claro demais em relação à paleta e às prévias. Aqui só a
-## cor é relida como sRGB, numa cópia do material (cacheada por material
-## importado). Geometria, arquivo e demais parâmetros PBR ficam intactos.
-static var _authored_materials: Dictionary = {}
-
-static func _apply_authored_colors(model: Node3D) -> void:
-	for node in model.find_children("*", "MeshInstance3D", true, false):
-		var mesh_node := node as MeshInstance3D
-		for surface in mesh_node.mesh.get_surface_count():
-			var imported := mesh_node.mesh.surface_get_material(surface) as StandardMaterial3D
-			if imported == null:
-				continue
-			if not _authored_materials.has(imported):
-				var authored := imported.duplicate() as StandardMaterial3D
-				authored.albedo_color = imported.albedo_color.srgb_to_linear()
-				_authored_materials[imported] = authored
-			mesh_node.set_surface_override_material(surface, _authored_materials[imported])
 
 ## Pistola com o cano em -Z local (mesma frente da câmera).
 static func build_pistol() -> Node3D:

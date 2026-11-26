@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://rlqt5vcvbhnq"
-path="res://.godot/imported/mystery_character_plum.glb-748869008b2efbe6fa9cf1083d00e937.scn"
+uid="uid://liuvqxgn0ukv"
+path="res://.godot/imported/ninja.glb-f36ebe2c4be9705d98a81b5f876efc85.scn"
 
 [deps]
 
-source_file="res://assets/characters/mystery_character_plum.glb"
-dest_files=["res://.godot/imported/mystery_character_plum.glb-748869008b2efbe6fa9cf1083d00e937.scn"]
+source_file="res://assets/characters/ninja.glb"
+dest_files=["res://.godot/imported/ninja.glb-f36ebe2c4be9705d98a81b5f876efc85.scn"]
 
 [params]
 
@@ -19,8 +19,8 @@ nodes/apply_root_scale=true
 nodes/root_scale=1.0
 nodes/import_as_skeleton_bones=false
 nodes/use_node_type_suffixes=true
-meshes/ensure_tangents=false
-meshes/generate_lods=false
+meshes/ensure_tangents=true
+meshes/generate_lods=true
 meshes/create_shadow_meshes=true
 meshes/light_baking=1
 meshes/lightmap_texel_size=0.2

@@ -1,6 +1,6 @@
-# Créditos de assets — Mansão Noturna
+# Créditos de assets
 
-Os modelos abaixo entram só na variante `OSSUSPEITOS_MAP=nocturna_salao`. A mansão padrão não os utiliza.
+Os modelos de cenário abaixo entram só na variante `OSSUSPEITOS_MAP=nocturna_salao`. A mansão padrão não os utiliza.
 
 ## CC0 (Poly Haven)
 
@@ -71,3 +71,18 @@ Estes arquivos entram no jogo, mas a licença ainda não foi confirmada. Não re
 |---|---|
 | `assets/furniture/bathtub`, `toilet`, `faucet`, `dining_chair`, `kitchen_cabinet`, `kettle`, `washer` | Extraídos de `PipeworkFreeSample_scene.glb` (nós `SM_Bathtub_Clawfoot_01`, `SM_Toilet_01`, `SM_Faucet_Gooseneck_01`, `SM_DiningChair_Wood_01`, `SM_KitCab_Base_Door_05`, `SM_Kettle_Electric_01`, `SM_Washer_Front_01`). Licença pendente. |
 | `assets/furniture/lampara_ar` | Origem Sketchfab; licença desconhecida / pendente. |
+
+## Personagens CC0 (Quaternius) — todos os mapas
+
+Personagens low-poly de Quaternius (2019), do [Ultimate Animated Character Pack](https://quaternius.com/packs/ultimatedanimatedcharacter.html), também disponível no [OpenGameArt](https://opengameart.org/content/animated-characters-pack). Licença [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). Os modelos foram redimensionados, tiveram os clipes aparados e foram otimizados com `gltf-transform` sem Draco ou meshopt.
+
+| Arquivo em `assets/characters/` | Nome original |
+|---|---|
+| `knight.glb` | Knight_Male |
+| `soldier.glb` | Soldier_Male |
+| `ninja.glb` | Ninja_Male |
+| `detective.glb` | Suit_Male |
+| `butler.glb` | OldClassy_Male |
+| `viking.glb` | Viking_Male |
+| `pirate.glb` | Pirate_Male |
+| `cowboy.glb` | Cowboy_Male |

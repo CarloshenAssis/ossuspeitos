@@ -395,8 +395,8 @@ func _test_online_rooms() -> void:
 	# Sala: anfitrião, PRONTO/AGUARDANDO, contagem de prontos.
 	var dto := RoomRules.sanitize_room_state({"code": "K7M2QX", "phase": "lobby", "round_id": 0, "countdown_msec": 0,
 		"min_players": 4, "max_players": 8, "ready_count": 1, "result": {}, "players": [
-			{"peer_id": 5, "label": "Ana", "appearance": "ember", "ready": false, "host": true},
-			{"peer_id": 6, "label": "Beto", "appearance": "moss", "ready": true, "host": false}]})
+			{"peer_id": 5, "label": "Ana", "appearance": "knight", "ready": false, "host": true},
+			{"peer_id": 6, "label": "Beto", "appearance": "soldier", "ready": true, "host": false}]})
 	rooms_menu.show_room(dto, 5)
 	_expect(rooms_menu.panel_name == "room" and rooms_menu.room_title.text == "Sala K7M-2QX", "room shows the display code")
 	_expect(rooms_menu.room_status.text == "AGUARDANDO JOGADORES\n2 de 4 no mínimo. Envie o código da sala aos amigos.", "room below the minimum says it is waiting for players (%s)" % rooms_menu.room_status.text)
@@ -435,7 +435,7 @@ func _test_online_rooms() -> void:
 func _test_room_status_lines() -> void:
 	var players: Array = []
 	for index in 4:
-		players.append({"peer_id": 5 + index, "label": "P%d" % index, "appearance": "ember", "ready": index < 3, "host": index == 0})
+		players.append({"peer_id": 5 + index, "label": "P%d" % index, "appearance": "knight", "ready": index < 3, "host": index == 0})
 	var view := {"phase": "lobby", "countdown_msec": 0, "min_players": 4, "ready_count": 3, "result": {}, "players": players}
 	var lobby := DesktopMenu.room_status_lines(view)
 	_expect(lobby[0] == "LOBBY DA SALA" and str(lobby[1]).begins_with("3 de 4 prontos."), "lobby with enough players (%s)" % str(lobby))

@@ -1150,3 +1150,11 @@ A apresentação do térreo de `nocturna_salao` instancia modelos no cliente e
 oculta as malhas cinzas dos móveis substituídos pelos seus IDs oficiais.
 `SalaoMap.FURNITURE` fornece os volumes para encaixe. `ArenaRules.BLOCKERS`
 continua como fonte da colisão e do bloqueio de disparos.
+
+## Avatares animados de Quaternius
+
+Os oito avatares CC0 são usados em todos os mapas e mantêm a atribuição pela
+primeira vaga livre. No cliente, o AnimationPlayer avança manualmente para
+compor o pitch com a pose do osso Head. A velocidade apresentada ajusta a
+cadência de Walk. O clipe Defeat termina em pé, então os corpos deitam com um giro de 90° em X
+e usam os limites da malha deformada para alinhar o modelo ao piso.

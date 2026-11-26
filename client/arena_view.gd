@@ -85,7 +85,6 @@ var _visual_time := 0.0
 var animators: Dictionary = {}
 var _action_round := 0
 var _action_event_id := 0
-var _body_transitions: Dictionary = {}
 ## Liga/desliga a animação procedural (comparação de desempenho e testes).
 var character_animation := true
 ## Distância a partir da qual o corpo remoto salta para a posição oficial em
@@ -284,11 +283,8 @@ func _process(delta: float) -> void:
 		else:
 			avatar.position = official
 		avatar.rotation.y = float(sample["yaw"])
-		# Só a cabeça acompanha o pitch oficial; o corpo continua de pé. A
-		# referência vem do rig (sem busca de nó por quadro).
-		var head: Node3D = animator.rig.get("head") if animator != null and animator.is_valid() else avatar.find_child(ArenaModels.HEAD_PIVOT, true, false) as Node3D
-		if head != null:
-			head.rotation.x = ArenaModels.head_rotation_for_pitch(float(sample["pitch"]))
+		if animator != null:
+			animator.head_pivot.rotation.x = ArenaModels.head_rotation_for_pitch(float(sample["pitch"]))
 		# Em primeira pessoa como espectador, a câmera fica dentro do alvo:
 		# chapéu, braços e visor dele ficariam colados à lente.
 		var show_model: bool = peer_id != spectator_target_peer_id
@@ -299,7 +295,6 @@ func _process(delta: float) -> void:
 				animator.update(avatar.position, avatar.rotation.y, delta)
 			elif animator.amplitude > 0.0 or animator.speed > 0.0:
 				animator.rest()
-	_update_body_transitions(delta)
 	_update_local_view(delta)
 	_update_environment_prompt()
 	_update_presentation_motion(delta)
@@ -882,7 +877,6 @@ func clear_bodies(keep_round: int = -1) -> void:
 			continue
 		node.queue_free()
 		bodies.erase(body_id)
-		_body_transitions.erase(body_id)
 
 func _build_body(dto: Dictionary) -> Node3D:
 	var placement := body_placement(dto["position"], float(dto["yaw"]))
@@ -894,8 +888,8 @@ func _build_body(dto: Dictionary) -> Node3D:
 	root.set_meta("placement", placement)
 	root.position = placement["position"]
 	root.rotation.y = float(placement["yaw"])
-	# De costas: o personagem em pé gira 90° em X (o rosto, à frente em -Z,
-	# fica para cima; a cabeça vai para +Z local).
+	# Defeat termina em pé, então deitamos o modelo com o mesmo giro de 90°
+	# em X da apresentação anterior (rosto em -Z fica para cima).
 	var fall := Node3D.new()
 	fall.name = "Fall"
 	fall.rotation.x = PI * 0.5
@@ -903,46 +897,18 @@ func _build_body(dto: Dictionary) -> Node3D:
 	var character := ArenaModels.build_character(str(dto["appearance"]))
 	fall.add_child(character)
 	add_child(root)
-	_pose_body(character)
-	# Apoia no piso: a parte mais baixa da malha encosta em y = 0.
 	var lowest := INF
 	for mesh in root.find_children("*", "MeshInstance3D", true, false):
-		var box: AABB = (mesh as MeshInstance3D).global_transform * (mesh as MeshInstance3D).get_aabb()
-		lowest = minf(lowest, box.position.y)
+		lowest = minf(lowest, ArenaModels.posed_mesh_bounds(mesh).position.y)
 	if is_finite(lowest):
-		fall.position.y = root.global_position.y - lowest + 0.01
-	if presentation_motion:
-		var rig := CharacterRig.build(character.get_node(ArenaModels.CHARACTER_MODEL))
-		_body_transitions[int(dto["body_id"])]= {"root":root,"fall":fall,"elapsed":0.0,
-			"left":rig.pivots.Elbow_L,"right":rig.pivots.Elbow_R,
-			"left_rest":(rig.pivots.Elbow_L as Node3D).rotation,"right_rest":(rig.pivots.Elbow_R as Node3D).rotation}
+		fall.position.y += root.global_position.y - lowest + 0.01
 	return root
-
-## Pose determinística e legível de quem caiu: braços abertos, uma perna
-## dobrada e a cabeça de lado. Sem animação e sem seguir pitch ou input.
-static func _pose_body(character: Node3D) -> void:
-	var model := character.get_node_or_null(ArenaModels.CHARACTER_MODEL) as Node3D
-	if model == null:
-		return
-	var rig := CharacterRig.build(model)
-	if rig.is_empty():
-		return
-	var pivots: Dictionary = rig["pivots"]
-	if pivots.has("Shoulder_L"): (pivots["Shoulder_L"] as Node3D).rotation = Vector3(0.0, 0.0, 0.9)
-	if pivots.has("Shoulder_R"): (pivots["Shoulder_R"] as Node3D).rotation = Vector3(0.0, 0.0, -0.9)
-	if pivots.has("Elbow_L"): (pivots["Elbow_L"] as Node3D).rotation = Vector3(-0.4, 0.0, 0.0)
-	if pivots.has("Hip_R"): (pivots["Hip_R"] as Node3D).rotation = Vector3(-0.35, 0.0, 0.0)
-	if pivots.has("Knee_R"): (pivots["Knee_R"] as Node3D).rotation = Vector3(0.7, 0.0, 0.0)
-	var head: Node3D = rig.get("head")
-	if head != null:
-		head.rotation = Vector3(0.0, 0.35, 0.0)
 
 ## One writer for the motion child; reload/recoil continue on WeaponPivot.
 func set_presentation_motion(enabled: bool) -> void:
 	presentation_motion = enabled
 	if not enabled:
 		_reset_presentation_motion()
-		_update_body_transitions(0.0)
 
 func _reset_presentation_motion() -> void:
 	camera_effects.reset()
@@ -1040,27 +1006,6 @@ func _reset_visual_actions(round_id: int) -> void:
 func _trigger_remote_action(peer_id: int, kind: String) -> void:
 	if not character_animation or not bool(_alive_flags.get(peer_id,true)) or not animators.has(peer_id): return
 	(animators[peer_id] as CharacterAnimator).actions.trigger(kind)
-
-## Small settling of corpse arms, not a second simulation or falling collider.
-## Root/Fall angle stay authoritative-placement compatible; only visual elbows
-## move and floor support is re-established from the resulting mesh bounds.
-func _update_body_transitions(delta: float) -> void:
-	for id in _body_transitions.keys():
-		var entry: Dictionary=_body_transitions[id]
-		if not is_instance_valid(entry.root):
-			_body_transitions.erase(id)
-			continue
-		entry.elapsed=minf(0.35,float(entry.elapsed)+maxf(delta,0.0))
-		var ratio := float(entry.elapsed)/0.35
-		var offset := 0.12*sin(PI*ratio)*(1.0-ratio) if presentation_motion else 0.0
-		(entry.left as Node3D).rotation=entry.left_rest+Vector3(offset,0,0)
-		(entry.right as Node3D).rotation=entry.right_rest+Vector3(-offset,0,0)
-		var lowest := INF
-		for mesh in (entry.root as Node3D).find_children("*","MeshInstance3D",true,false):
-			var bounds: AABB=(mesh as MeshInstance3D).global_transform*(mesh as MeshInstance3D).get_aabb()
-			lowest=minf(lowest,bounds.position.y)
-		if is_finite(lowest): (entry.fall as Node3D).position.y+=0.01-lowest
-		if ratio>=1.0 or not presentation_motion: _body_transitions.erase(id)
 
 func nearest_investigation() -> String:
 	if player_rig == null: return ""

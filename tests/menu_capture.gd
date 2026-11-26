@@ -98,11 +98,11 @@ func _prepare_online(screen: String) -> void:
 		menu.buttons["room_create"].grab_focus()
 		return
 	var players := [
-		{"peer_id": 11, "label": "Ana Luísa", "appearance": "ember", "ready": screen == "room", "host": true},
-		{"peer_id": 12, "label": "Beto", "appearance": "moss", "ready": screen == "room", "host": false},
-		{"peer_id": 13, "label": "Caio", "appearance": "night", "ready": false, "host": false},
-		{"peer_id": 14, "label": "Eduarda Maria", "appearance": "plum", "ready": screen == "room", "host": false},
-		{"peer_id": 15, "label": "Duda", "appearance": "sand", "ready": false, "host": false},
+		{"peer_id": 11, "label": "Ana Luísa", "appearance": "knight", "ready": screen == "room", "host": true},
+		{"peer_id": 12, "label": "Beto", "appearance": "soldier", "ready": screen == "room", "host": false},
+		{"peer_id": 13, "label": "Caio", "appearance": "detective", "ready": false, "host": false},
+		{"peer_id": 14, "label": "Eduarda Maria", "appearance": "cowboy", "ready": screen == "room", "host": false},
+		{"peer_id": 15, "label": "Duda", "appearance": "pirate", "ready": false, "host": false},
 	]
 	var result := {}
 	if screen == "room_result":

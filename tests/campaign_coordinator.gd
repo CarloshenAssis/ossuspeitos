@@ -551,7 +551,7 @@ func round_private_spectator_targets_stale(peer_id: int, old_round: int) -> void
 	app.round_private_spectator_targets.rpc_id(peer_id, {"round_id": old_round, "targets": peers.duplicate()})
 	app.round_final_reveal.rpc_id(peer_id, {"round_id": old_round, "winner": "ASSASSIN", "reason": "stale", "players": []})
 	# Corpo da rodada anterior chegando atrasado: não pode reaparecer.
-	app.round_body_added.rpc_id(peer_id, BodyRules.make(900 + peer_id % 50, old_round, int(peers[0]), Vector3(13.5, 1.0, 14.0), 0.0, "ember"))
+	app.round_body_added.rpc_id(peer_id, BodyRules.make(900 + peer_id % 50, old_round, int(peers[0]), Vector3(13.5, 1.0, 14.0), 0.0, "knight"))
 
 func _check_stale_rejected() -> String:
 	if not campaign_shots.is_empty(): return "a stale packet produced a shot"

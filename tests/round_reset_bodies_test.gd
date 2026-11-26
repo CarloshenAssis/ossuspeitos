@@ -165,19 +165,19 @@ func _test_interpolator_teleports_on_new_round() -> void:
 
 func _test_body_registry_and_dto() -> void:
 	var registry := BodyRegistry.new()
-	var dto := registry.add(4, 7, Vector3(10, 1, 12), 0.5, "moss")
+	var dto := registry.add(4, 7, Vector3(10, 1, 12), 0.5, "soldier")
 	_expect(not dto.is_empty(), "body registered")
 	_expect(dto.keys() == BodyRules.PUBLIC_KEYS, "body DTO is the exact public allowlist (%s)" % str(dto.keys()))
 	for forbidden in ["role", "inventory", "weapon_id", "magazine", "reserve", "health", "instigator", "shooter_peer_id"]:
 		_expect(not dto.has(forbidden), "body DTO has no %s" % forbidden)
-	_expect(registry.add(4, 7, Vector3(0, 1, 0), 0.0, "moss").is_empty(), "duplicate elimination creates no second body")
+	_expect(registry.add(4, 7, Vector3(0, 1, 0), 0.0, "soldier").is_empty(), "duplicate elimination creates no second body")
 	_expect(registry.size() == 1, "one body per eliminated player per round")
-	_expect(not registry.add(4, 8, Vector3(1, 1, 1), 0.0, "ember").is_empty(), "another player gets its own body")
+	_expect(not registry.add(4, 8, Vector3(1, 1, 1), 0.0, "knight").is_empty(), "another player gets its own body")
 	_expect(registry.public_list().size() == 2, "public list holds both bodies")
 	registry.clear()
 	_expect(registry.size() == 0 and registry.public_list().is_empty(), "reset removes every body")
 	# Validação no cliente: chave extra, papel ou tipo errado viram vazio.
-	var clean := BodyRules.make(1, 2, 3, Vector3(1, 1, 1), 0.0, "ember")
+	var clean := BodyRules.make(1, 2, 3, Vector3(1, 1, 1), 0.0, "knight")
 	_expect(BodyRules.sanitize(clean) == clean, "valid DTO passes")
 	var with_role := clean.duplicate(); with_role["role"] = "ASSASSIN"
 	_expect(BodyRules.sanitize(with_role).is_empty(), "DTO with a role is refused")
@@ -233,28 +233,30 @@ func _test_body_does_not_block_or_absorb_shots() -> void:
 # --- Corpos: apresentação ----------------------------------------------------------
 
 func _test_body_presentation() -> void:
-	var dto := BodyRules.make(11, 5, 2, Vector3(13.5, 1.0, 14.8), 0.7, "moss")
+	var dto := BodyRules.make(11, 5, 2, Vector3(13.5, 1.0, 14.8), 0.7, "soldier")
 	_expect(_arena.add_body(dto), "body shown")
 	_expect(not _arena.add_body(dto), "same body is not shown twice")
-	var again := BodyRules.make(12, 5, 2, Vector3(20, 1, 2), 0.0, "moss")
+	var again := BodyRules.make(12, 5, 2, Vector3(20, 1, 2), 0.0, "soldier")
 	_expect(not _arena.add_body(again), "a second body of the same player in the same round is ignored")
 	_expect(_arena.bodies.size() == 1 and not _arena.avatars.has(2), "body is separate from the living avatars")
 	var node: Node3D = _arena.bodies[11]
 	_expect(node.find_children("*", "CollisionObject3D", true, false).is_empty() and node.find_children("*", "CollisionShape3D", true, false).is_empty(), "body has no collision")
 	var character := node.find_child("Character", true, false) as Node3D
-	_expect(character != null and str(character.get_meta("appearance", "")) == "moss", "body keeps the player's appearance")
+	_expect(character != null and str(character.get_meta("appearance", "")) == "soldier", "body keeps the player's appearance")
 	var official: Vector3 = dto["position"]
 	_expect(Vector2(node.position.x, node.position.z).distance_to(Vector2(official.x, official.z)) <= ArenaView.BODY_MAX_NUDGE + 1e-4, "body stays at the official death spot")
 	_expect(absf(node.position.y) < 1e-4, "body root on the official floor")
 	var box := AABB()
 	var first := true
 	for mesh in node.find_children("*", "MeshInstance3D", true, false):
-		var part: AABB = (mesh as MeshInstance3D).global_transform * (mesh as MeshInstance3D).get_aabb()
+		var part: AABB = ArenaModels.posed_mesh_bounds(mesh as MeshInstance3D)
 		box = part if first else box.merge(part)
 		first = false
 	_expect(box.position.y > -0.02 and box.position.y < 0.05, "body rests on the floor (lowest %.3f)" % box.position.y)
-	_expect(box.size.y < 0.75, "body is lying down (height %.2f)" % box.size.y)
+	_expect(box.size.y < 0.95, "body is lying down (height %.2f)" % box.size.y)
 	_expect(maxf(box.size.x, box.size.z) > 1.4, "body is stretched on the floor (%.2f x %.2f)" % [box.size.x, box.size.z])
+	var fall := character.get_parent() as Node3D
+	_expect(fall != null and fall.name == "Fall" and is_equal_approx(fall.rotation.x, PI * 0.5), "body uses the 90-degree fall tilt")
 	print("BODY_POSE lowest=%.3f height=%.2f length=%.2f" % [box.position.y, box.size.y, maxf(box.size.x, box.size.z)])
 	# Snapshots não tocam o corpo.
 	var before := node.global_transform
@@ -267,7 +269,7 @@ func _test_body_presentation() -> void:
 	_expect(str(MansionMap.space_at(near_wall["position"] + Vector3.UP).get("id", "")) == "escritorio", "wall correction keeps the body in its room")
 	_expect(not bool(near_wall.get("clipped", false)), "a fitting pose is found next to the wall")
 	# Reset: a rodada seguinte remove os corpos da anterior.
-	_arena.add_body(BodyRules.make(13, 6, 3, Vector3(24.0, 1.0, 11.5), 0.0, "ember"))
+	_arena.add_body(BodyRules.make(13, 6, 3, Vector3(24.0, 1.0, 11.5), 0.0, "knight"))
 	_arena.clear_bodies(6)
 	_expect(_arena.bodies.size() == 1 and _arena.bodies.has(13), "bodies of other rounds removed, current round kept")
 	_arena.clear_bodies()

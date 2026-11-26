@@ -100,33 +100,29 @@ func _test_models_are_visual_only() -> void:
 	nodes.append_array(_arena.pickup_nodes.values())
 	for node in nodes:
 		_expect(_collision_nodes(node) == 0, "%s has no collision" % (node as Node).name)
-	# Personagem: pés no chão e 2 m de altura, como a cápsula oficial anterior.
+	# Personagem: pés próximos ao piso na pose animada.
 	var avatar: Node3D = _arena.avatars[REMOTE]
 	var bounds := _bounds(avatar)
 	_expect(absf(bounds.position.y - (avatar.global_position.y - 1.0)) < 0.05, "character feet touch the floor (bottom %.2f)" % bounds.position.y)
-	_expect(bounds.size.x < 1.0 and bounds.size.z < 1.0, "character stays inside a 1 m footprint")
+	_expect(bounds.size.x < 1.5 and bounds.size.z < 1.5, "character has a compact horizontal footprint")
 
 func _test_character_does_not_reveal_roles() -> void:
 	# Cada uma das oito aparências vira o GLB certo, na escala real, com os pés
-	# no piso oficial, sem colisão, sem animação e com a frente em -Z.
+	# no piso oficial, sem colisão e com a frente em -Z.
 	for appearance_id in CharacterAppearance.IDS:
 		var body := ArenaModels.build_character(appearance_id)
 		root.add_child(body)
 		body.position = Vector3(0, MovementRules.PLAYER_HEIGHT, 0)
 		var model := body.get_node_or_null(ArenaModels.CHARACTER_MODEL) as Node3D
 		_expect(model != null and str(body.get_meta("appearance")) == appearance_id, "%s builds its own GLB" % appearance_id)
+		var animator := CharacterAnimator.new(model)
 		var bounds := _bounds(body)
-		_expect(absf(bounds.position.y) < 0.01 and absf(bounds.size.y - 1.8) < 0.01, "%s stands on the floor and is 1.80 m tall (%s)" % [appearance_id, str(bounds)])
-		_expect(bounds.size.x < 1.0 and bounds.size.z < 1.0, "%s fits a 1 m footprint" % appearance_id)
+		_expect(absf(bounds.position.y) < 0.08 and bounds.size.y > 1.5, "%s stands near the floor (%s)" % [appearance_id, str(bounds)])
 		_expect(_collision_nodes(body) == 0, "%s has no collision" % appearance_id)
-		_expect(body.find_children("*", "AnimationPlayer", true, false).is_empty() and body.find_children("*", "Skeleton3D", true, false).is_empty(), "%s brings no invented animation or rig" % appearance_id)
-		var shoe := body.find_child("Shoe_L", true, false) as MeshInstance3D
-		var shoe_color := (shoe.get_active_material(0) as StandardMaterial3D).albedo_color
-		_expect(shoe_color.r < 0.12 and shoe_color.b < 0.12, "%s keeps the authored dark palette (shoe %s)" % [appearance_id, str(shoe_color)])
-		var head := body.find_child("Head", true, false) as MeshInstance3D
-		var nose := body.find_child("Nose", true, false) as MeshInstance3D
-		var front := (nose.global_transform * nose.get_aabb()).get_center() - (head.global_transform * head.get_aabb()).get_center()
-		_expect(front.z < -0.05, "%s faces -Z (game forward) with yaw 0" % appearance_id)
+		_expect(animator.is_valid(), "%s has an animated skeleton" % appearance_id)
+		var head := animator.skeleton.find_bone("Head")
+		var front := animator.skeleton.global_basis * animator.skeleton.get_bone_global_pose(head).basis.z
+		_expect(front.normalized().z < -0.9, "%s faces -Z (game forward) with yaw 0" % appearance_id)
 		body.free()
 	var fallback := ArenaModels.build_character("ASSASSIN")
 	_expect(str(fallback.get_meta("appearance")) == CharacterAppearance.FALLBACK, "a role-like id is not an appearance")
@@ -134,18 +130,18 @@ func _test_character_does_not_reveal_roles() -> void:
 	# Aparência vem só do roster público; sem roster, o padrão.
 	var states := [_state(LOCAL, Vector3(0, 1, 0), 0.0), _state(REMOTE, Vector3(3, 1, 3), 0.7), _state(OTHER, Vector3(-3, 1, 3), 0.0)]
 	_arena.apply_snapshot([_state(LOCAL, Vector3(0, 1, 0), 0.0)])
-	_arena.apply_roster_alive([{"peer_id": REMOTE, "alive": true, "appearance": "night"}, {"peer_id": OTHER, "alive": true, "appearance": "plum"}])
+	_arena.apply_roster_alive([{"peer_id": REMOTE, "alive": true, "appearance": "detective"}, {"peer_id": OTHER, "alive": true, "appearance": "cowboy"}])
 	_arena.apply_snapshot(states)
-	_expect(str((_arena.avatars[REMOTE] as Node3D).get_meta("appearance")) == "night" and str((_arena.avatars[OTHER] as Node3D).get_meta("appearance")) == "plum", "bodies use the roster appearances")
+	_expect(str((_arena.avatars[REMOTE] as Node3D).get_meta("appearance")) == "detective" and str((_arena.avatars[OTHER] as Node3D).get_meta("appearance")) == "cowboy", "bodies use the roster appearances")
 	# Troca de aparência (roster novo) mantém posição, yaw e visibilidade.
 	for _i in 30: _arena._process(0.1)
 	var before: Node3D = _arena.avatars[REMOTE]
 	var position := before.position
 	var yaw := before.rotation.y
-	_arena.apply_roster_alive([{"peer_id": REMOTE, "alive": true, "appearance": "sand"}])
+	_arena.apply_roster_alive([{"peer_id": REMOTE, "alive": true, "appearance": "pirate"}])
 	var after: Node3D = _arena.avatars[REMOTE]
-	_expect(str(after.get_meta("appearance")) == "sand" and after.position.is_equal_approx(position) and is_equal_approx(after.rotation.y, yaw), "an appearance update swaps only the visual")
-	_arena.apply_roster_alive([{"peer_id": REMOTE, "alive": true, "appearance": "sand"}])
+	_expect(str(after.get_meta("appearance")) == "pirate" and after.position.is_equal_approx(position) and is_equal_approx(after.rotation.y, yaw), "an appearance update swaps only the visual")
+	_arena.apply_roster_alive([{"peer_id": REMOTE, "alive": true, "appearance": "pirate"}])
 	_expect(_arena.avatars[REMOTE] == after, "the same appearance does not rebuild the body")
 	_expect(not _arena.avatars.has(LOCAL), "the local player never gets a body in front of the camera")
 
@@ -196,7 +192,7 @@ func _bounds(root_node: Node3D) -> AABB:
 	var first := true
 	for node in root_node.find_children("*", "MeshInstance3D", true, false):
 		var mesh_node := node as MeshInstance3D
-		var box := mesh_node.global_transform * mesh_node.get_aabb()
+		var box := ArenaModels.posed_mesh_bounds(mesh_node)
 		result = box if first else result.merge(box)
 		first = false
 	return result
