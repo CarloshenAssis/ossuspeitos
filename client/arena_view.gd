@@ -22,6 +22,7 @@ var camera_effects := CameraEffects.new()
 var presentation_motion := true
 var spatial_audio: SpatialAudioController
 var fx: CombatFx
+var _ambient: AudioStreamPlayer
 var _muzzle_flash: MeshInstance3D
 var _combat_prev: Dictionary = {}
 var _reload_pose := false
@@ -153,6 +154,7 @@ func _ready() -> void:
 	add_child(fx)
 	spatial_audio = SpatialAudioController.new()
 	add_child(spatial_audio)
+	_ensure_ambient()
 	configure_audio(MenuSettings.load_saved())
 	var overlay := CanvasLayer.new()
 	add_child(overlay)
@@ -513,7 +515,8 @@ func apply_combat_state(state: Dictionary) -> void:
 	_refresh_gameplay_visuals()
 	for feedback in combat_feedback(_combat_prev, state):
 		match feedback:
-			"pickup_ok", "reload_start", "reload_end": fx.play_ui(feedback)
+			"pickup_ok", "pickup_weapon", "pickup_ammo", "pickup_health", "reload_start", "reload_end":
+				fx.play_ui(feedback)
 			"hurt":
 				fx.play_ui("hurt")
 				if int(state.get("health", 0)) > 0: _damage_kick()
@@ -538,7 +541,7 @@ static func combat_feedback(before: Dictionary, after: Dictionary) -> Array:
 	if health_after < health_before:
 		result.append("hurt")
 	elif health_after > health_before:
-		result.append("pickup_ok")
+		result.append("pickup_health")
 	if health_after <= 0:
 		return result
 	var weapon_before := str(before.get("weapon_id", ""))
@@ -546,9 +549,9 @@ static func combat_feedback(before: Dictionary, after: Dictionary) -> Array:
 	var reloading_before := bool(before.get("reloading", false))
 	var reloading_after := bool(after.get("reloading", false))
 	if weapon_before.is_empty() and not weapon_after.is_empty():
-		result.append("pickup_ok")
+		result.append("pickup_weapon")
 	elif not weapon_after.is_empty() and int(after.get("reserve", 0)) > int(before.get("reserve", 0)) and not reloading_before:
-		result.append("pickup_ok")
+		result.append("pickup_ammo")
 	if not reloading_before and reloading_after:
 		result.append("reload_start")
 	elif reloading_before and not reloading_after and int(after.get("magazine", 0)) > int(before.get("magazine", 0)):
@@ -706,13 +709,13 @@ func show_shot(payload: Dictionary) -> void:
 		# Disparo já antecipado no clique: o oficial confirma sem repetir som e
 		# recuo. Sem antecipação, o efeito sai agora.
 		if predicted_shots.is_empty():
-			fx.play_ui("shot")
+			fx.play_ui(SfxBank.shot_for(str(payload.get("weapon_id", _held_weapon_id))))
 			_recoil()
 		else:
 			predicted_shots.pop_front()
 	else:
 		fx.muzzle_flash(start, finish - start)
-		fx.play_world("shot", start)
+		fx.play_world(SfxBank.shot_for(str(payload.get("weapon_id", ""))), start)
 	# Impacto colado na própria câmera (é você quem foi atingido) viraria uma
 	# mancha no centro da tela; aí basta o retorno de dano do estado privado.
 	if finish.distance_to(camera_origin()) > IMPACT_CAMERA_CLEARANCE:
@@ -727,7 +730,7 @@ func predict_local_shot(action_id: int) -> bool:
 	var now := Time.get_ticks_msec()
 	predicted_shots.append({"id": action_id, "msec": now})
 	_last_predicted_shot_msec = now
-	fx.play_ui("shot")
+	fx.play_ui(SfxBank.shot_for(_held_weapon_id))
 	_recoil()
 	return true
 
@@ -979,6 +982,15 @@ func configure_audio(settings: MenuSettings) -> void:
 		spatial_audio.configure(settings.movement_volume, settings.environment_volume, settings.combat_volume)
 	if fx != null:
 		fx.set_category_volume(settings.combat_volume)
+	if _ambient != null:
+		var gain := clampf(settings.volume, 0.0, 1.0) * clampf(settings.environment_volume, 0.0, 1.0)
+		_ambient.volume_db = linear_to_db(maxf(0.0001, gain * 0.14)) - 6.0
+		if DisplayServer.get_name() == "headless":
+			return
+		if gain <= 0.0:
+			_ambient.stop()
+		elif not _ambient.playing:
+			_ambient.play()
 
 func apply_sound_events(events: Array, round_id: int, bootstrap: bool = false) -> void:
 	if round_id<_action_round: return
@@ -1030,3 +1042,26 @@ func apply_inspection(raw: Dictionary) -> void:
 	if int(info.request_id)==_inspection_request: return
 	_inspection_request=int(info.request_id)
 	inspection_label.text="Corpo de %s — eliminação confirmada nesta rodada." % str(info.label)
+
+func _exit_tree() -> void:
+	if _ambient != null:
+		_ambient.stop()
+		_ambient.stream = null
+
+func _ensure_ambient() -> void:
+
+	if _ambient != null:
+		return
+	# Testes headless não precisam do loop; o stream importado vazaria no exit.
+	if DisplayServer.get_name() == "headless":
+		return
+	var stream := SfxBank.ambient_stream()
+	if stream == null:
+		return
+	if stream is AudioStreamOggVorbis:
+		stream = stream.duplicate()
+		(stream as AudioStreamOggVorbis).loop = true
+	_ambient = AudioStreamPlayer.new()
+	_ambient.stream = stream
+	_ambient.volume_db = -24.0
+	add_child(_ambient)

@@ -91,7 +91,11 @@ func _test_client_roster_allowlist() -> void:
 	var hostile := {"peer_id": 7, "label": "Ana", "connected": true, "participant": true, "alive": true,
 		"appearance": "detective", "inventory": {"weapon_id": "common_pistol"}, "team": 2, "secret": "x"}
 	var clean: Dictionary = app_script.sanitize_roster_entry(hostile)
-	_expect(clean.keys().size() <= 6 and not clean.has("inventory") and not clean.has("team") and not clean.has("secret"), "unknown roster keys are dropped")
+	_expect(clean.keys().size() <= 8 and not clean.has("inventory") and not clean.has("team") and not clean.has("secret"), "unknown roster keys are dropped")
+	var scored: Dictionary = app_script.sanitize_roster_entry({"peer_id": 7, "label": "Ana", "appearance": "detective", "kills": 2, "deaths": 1, "inventory": {}})
+	_expect(int(scored["kills"]) == 2 and int(scored["deaths"]) == 1 and not scored.has("inventory"), "official kills and deaths survive the allowlist")
+	var bad_score: Dictionary = app_script.sanitize_roster_entry({"peer_id": 7, "kills": "x", "deaths": -3})
+	_expect(int(bad_score["kills"]) == 0 and int(bad_score["deaths"]) == 0, "malformed scores become zero")
 	_expect(clean["appearance"] == "detective" and clean["label"] == "Ana" and int(clean["peer_id"]) == 7, "allowed keys survive")
 	var bad: Dictionary = app_script.sanitize_roster_entry({"peer_id": 8, "label": "Beto", "appearance": "ASSASSIN"})
 	_expect(bad["appearance"] == CharacterAppearance.FALLBACK, "unknown appearance id becomes the fallback")

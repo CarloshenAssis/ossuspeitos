@@ -40,6 +40,9 @@ var alive: Dictionary = {}
 
 var _roles: Dictionary = {}
 var _eliminations: Dictionary = {}
+## Abates e mortes da rodada, só do resultado oficial de eliminação.
+var kills: Dictionary = {}
+var deaths: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 var _countdown_seconds := RoundRules.COUNTDOWN_SECONDS
 var _round_end_delay_seconds := RoundRules.ROUND_END_DELAY_SECONDS
@@ -296,6 +299,8 @@ func public_roster() -> Array:
 			"participant": participants.has(peer_id),
 			"alive": bool(alive.get(peer_id, true)),
 			"appearance": str(entry["appearance"]),
+			"kills": int(kills.get(peer_id, 0)),
+			"deaths": int(deaths.get(peer_id, 0)),
 		})
 	return result
 
@@ -327,6 +332,8 @@ func _begin_countdown(now_msec: int) -> void:
 	final_reveal.clear()
 	_revealed_round_id = 0
 	_eliminations.clear()
+	kills.clear()
+	deaths.clear()
 	participants.clear()
 	alive.clear()
 	winning_team = Role.TEAM_NONE
@@ -363,6 +370,8 @@ func _begin_active(now_msec: int) -> void:
 	participants.clear()
 	alive.clear()
 	_eliminations.clear()
+	kills.clear()
+	deaths.clear()
 	_roles = roles
 	final_reveal.clear()
 	_revealed_round_id = 0
@@ -384,6 +393,9 @@ func _set_alive(peer_id: int, value: bool, cause: String, instigator_peer_id: in
 			"cause": cause,
 			"instigator": instigator_peer_id,
 		}
+		deaths[peer_id] = int(deaths.get(peer_id, 0)) + 1
+		if instigator_peer_id > 0 and instigator_peer_id != peer_id:
+			kills[instigator_peer_id] = int(kills.get(instigator_peer_id, 0)) + 1
 	alive_changed.emit(round_id, peer_id, value)
 	spectator_targets_changed.emit(round_id)
 
@@ -448,6 +460,8 @@ func reset_for_next_round(now_msec: int) -> void:
 	final_reveal.clear()
 	_revealed_round_id = 0
 	_eliminations.clear()
+	kills.clear()
+	deaths.clear()
 	participants.clear()
 	alive.clear()
 	winning_team = Role.TEAM_NONE
@@ -469,6 +483,8 @@ func clear() -> void:
 	final_reveal.clear()
 	_revealed_round_id = 0
 	_eliminations.clear()
+	kills.clear()
+	deaths.clear()
 	participants.clear()
 	alive.clear()
 	lobby.clear()

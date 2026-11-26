@@ -3,6 +3,8 @@ extends RefCounted
 
 ## Owned by one MatchRoom. No client payload is accepted here.
 const STEP_DISTANCE := 0.65
+## Mesmo limiar da animação de corrida (3 m/s). Usa a velocidade oficial, não teclas.
+const STEP_RUN_SPEED := 3.0
 var rounds: RoundAuthority
 var world: AuthoritativeWorld
 var _round_id := 0
@@ -43,9 +45,10 @@ func observe_movement() -> void:
 		old.distance=float(old.distance)+distance
 		if float(old.distance)>=STEP_DISTANCE:
 			old.distance=fmod(float(old.distance),STEP_DISTANCE)
-			# No sprint exists. The run category is reserved, never inferred from
-			# client keys or introduced as a new movement rule.
-			emit_authorized("step_walk",position,peer)
+			var velocity: Vector3 = state.get("velocity", Vector3.ZERO)
+			var horizontal := Vector2(velocity.x, velocity.z).length()
+			var kind := "step_run" if horizontal > STEP_RUN_SPEED else "step_walk"
+			emit_authorized(kind,position,peer)
 	for peer in _movement.keys():
 		if not world.states.has(peer): _movement.erase(peer)
 

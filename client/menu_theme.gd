@@ -20,13 +20,13 @@ const GOLD := Color("#C19A55")
 const GOLD_SOFT := Color("#8D7040")
 const CREAM := Color("#EFE5D0")
 const PARCHMENT := Color("#D8CBB0")
-const MUTED := Color("#B5A58C")
+const MUTED := Color("#C9B89A")
 const ERROR := Color("#E8A08E")
 const OK := Color("#B9D3A8")
 const CARD := Color(0.075, 0.048, 0.035, 0.94)
 
 ## Tamanhos na base 960×540 (o `canvas_items` escala o resto).
-const TITLE_SIZE := 50
+const TITLE_SIZE := 48
 const SUBTITLE_SIZE := 17
 const HEADING_SIZE := 26
 const BODY_SIZE := 16
@@ -165,9 +165,9 @@ static func _check_icon(checked: bool) -> ImageTexture:
 
 ## Moldura do cartão central: couro escuro com filete dourado duplo.
 static func card_style() -> StyleBoxFlat:
-	var style := box(CARD, GOLD_SOFT, 1, 4, Vector2(28, 22))
-	style.shadow_color = Color(0, 0, 0, 0.55)
-	style.shadow_size = 14
+	var style := box(CARD, GOLD_SOFT, 1, 6, Vector2(28, 18))
+	style.shadow_color = Color(0, 0, 0, 0.6)
+	style.shadow_size = 16
 	return style
 
 static func label(text: String, size: int = BODY_SIZE, color: Color = CREAM, wrap: bool = false) -> Label:

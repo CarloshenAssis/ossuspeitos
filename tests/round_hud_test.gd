@@ -32,6 +32,7 @@ func _initialize() -> void:
 	_test_combat_notices_come_from_official_events()
 	_test_pickup_prompt_matches_server_rules()
 	_test_new_round_banner_only_in_active()
+	_test_scoreboard_uses_official_roster()
 	if failures > 0:
 		push_error("ROUND_HUD_TEST_FAILED failures=%d checks=%d" % [failures, checks])
 		quit(1)
@@ -340,3 +341,16 @@ func _expect(condition: bool, description: String) -> void:
 	failures += 1
 	push_error("ROUND_HUD_CHECK_FAILED %s" % description)
 	print("ROUND_HUD_CHECK_FAILED %s" % description)
+
+func _test_scoreboard_uses_official_roster() -> void:
+	var roster := [
+		{"peer_id": 8, "label": "Beto", "appearance": "soldier", "alive": true, "kills": 0, "deaths": 2},
+		{"peer_id": 9, "label": "Caio", "appearance": "detective", "alive": true, "kills": 2, "deaths": 1},
+		{"peer_id": 7, "label": "Ana", "appearance": "knight", "alive": false, "kills": 2, "deaths": 0},
+	]
+	var rows: Array = RoundHud.scoreboard_rows(roster, 9, {9: 42})
+	_expect(rows.size() == 3 and rows[0]["name"] == "Ana" and rows[1]["name"] == "Caio", "scoreboard orders by official kills then deaths")
+	_expect(int(rows[1]["kills"]) == 2 and int(rows[1]["deaths"]) == 1 and bool(rows[1]["you"]), "own official row is marked")
+	_expect(rows[1]["appearance"] == "Detetive" and rows[1]["ping"] == "42 ms", "character name and available ping")
+	_expect(rows[0]["ping"] == "—" and not bool(rows[0]["alive"]), "missing ping is dashed; death follows the roster")
+	_expect(rows[2]["name"] == "Beto", "lower score stays last")

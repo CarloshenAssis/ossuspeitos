@@ -238,7 +238,7 @@ func fixture_round(campaign: int) -> bool:
 	if not fixture_require(int(combat_authority.health[victim])==66,"open door passes damage"): return false
 	# Move target out of the passage before testing actual crossing.
 	fixture_teleport(victim,Vector3(26,1,2.5))
-	if not await fixture_stage_run({actor:{"op":"move","direction":Vector2(0,-1),"ticks":30}}, {"sound_kind":"step_walk"}): return false
+	if not await fixture_stage_run({actor:{"op":"move","direction":Vector2(0,-1),"ticks":30}}, {"sound_kind":"step_run"}): return false
 	if not fixture_require(float((authoritative_world.states[actor].position as Vector3).x)>6.55,"open door passes movement"): return false
 	fixture_teleport(actor,PROP_NEAR,-PI/2)
 	fixture_teleport(victim,Vector3(3,1,2.6),PI)

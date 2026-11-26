@@ -12,6 +12,13 @@ extends RefCounted
 const IDS: Array[String] = ["knight", "soldier", "ninja", "detective", "butler", "viking", "pirate", "cowboy"]
 const FALLBACK := "knight"
 const SCENE_PATH := "res://assets/characters/%s.glb"
+const DISPLAY_NAMES := {
+	"knight": "Cavaleiro", "soldier": "Soldado", "ninja": "Ninja", "detective": "Detetive",
+	"butler": "Mordomo", "viking": "Viking", "pirate": "Pirata", "cowboy": "Cowboy",
+}
+
+static func display_name(appearance_id: Variant) -> String:
+	return str(DISPLAY_NAMES.get(sanitize(appearance_id), DISPLAY_NAMES[FALLBACK]))
 
 static func is_valid(appearance_id: Variant) -> bool:
 	return typeof(appearance_id) == TYPE_STRING and IDS.has(appearance_id)

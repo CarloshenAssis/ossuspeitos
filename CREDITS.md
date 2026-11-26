@@ -92,3 +92,20 @@ Personagens low-poly de Quaternius (2019), do [Ultimate Animated Character Pack]
 | `viking.glb` | Viking_Male |
 | `pirate.glb` | Pirate_Male |
 | `cowboy.glb` | Cowboy_Male |
+
+## Áudio CC0
+
+Sons curtos em `assets/audio/`, recortados e convertidos para OGG mono (22 kHz). Usados no menu, no HUD e no áudio espacial 3D.
+
+| Pacote | Autor | Licença | Fonte | Uso neste repo |
+|---|---|---|---|---|
+| Impact Sounds | [Kenney](https://kenney.nl/) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | [Impact Sounds](https://kenney.nl/assets/impact-sounds) | Passos de madeira (andar/correr), acerto, dano, eliminação, impactos |
+| RPG Audio | [Kenney](https://kenney.nl/) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | [RPG Audio](https://kenney.nl/assets/rpg-audio) | Recarga, clique vazio, coleta de arma/munição, porta, trinco; creaks no loop ambiente |
+| Interface Sounds | [Kenney](https://kenney.nl/) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | [Interface Sounds](https://kenney.nl/assets/interface-sounds) | Clique de menu, confirmação, erro, coleta de vida |
+| UI Audio | [Kenney](https://kenney.nl/) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | [UI Audio](https://kenney.nl/assets/ui-audio) | Navegação do menu (rollover) |
+| Gunshot Sounds | Tabasco | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | [OpenGameArt](https://opengameart.org/content/gunshot-sounds) | Disparos: pistola (CZ), rifle (Mosin), AUG (SKS); um tiro recortado de cada gravação |
+
+O loop `ambient_mansion.ogg` é uma cama curta e baixa (ruído marrom) com dois creaks do RPG Audio, montada neste projeto e também dedicada a CC0.
+
+Se um arquivo não estiver importado, o jogo cai na síntese PCM original de `SfxBank`.
+
