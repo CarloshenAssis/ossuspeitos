@@ -123,6 +123,8 @@ func _test_values_match_the_official_rules() -> void:
 	_expect(RoundHud.MAGAZINE_CAPACITY == int(definition.magazine_capacity), "magazine pips match the official capacity")
 	_expect(RoundHud.MAX_RESERVE == int(definition.max_reserve_ammo), "full-reserve prompt uses the official maximum")
 	_expect(RoundHud.AMMO_BOX_AMOUNT == CombatAuthority.AMMO_BOX_AMOUNT, "ammo prompt shows the official box amount")
+	_expect(RoundHud.HEALTH_BOX_AMOUNT == CombatAuthority.HEALTH_AMOUNT, "health prompt shows the official heal amount")
+	_expect(RoundHud.WEAPON_NAMES.has("hunting_rifle") and RoundHud.WEAPON_NAMES.has("aug") and not RoundHud.WEAPON_NAMES.has("coach_gun"), "nocturna weapons have display names")
 	_expect(RoundHud.REASON_TEXT.has(RoundRules.REASON_ASSASSIN_DOWN) and RoundHud.REASON_TEXT.has(RoundRules.REASON_INNOCENTS_DOWN), "every official win reason has a sentence")
 
 func _test_weapon_panel_follows_official_state() -> void:
@@ -231,6 +233,8 @@ func _test_combat_notices_come_from_official_events() -> void:
 	_expect(RoundHud.transition_notices(unarmed, _combat(2, 100, "common_pistol", 6, 0, false)).is_empty(), "nothing is announced across rounds")
 	_expect(RoundHud.transition_notices(unarmed, _combat(1, 0, "common_pistol", 6, 0, false)).is_empty(), "nothing is announced to the dead")
 	_expect(RoundHud.transition_notices(armed, _combat(1, 100, "", 0, 0, false)).is_empty(), "losing the weapon is not celebrated")
+	_expect(RoundHud.transition_notices(_combat(1, 50, "common_pistol", 6, 0, false), _combat(1, 90, "common_pistol", 6, 0, false)) == ["+40 VIDA"], "official heal announces the amount")
+	_expect(RoundHud.transition_notices(_combat(1, 50, "", 0, 0, false), _combat(1, 90, "", 0, 0, false)) == ["+40 VIDA"], "heal is announced even without a weapon")
 
 func _test_pickup_prompt_matches_server_rules() -> void:
 	var unarmed := _combat(1, 100, "", 0, 0, false)
@@ -246,6 +250,11 @@ func _test_pickup_prompt_matches_server_rules() -> void:
 	_expect(not bool(full["key"]) and full["text"] == "Reserva cheia", "full reserve: no E (server says reserve_full)")
 	_expect(RoundHud.pickup_prompt("weapon", _combat(1, 0, "", 0, 0, false)).is_empty(), "the dead see no prompt")
 	_expect(RoundHud.pickup_prompt("weapon", {}).is_empty(), "no official private state, no prompt")
+	var take_health := RoundHud.pickup_prompt("health", _combat(1, 50, "common_pistol", 6, 6, false))
+	_expect(bool(take_health["key"]) and str(take_health["text"]).contains("+40"), "injured player can pick a health box")
+	var full_health := RoundHud.pickup_prompt("health", armed)
+	_expect(not bool(full_health["key"]) and full_health["text"] == "Vida cheia", "full health: no E (server says health_full)")
+	_expect(RoundHud.rejection_notice("pickup", "health_full") == "Vida cheia", "health_full has a rejection sentence")
 
 func _pub(state: int, round_id: int) -> Dictionary:
 	return {"state": state, "round_id": round_id, "countdown_msec": 3000, "connected": 4, "participants": 4, "alive": 4,

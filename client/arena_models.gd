@@ -25,7 +25,9 @@ const GUNMETAL := Color(0.16, 0.17, 0.19)
 const GRIP := Color(0.24, 0.16, 0.11)
 const WEAPON_GLOW := Color(0.3, 0.85, 0.95)
 const AMMO_GLOW := Color(0.95, 0.4, 0.32)
+const HEALTH_GLOW := Color(0.95, 0.2, 0.22)
 const CRATE := Color(0.25, 0.2, 0.14)
+const HEALTH_BOX := Color(0.86, 0.86, 0.88)
 const BRASS := Color(0.78, 0.6, 0.3)
 
 ## Nome do nó com o GLB dentro da raiz do avatar.
@@ -130,20 +132,81 @@ static func build_pistol() -> Node3D:
 	_part(root, "FrontSight", _box(Vector3(0.008, 0.014, 0.012)), Vector3(0.0, 0.062, -0.135), WEAPON_GLOW, 0.6)
 	return root
 
-## Pistola no chão: a mesma arma deitada sobre um halo ciano.
-static func build_weapon_pickup() -> Node3D:
+const AUG_SCENE := "res://assets/weapons/aug_a4/aug_a4.glb"
+const AUG_WORLD_SCALE := 0.10
+const AUG_HELD_SCALE := 0.055
+
+static func build_aug(model_scale: float = AUG_WORLD_SCALE) -> Node3D:
+	var root := Node3D.new()
+	root.name = "Aug"
+	var scene := load(AUG_SCENE) as PackedScene if ResourceLoader.exists(AUG_SCENE) else null
+	if scene == null:
+		return build_pistol()
+	var model := scene.instantiate() as Node3D
+	# O eixo longo do glTF é +X; gira para a boca apontar a -Z da visão.
+	model.scale = Vector3.ONE * model_scale
+	model.rotation.y = PI * 0.5
+	root.add_child(model)
+	return root
+
+const RIFLE_SCENE := "res://assets/weapons/bolt_action_rifle_7_62/bolt_action_rifle_7_62.glb"
+const RIFLE_WORLD_SCALE := 0.75
+const RIFLE_HELD_SCALE := 0.35
+
+static func build_hunting_rifle(model_scale: float = RIFLE_WORLD_SCALE) -> Node3D:
+	var root := Node3D.new()
+	root.name = "HuntingRifle"
+	var scene := load(RIFLE_SCENE) as PackedScene if ResourceLoader.exists(RIFLE_SCENE) else null
+	if scene == null:
+		return build_pistol()
+	var model := scene.instantiate() as Node3D
+	# O eixo longo do glTF é +X; gira para a boca apontar a -Z da visão.
+	model.scale = Vector3.ONE * model_scale
+	model.rotation.y = PI * 0.5
+	root.add_child(model)
+	return root
+
+static func build_held_weapon(weapon_id: String) -> Node3D:
+	if weapon_id == "aug":
+		return build_aug(AUG_HELD_SCALE)
+	if weapon_id == "hunting_rifle":
+		return build_hunting_rifle(RIFLE_HELD_SCALE)
+	return build_pistol()
+
+static func muzzle_offset(weapon_id: String) -> Vector3:
+	if weapon_id == "aug":
+		return Vector3(0.0, 0.02, -0.32)
+	if weapon_id == "hunting_rifle":
+		return Vector3(0.0, 0.02, -0.22)
+	return Vector3(0.0, 0.03, -0.19)
+
+## Arma no chão: pistola procedural, AUG ou rifle, deitada sobre um halo ciano.
+static func build_weapon_pickup(weapon_id: String = "common_pistol") -> Node3D:
 	var root := Node3D.new()
 	root.name = "WeaponPickup"
 	_halo(root, WEAPON_GLOW)
 	var spin := Node3D.new()
 	spin.name = "Spin"
 	root.add_child(spin)
-	var pistol := build_pistol()
-	pistol.scale = Vector3.ONE * 2.4
-	pistol.rotation = Vector3(0.0, 0.0, PI * 0.5)
-	pistol.position = Vector3(0.0, 0.05, 0.0)
-	spin.add_child(pistol)
-	_glow_all(pistol, WEAPON_GLOW, 0.25)
+	var gun: Node3D
+	if weapon_id == "aug":
+		gun = build_aug(AUG_WORLD_SCALE)
+	elif weapon_id == "hunting_rifle":
+		gun = build_hunting_rifle(RIFLE_WORLD_SCALE)
+	else:
+		gun = build_pistol()
+		gun.scale = Vector3.ONE * 2.4
+	gun.rotation = Vector3(0.0, 0.0, PI * 0.5)
+	# The official pickup point sits 0.25 m above the floor; drop the longer
+	# rifles onto the halo instead of leaving them floating at that height.
+	if weapon_id == "hunting_rifle":
+		gun.position = Vector3(0.0, -0.14, 0.0)
+	elif weapon_id == "aug":
+		gun.position = Vector3(0.0, -0.06, 0.0)
+	else:
+		gun.position = Vector3(0.0, 0.05, 0.0)
+	spin.add_child(gun)
+	_glow_all(gun, WEAPON_GLOW, 0.25)
 	return root
 
 ## Caixa de munição: caixote escuro com pontas de latão à mostra e halo cobre.
@@ -164,6 +227,20 @@ static func build_ammo_pickup() -> Node3D:
 	for column in 3:
 		for row in 2:
 			_part(spin, "Round%d" % (column * 2 + row), _cylinder(0.022, 0.028, 0.09), Vector3(-0.1 + 0.1 * column, 0.08, -0.06 + 0.12 * row), BRASS, 0.15)
+	return root
+
+## Caixa de vida: caixote claro com cruz vermelha e halo vermelho. Sem modelo
+## CC0 no repositório; a forma é procedural, no mesmo padrão da munição.
+static func build_health_pickup() -> Node3D:
+	var root := Node3D.new()
+	root.name = "HealthPickup"
+	_halo(root, HEALTH_GLOW)
+	var spin := Node3D.new()
+	spin.name = "Spin"
+	root.add_child(spin)
+	_part(spin, "Crate", _box(Vector3(0.36, 0.24, 0.36)), Vector3(0.0, -0.1, 0.0), HEALTH_BOX)
+	_part(spin, "CrossV", _box(Vector3(0.08, 0.04, 0.28)), Vector3(0.0, 0.03, 0.0), HEALTH_GLOW, 0.7)
+	_part(spin, "CrossH", _box(Vector3(0.28, 0.04, 0.08)), Vector3(0.0, 0.03, 0.0), HEALTH_GLOW, 0.7)
 	return root
 
 # --- Peças -------------------------------------------------------------------------
@@ -203,8 +280,10 @@ static func _halo(root: Node3D, color: Color) -> void:
 static func _glow_all(root: Node, color: Color, energy: float) -> void:
 	for node in root.find_children("*", "MeshInstance3D", true, false):
 		var mesh_node := node as MeshInstance3D
-		var base := (mesh_node.material_override as StandardMaterial3D).albedo_color
-		mesh_node.material_override = _material(base.lerp(color, 0.25), energy)
+		var override := mesh_node.material_override as StandardMaterial3D
+		if override == null:
+			continue
+		mesh_node.material_override = _material(override.albedo_color.lerp(color, 0.25), energy)
 
 static func _override(key: String) -> Node3D:
 	var path := str(OVERRIDES.get(key, ""))

@@ -25,6 +25,7 @@ Modelos e texturas de [Poly Haven](https://polyhaven.com/), licença [CC0 1.0](h
 | `assets/furniture/vintage_drawer` | [Vintage wooden drawer 01](https://polyhaven.com/a/vintage_wooden_drawer_01) |
 | `assets/furniture/antique_katana` | [Antique katana 01](https://polyhaven.com/a/antique_katana_01) |
 | `assets/furniture/cannon_01` | [Cannon 01](https://polyhaven.com/a/cannon_01) |
+| `assets/weapons/bolt_action_rifle_7_62` | [Bolt-action rifle 7.62](https://polyhaven.com/a/bolt_action_rifle_7_62) |
 
 ## CC-BY 4.0 (Sketchfab)
 
@@ -32,6 +33,7 @@ Modelos e texturas de [Poly Haven](https://polyhaven.com/), licença [CC0 1.0](h
 |---|---|
 | `assets/furniture/bed` (só a cama: estrutura, colchão, edredom e almofadas) | Japanese Inspired Bedroom Set, [lemorett](https://sketchfab.com/lemorett), [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), [modelo](https://sketchfab.com/3d-models/japanese-inspired-bedroom-set-cc911de9509647b2a8e24a1919a75b82) |
 | `assets/furniture/tree_medium`, `tree_large` (mudas e árvore de fruto de verão, tronco + folhagem; `tree_small` permanece no pacote) | Gravel Rally tree pack, [deni_spa](https://sketchfab.com/deni_spa), [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), [modelo](https://sketchfab.com/3d-models/gravel-rally-tree-pack-27-trees-3-seasons-65da19fc1a4449a988f8dbaf2513ae59) |
+| `assets/weapons/aug_a4` | Low-poly AUG A4, [D_U](https://sketchfab.com/DU1701), [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), [modelo](https://sketchfab.com/3d-models/low-poly-aug-a4-726426287fa941b785606fd4bf828f60) |
 
 
 

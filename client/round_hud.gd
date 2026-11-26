@@ -28,13 +28,14 @@ const MODE_NEXT_ROUND := "next_round"
 const HEALTH_BAR_MAX := 100
 ## Um tiro da pistola comum tira 34: com 34 ou menos, o próximo acerto mata.
 const LOW_HEALTH := 34
-const WEAPON_NAMES := {"common_pistol": "PISTOLA"}
+const WEAPON_NAMES := {"common_pistol": "PISTOLA", "hunting_rifle": "RIFLE", "aug": "AUG"}
 ## Mesmos valores da pistola comum e da caixa de munição do servidor
 ## (`CombatAuthority`); o teste do HUD confere que não divergem. Servem só para
 ## desenhar as balas do pente e escrever o prompt de coleta.
 const MAGAZINE_CAPACITY := 6
 const MAX_RESERVE := 18
 const AMMO_BOX_AMOUNT := 6
+const HEALTH_BOX_AMOUNT := 40
 ## Avisos curtos de combate e eliminações públicas: tempo na tela.
 const NOTICE_MSEC := 1800
 const FEED_MSEC := 5000
@@ -58,6 +59,7 @@ const REJECTION_TEXT := {
 	"out_of_range": "Longe demais do item",
 	"item_unavailable": "Alguém pegou antes",
 	"item_not_found": "Alguém pegou antes",
+	"health_full": "Vida cheia",
 }
 const REASON_TEXT := {
 	RoundRules.REASON_ASSASSIN_DOWN: "O assassino foi eliminado.",
@@ -208,7 +210,7 @@ func apply_elimination(peer_id: int) -> void:
 		_feed.pop_front()
 	_render()
 
-## Tipo do pickup disponível ao alcance ("weapon", "ammo" ou ""), calculado pela
+## Tipo do pickup disponível ao alcance ("weapon", "ammo", "health" ou ""), calculado pela
 ## arena com a posição oficial e o estado público dos pickups.
 func set_nearby_pickup(pickup_type: String) -> void:
 	if pickup_type == _nearby_pickup:
@@ -276,6 +278,8 @@ static func transition_notices(before: Dictionary, after: Dictionary) -> Array:
 		return result
 	if int(after.get("health", 0)) <= 0:
 		return result
+	if int(after.get("health", 0)) > int(before.get("health", 0)):
+		result.append("+%d VIDA" % (int(after.get("health", 0)) - int(before.get("health", 0))))
 	var weapon_before := str(before.get("weapon_id", ""))
 	var weapon_after := str(after.get("weapon_id", ""))
 	if weapon_before.is_empty() and not weapon_after.is_empty():
@@ -309,6 +313,10 @@ static func pickup_prompt(pickup_type: String, combat: Dictionary) -> Dictionary
 		if int(combat.get("reserve", 0)) >= MAX_RESERVE:
 			return {"key": false, "text": "Reserva cheia", "kind": "ammo"}
 		return {"key": true, "text": "PEGAR MUNIÇÃO  +%d" % AMMO_BOX_AMOUNT, "kind": "ammo"}
+	if pickup_type == "health":
+		if int(combat.get("health", 0)) >= HEALTH_BAR_MAX:
+			return {"key": false, "text": "Vida cheia", "kind": "health"}
+		return {"key": true, "text": "PEGAR VIDA  +%d" % HEALTH_BOX_AMOUNT, "kind": "health"}
 	return {}
 
 # --- Modelo puro ----------------------------------------------------------------

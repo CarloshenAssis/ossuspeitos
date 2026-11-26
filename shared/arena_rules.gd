@@ -29,7 +29,11 @@ const PLAYER_HIT_HEIGHT := 2.0
 const BODY_CENTER_HEIGHT := 1.0
 const OFFICIAL_EYE_Y := BODY_CENTER_HEIGHT + EYE_HEIGHT
 
-## Índices 0..7: armas comuns. Índices 8..19: caixas de munição.
+## No mapa aprovado: índices 0..7 armas comuns, 8..19 munição. Na Nocturna
+## a lista oficial pode incluir caixas de vida depois das munições.
+static func official_pickups() -> Array:
+	return SalaoMap.pickups() if SalaoMap.enabled else MansionMap.PICKUPS
+
 static var PICKUP_POSITIONS: Array = SalaoMap.pickup_positions() if SalaoMap.enabled else MansionMap.pickup_positions()
 
 ## Lista única usada por hitscan, colisão e apresentação.
