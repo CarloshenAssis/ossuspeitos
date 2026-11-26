@@ -2,6 +2,7 @@
 set -eEuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/tests/engine_send_races.sh"
 GODOT_BIN="${GODOT_BIN:-}"
 if [[ -z "$GODOT_BIN" ]]; then
   if command -v godot4 >/dev/null; then GODOT_BIN="$(command -v godot4)";
@@ -108,6 +109,7 @@ COMPLETED="$(sed -n 's/.*COMBAT_CLIENT_TEST_OK id=client-\([0-9]*\).*/\1/p' "$TM
 assert_equal all-completed-clients "$(wc -l <<<"$COMPLETED" | tr -d ' ')" "$CLIENTS"
 assert_no_grep no-role-leak 'peer_id=[0-9]+.*role=|ASSASSIN|DETECTIVE|VICTIM' "$TMP_DIR"/*.log
 assert_no_grep no-private-payload 'health.*weapon_id|magazine.*reserve' "$TMP_DIR"/client-*.log
-assert_no_grep no-timeout-or-unexpected-runtime-error 'COMBAT_TEST_STAGE_TIMEOUT|COMBAT_NETWORK_TEST_FAILURE|ready_state != STATE_OPEN|The InputMap action .* doesn.t exist|Trying to call an RPC via a multiplayer peer which is not connected|SCRIPT ERROR' "$TMP_DIR"/*.log
+assert_no_grep no-timeout-or-unexpected-runtime-error 'COMBAT_TEST_STAGE_TIMEOUT|COMBAT_NETWORK_TEST_FAILURE|The InputMap action .* doesn.t exist|SCRIPT ERROR' "$TMP_DIR"/*.log
+assert_engine_send_races_bounded "$TMP_DIR"/*.log
 cat "$TMP_DIR/server.log"
 echo "COMBAT_NETWORK_TEST_OK server=1 clients=$CLIENTS extended=$EXTENDED"

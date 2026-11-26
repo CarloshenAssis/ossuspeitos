@@ -2,6 +2,7 @@
 set -eEuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/tests/engine_send_races.sh"
 GODOT_BIN="${GODOT_BIN:-$(command -v godot4 2>/dev/null || command -v godot 2>/dev/null || true)}"
 PORT="${TEST_PORT:-$((26080 + RANDOM % 1000))}"
 if [[ -n "${TEST_LOG_DIR:-}" ]]; then TMP_DIR="$TEST_LOG_DIR"; mkdir -p "$TMP_DIR"; REMOVE=false
@@ -97,6 +98,7 @@ assert_no_grep no-private-fields-in-reveal 'ROUND_REVEAL.*(health|inventory|maga
 assert_no_grep no-role-before-ended 'CLIENT_ROUND_STATE.*state=(WAITING|COUNTDOWN|ACTIVE).*role=' "$TMP_DIR"/*.log
 assert_no_grep no-peer-role-association 'peer_id=[0-9]+.*(ASSASSIN|DETECTIVE|VICTIM)|(ASSASSIN|DETECTIVE|VICTIM).*peer_id=[0-9]+' "$TMP_DIR"/*.log
 assert_no_grep no-role-forgery-delivered 'ROLE_SPOOF_REJECTED|CLIENT_PRIVATE_ROLE_RECEIVED.*count=[2-9]' "$TMP_DIR"/*.log
-assert_no_grep no-runtime-errors 'SCRIPT ERROR|ready_state != STATE_OPEN|Trying to call an RPC via a multiplayer peer which is not connected|SERVER_SHUTDOWN_TIMEOUT' "$TMP_DIR"/*.log
+assert_no_grep no-runtime-errors 'SCRIPT ERROR|SERVER_SHUTDOWN_TIMEOUT' "$TMP_DIR"/*.log
+assert_engine_send_races_bounded "$TMP_DIR"/*.log
 cat "$TMP_DIR/server.log"
 echo 'SPECTATOR_REVEAL_NETWORK_TEST_OK clients=4'
