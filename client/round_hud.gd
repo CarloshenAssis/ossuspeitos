@@ -979,7 +979,6 @@ func _build() -> void:
 	var board_box := VBoxContainer.new()
 	board_box.add_theme_constant_override("separation", 8)
 	var board_title := HudStyle.label("PLACAR", 22, Color("#C19A55"), true)
-	board_title.add_theme_font_override("font", MenuTheme.serif())
 	board_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_scoreboard_hint = HudStyle.label("Segure Tab", 12, HudStyle.MUTED)
 	_scoreboard_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

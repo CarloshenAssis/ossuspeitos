@@ -79,7 +79,8 @@ func consume(events: Variant, round_id: int, listener: Vector3, own_peer: int, b
 		voice.volume_db=linear_to_db(maxf(0.0001,volume*gain))-10.0
 		_priorities[slot]=priority
 		_voice_index=(slot+1)%MAX_VOICES
-		voice.play()
+		if DisplayServer.get_name() != "headless":
+			voice.play()
 		played_events+=1
 		count+=1
 	return count
@@ -94,4 +95,8 @@ func _stream(kind: String) -> AudioStream:
 	_streams[kind] = fallback
 	return fallback
 func _exit_tree() -> void:
-	for voice in get_children(): voice.stop()
+	for voice in get_children():
+		if voice is AudioStreamPlayer3D:
+			voice.stop()
+			voice.stream = null
+	_streams.clear()

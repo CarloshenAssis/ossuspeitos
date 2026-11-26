@@ -37,6 +37,14 @@ var _category_volume := 1.0
 var _next_ui := 0
 var _next_world := 0
 
+func _exit_tree() -> void:
+	for player in _ui_players:
+		player.stop()
+		player.stream = null
+	for player in _world_players:
+		player.stop()
+		player.stream = null
+
 func _ready() -> void:
 	name = "CombatFx"
 	for index in 4:
@@ -61,7 +69,8 @@ func play_ui(sound_name: String) -> void:
 	var player: AudioStreamPlayer = _ui_players[_next_ui]
 	_next_ui = (_next_ui + 1) % _ui_players.size()
 	player.stream = SfxBank.stream(sound_name)
-	player.play()
+	if DisplayServer.get_name() != "headless":
+		player.play()
 
 ## Som de um evento público no mundo, na posição oficial do evento.
 func play_world(sound_name: String, position: Vector3) -> void:
@@ -71,7 +80,8 @@ func play_world(sound_name: String, position: Vector3) -> void:
 	_next_world = (_next_world + 1) % _world_players.size()
 	player.stream = SfxBank.stream(sound_name)
 	player.global_position = position
-	player.play()
+	if DisplayServer.get_name() != "headless":
+		player.play()
 
 # --- Efeitos visuais ------------------------------------------------------------
 

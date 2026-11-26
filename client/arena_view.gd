@@ -1043,8 +1043,17 @@ func apply_inspection(raw: Dictionary) -> void:
 	_inspection_request=int(info.request_id)
 	inspection_label.text="Corpo de %s — eliminação confirmada nesta rodada." % str(info.label)
 
-func _ensure_ambient() -> void:
+func _exit_tree() -> void:
 	if _ambient != null:
+		_ambient.stop()
+		_ambient.stream = null
+
+func _ensure_ambient() -> void:
+
+	if _ambient != null:
+		return
+	# Testes headless não precisam do loop; o stream importado vazaria no exit.
+	if DisplayServer.get_name() == "headless":
 		return
 	var stream := SfxBank.ambient_stream()
 	if stream == null:
