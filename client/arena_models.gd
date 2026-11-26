@@ -25,7 +25,9 @@ const GUNMETAL := Color(0.16, 0.17, 0.19)
 const GRIP := Color(0.24, 0.16, 0.11)
 const WEAPON_GLOW := Color(0.3, 0.85, 0.95)
 const AMMO_GLOW := Color(0.95, 0.4, 0.32)
+const HEALTH_GLOW := Color(0.95, 0.2, 0.22)
 const CRATE := Color(0.25, 0.2, 0.14)
+const HEALTH_BOX := Color(0.86, 0.86, 0.88)
 const BRASS := Color(0.78, 0.6, 0.3)
 
 ## Nome do nó com o GLB dentro da raiz do avatar.
@@ -164,6 +166,20 @@ static func build_ammo_pickup() -> Node3D:
 	for column in 3:
 		for row in 2:
 			_part(spin, "Round%d" % (column * 2 + row), _cylinder(0.022, 0.028, 0.09), Vector3(-0.1 + 0.1 * column, 0.08, -0.06 + 0.12 * row), BRASS, 0.15)
+	return root
+
+## Caixa de vida: caixote claro com cruz vermelha e halo vermelho. Sem modelo
+## CC0 no repositório; a forma é procedural, no mesmo padrão da munição.
+static func build_health_pickup() -> Node3D:
+	var root := Node3D.new()
+	root.name = "HealthPickup"
+	_halo(root, HEALTH_GLOW)
+	var spin := Node3D.new()
+	spin.name = "Spin"
+	root.add_child(spin)
+	_part(spin, "Crate", _box(Vector3(0.36, 0.24, 0.36)), Vector3(0.0, -0.1, 0.0), HEALTH_BOX)
+	_part(spin, "CrossV", _box(Vector3(0.08, 0.04, 0.28)), Vector3(0.0, 0.03, 0.0), HEALTH_GLOW, 0.7)
+	_part(spin, "CrossH", _box(Vector3(0.28, 0.04, 0.08)), Vector3(0.0, 0.03, 0.0), HEALTH_GLOW, 0.7)
 	return root
 
 # --- Peças -------------------------------------------------------------------------

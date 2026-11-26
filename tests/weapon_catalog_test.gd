@@ -27,6 +27,11 @@ func _initialize() -> void:
 	_expect(isolated.definitions["common_pistol"].damage == 34, "caller cannot poison another catalogue")
 	var invalid := InventoryAuthority.new({"wrong_id": second["common_pistol"], "bad": WeaponDefinition.new("bad", -1)})
 	_expect(invalid.definitions.is_empty(), "invalid entries and key mismatch rejected")
+	var extra: Dictionary = factory.nocturna()
+	_expect(factory.defaults().keys() == ["common_pistol"], "nocturna extras do not leak into defaults")
+	_expect(extra.keys().size() == 2 and extra.has("hunting_rifle") and extra.has("coach_gun"), "nocturna catalogue has the two stronger guns")
+	_expect(WeaponRules.validate_definition(extra["hunting_rifle"]).is_empty() and WeaponRules.validate_definition(extra["coach_gun"]).is_empty(), "nocturna guns validate")
+	_expect(int(extra["hunting_rifle"].damage) > pistol.damage and int(extra["coach_gun"].damage) > pistol.damage, "nocturna guns hit harder than the pistol")
 	if failures: quit(1); return
 	print("WEAPON_CATALOG_TEST_OK checks=%d" % checks)
 	quit(0)

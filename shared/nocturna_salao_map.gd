@@ -5,8 +5,6 @@ const CELL := MansionMap.CELL
 const WALL_TOP := 7.0 + MansionMap.SLAB_THICKNESS
 const MIN_X := -10.5
 const GALLERY_FLOOR := 3.5
-const GALLERY_SPAWN := Vector2(15, 4)
-const GALLERY_WEAPON := Vector2(12.5, 0.5)
 const GALLERY := {"id": "galeria", "name": "Galeria", "kind": "room", "min": Vector2(0, 0), "max": Vector2(16, 2), "floor": GALLERY_FLOOR, "ceiling": 7.0, "space": "salao", "y": GALLERY_FLOOR}
 const SPACES := [
 	{"id": "salao", "name": "Salão Central", "kind": "room", "min": Vector2(0, 0), "max": Vector2(16, 14), "ceiling": 7.0},
@@ -115,18 +113,41 @@ const UPPER_RAILS := [
 	Rect2(16.5, 9.9, 10, 0.1), Rect2(17.9, 5, 0.1, 2),
 ]
 const SPAWNS := [
-	Vector2(7, 8.75), Vector2(12.5, 18.5), GALLERY_SPAWN,
-	Vector2(-1.5, 12.75), Vector2(-2, 13.5), Vector2(-8.25, 19),
-	Vector2(17, 5.5), Vector2(17, 6.5),
+	{"id": "spawn_salao", "space": "salao", "position": Vector2(1.8, 12.6), "floor": 0.0, "face": Vector2(8, 10)},
+	{"id": "spawn_biblioteca", "space": "biblioteca", "position": Vector2(-2.0, 12.4), "floor": 0.0, "face": Vector2(-0.25, 8)},
+	{"id": "spawn_jantar", "space": "jantar", "position": Vector2(7.2, 21.6), "floor": 0.0, "face": Vector2(8, 14.25)},
+	{"id": "spawn_hospedes", "space": "hospedes", "position": Vector2(-6.5, 18.8), "floor": 0.0, "face": Vector2(-8.5, 14.25)},
+	{"id": "spawn_galeria", "space": "galeria_leste", "position": Vector2(14.4, 3.4), "floor": GALLERY_FLOOR, "face": Vector2(8, 1)},
+	{"id": "spawn_quarto_norte", "space": "quarto_norte", "position": Vector2(-2.2, 1.5), "floor": GALLERY_FLOOR, "face": Vector2(0, 1)},
+	{"id": "spawn_suite", "space": "suite", "position": Vector2(-4.8, 4.6), "floor": GALLERY_FLOOR, "face": Vector2(0, 4)},
+	{"id": "spawn_musica", "space": "musica", "position": Vector2(28.6, 9.4), "floor": GALLERY_FLOOR, "face": Vector2(30, 11)},
 ]
-const WEAPONS := [
-	Vector2(25.5, 13.5), GALLERY_WEAPON, Vector2(10.75, 13.5), Vector2(26, 9), Vector2(6, 20.5),
-	Vector2(-10, 15.25), Vector2(-3, 5.5), Vector2(-6, 9),
-]
-const AMMO := [
-	Vector2(19, 10), Vector2(18, 27), Vector2(8, 2.5), Vector2(0.75, 1.75), Vector2(15.5, 13.5),
-	Vector2(1, 24.25), Vector2(1.5, 13.5), Vector2(-0.75, 17.75), Vector2(17.5, 22),
-	Vector2(-1.5, 9.75), Vector2(-5.25, 19), Vector2(-5.5, 13.5),
+const PICKUPS := [
+	{"id": "weapon_0", "type": "weapon", "weapon_id": "hunting_rifle", "space": "salao", "position": Vector2(10.8, 12.8), "floor": 0.0},
+	{"id": "weapon_1", "type": "weapon", "weapon_id": "coach_gun", "space": "galeria", "position": Vector2(2.0, 0.8), "floor": GALLERY_FLOOR},
+	{"id": "weapon_2", "type": "weapon", "weapon_id": "common_pistol", "space": "biblioteca", "position": Vector2(-8.5, 8.0), "floor": 0.0},
+	{"id": "weapon_3", "type": "weapon", "weapon_id": "common_pistol", "space": "cozinha", "position": Vector2(25.2, 13.0), "floor": 0.0},
+	{"id": "weapon_4", "type": "weapon", "weapon_id": "common_pistol", "space": "jantar", "position": Vector2(7.5, 16.2), "floor": 0.0},
+	{"id": "weapon_5", "type": "weapon", "weapon_id": "common_pistol", "space": "hospedes", "position": Vector2(-9.8, 16.0), "floor": 0.0},
+	{"id": "weapon_6", "type": "weapon", "weapon_id": "common_pistol", "space": "observatorio", "position": Vector2(33.4, 5.6), "floor": GALLERY_FLOOR},
+	{"id": "weapon_7", "type": "weapon", "weapon_id": "common_pistol", "space": "jardim_inverno", "position": Vector2(17.5, 27.2), "floor": 0.0},
+	{"id": "ammo_0", "type": "ammo", "space": "lavabo", "position": Vector2(-0.3, 18.7), "floor": 0.0},
+	{"id": "ammo_1", "type": "ammo", "space": "banheiro_marmore", "position": Vector2(-3.3, 25.2), "floor": 0.0},
+	{"id": "ammo_2", "type": "ammo", "space": "jardim_inverno", "position": Vector2(11.2, 24.2), "floor": 0.0},
+	{"id": "ammo_3", "type": "ammo", "space": "salao", "position": Vector2(14.7, 0.7), "floor": 0.0},
+	{"id": "ammo_4", "type": "ammo", "space": "corredor_oeste", "position": Vector2(17.2, 8.2), "floor": GALLERY_FLOOR},
+	{"id": "ammo_5", "type": "ammo", "space": "galeria_vao", "position": Vector2(8.7, 4.2), "floor": GALLERY_FLOOR},
+	{"id": "ammo_6", "type": "ammo", "space": "jantar", "position": Vector2(17.7, 18.2), "floor": 0.0},
+	{"id": "ammo_7", "type": "ammo", "space": "salao", "position": Vector2(2.2, 8.7), "floor": 0.0},
+	{"id": "ammo_8", "type": "ammo", "space": "quarto_norte", "position": Vector2(-5.3, 0.7), "floor": GALLERY_FLOOR},
+	{"id": "ammo_9", "type": "ammo", "space": "corredor_leste", "position": Vector2(22.2, 9.2), "floor": GALLERY_FLOOR},
+	{"id": "ammo_10", "type": "ammo", "space": "jardim_acesso", "position": Vector2(0.2, 28.2), "floor": 0.0},
+	{"id": "ammo_11", "type": "ammo", "space": "suite", "position": Vector2(-2.8, 7.2), "floor": GALLERY_FLOOR},
+	{"id": "health_0", "type": "health", "space": "biblioteca", "position": Vector2(-5.5, 13.0), "floor": 0.0},
+	{"id": "health_1", "type": "health", "space": "banheiro_marmore", "position": Vector2(4.0, 25.2), "floor": 0.0},
+	{"id": "health_2", "type": "health", "space": "cozinha", "position": Vector2(25.2, 8.2), "floor": 0.0},
+	{"id": "health_3", "type": "health", "space": "musica", "position": Vector2(32.5, 10.5), "floor": GALLERY_FLOOR},
+	{"id": "health_4", "type": "health", "space": "suite", "position": Vector2(-9.0, 5.2), "floor": GALLERY_FLOOR},
 ]
 
 static var enabled := OS.get_environment("OSSUSPEITOS_MAP") == "nocturna_salao"
@@ -170,37 +191,38 @@ static func space_at(point: Vector2, y: float = 0.0) -> Dictionary:
 					return entry
 	return {}
 
+static func pickups() -> Array:
+	return PICKUPS
+
+static func pickups_of_type(kind: String) -> Array:
+	return PICKUPS.filter(func(entry): return str(entry["type"]) == kind)
+
+static func item_floor(entry: Dictionary) -> float:
+	return float(entry.get("floor", 0.0))
+
+static func item_point(entry: Dictionary) -> Vector2:
+	return entry["position"]
+
+static func item_position(entry: Dictionary, height: float) -> Vector3:
+	var point: Vector2 = entry["position"]
+	return Vector3(point.x, height + item_floor(entry), point.y)
+
 static func spawn_points() -> Array[Vector3]:
 	var result: Array[Vector3] = []
-	for point in SPAWNS:
-		# Os pontos da Cozinha continuam sob o corredor.
-		var floor_y := GALLERY_FLOOR if point == GALLERY_SPAWN else 0.0
-		result.append(Vector3(point.x, MansionMap.BODY_CENTER_HEIGHT + floor_y, point.y))
+	for entry in SPAWNS:
+		result.append(item_position(entry, MansionMap.BODY_CENTER_HEIGHT))
 	return result
 
 static func spawn_yaw_at(index: int) -> float:
-	var point: Vector2 = SPAWNS[index]
-	if point == GALLERY_SPAWN:
-		return PI
-	var space := space_at(point)
-	var target := Vector2(8, 10)
-	match space.get("id"):
-		"biblioteca":
-			target = Vector2(-0.25, 8)
-		"cozinha":
-			target = rect(space).get_center()
-		"jantar":
-			target = Vector2(8, 14.25)
-		"hospedes":
-			target = rect(space).get_center()
-	var direction := target - point
-	return atan2(-direction.x, -direction.y)
+	var entry: Dictionary = SPAWNS[index]
+	var from: Vector2 = entry["position"]
+	var to: Vector2 = entry["face"]
+	return atan2(-(to.x - from.x), -(to.y - from.y))
 
 static func pickup_positions() -> Array:
 	var result: Array = []
-	for point in WEAPONS + AMMO:
-		var floor_y := GALLERY_FLOOR if point == GALLERY_WEAPON else 0.0
-		result.append(Vector3(point.x, MansionMap.PICKUP_HEIGHT + floor_y, point.y))
+	for entry in PICKUPS:
+		result.append(item_position(entry, MansionMap.PICKUP_HEIGHT))
 	return result
 
 static func _cells(entries: Array, floor_y: float) -> Dictionary:

@@ -511,6 +511,8 @@ static func combat_feedback(before: Dictionary, after: Dictionary) -> Array:
 	var health_after := int(after.get("health", 0))
 	if health_after < health_before:
 		result.append("hurt")
+	elif health_after > health_before:
+		result.append("pickup_ok")
 	if health_after <= 0:
 		return result
 	var weapon_before := str(before.get("weapon_id", ""))
@@ -617,7 +619,12 @@ func apply_pickups(entries: Array) -> void:
 		# Sumiu agora (público): anel neutro no lugar, igual para todos. Quem
 		# pegou não é revelado.
 		if node.visible and not available:
-			var color := ArenaModels.WEAPON_GLOW if str(entry.get("type", "")) == "weapon" else ArenaModels.AMMO_GLOW
+			var kind := str(entry.get("type", ""))
+			var color := ArenaModels.WEAPON_GLOW
+			if kind == "ammo":
+				color = ArenaModels.AMMO_GLOW
+			elif kind == "health":
+				color = ArenaModels.HEALTH_GLOW
 			fx.pickup_vanish(entry.get("position", node.position), color)
 		node.visible = available
 	for pickup_id in pickup_nodes.keys():
@@ -767,8 +774,14 @@ func appearance_for(peer_id: int) -> String:
 	return CharacterAppearance.sanitize(_appearances.get(peer_id, CharacterAppearance.FALLBACK))
 
 func _create_pickup(entry: Dictionary) -> Node3D:
-	var is_weapon := str(entry.get("type", "")) == "weapon"
-	var node := ArenaModels.build_weapon_pickup() if is_weapon else ArenaModels.build_ammo_pickup()
+	var kind := str(entry.get("type", ""))
+	var node: Node3D
+	if kind == "weapon":
+		node = ArenaModels.build_weapon_pickup()
+	elif kind == "health":
+		node = ArenaModels.build_health_pickup()
+	else:
+		node = ArenaModels.build_ammo_pickup()
 	# Mesma posição oficial de coleta; o servidor valida a distância por ela.
 	node.position = entry.get("position", Vector3.ZERO)
 	add_child(node)

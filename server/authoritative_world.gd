@@ -57,7 +57,7 @@ func add_player(peer_id: int) -> Dictionary:
 		"environment_blockers": environment_blockers,
 		"spawn_position": spawn,
 		"velocity": Vector3.ZERO,
-		"yaw": MansionMap.spawn_yaw_at(spawn_index),
+		"yaw": MovementRules.spawn_yaw(spawn),
 		"pitch": 0.0,
 		"yaw_tokens": MovementRules.MAX_YAW_DELTA * 2.0,
 		"pitch_tokens": MovementRules.MAX_PITCH_DELTA * 2.0,
@@ -120,7 +120,7 @@ func reset_to_spawn(peer_id: int) -> void:
 	var spawn_index := int(state["spawn_index"])
 	state["position"] = MovementRules.SPAWN_POINTS[spawn_index]
 	state["spawn_position"] = MovementRules.SPAWN_POINTS[spawn_index]
-	state["yaw"] = MansionMap.spawn_yaw_at(spawn_index)
+	state["yaw"] = MovementRules.spawn_yaw(state["position"])
 	state["pitch"] = 0.0
 	state["yaw_tokens"] = MovementRules.MAX_YAW_DELTA * 2.0
 	state["pitch_tokens"] = MovementRules.MAX_PITCH_DELTA * 2.0

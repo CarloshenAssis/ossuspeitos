@@ -1135,6 +1135,14 @@ A distância mínima entre pickups é de 2,5 m nesta variante. As armas
 mantêm 4 m de distância dos spawns, as munições mantêm 3 m, e todos os
 pickups mantêm 1,8 m de distância do centro de cada porta.
 
+Os oito spawns e as oito armas da Nocturna ficam nos dois andares, com o
+rifle no Salão e a espingarda na Galeria; as outras seis armas e as doze
+munições seguem a pistola comum. Cinco caixas de vida (cura 40, reaparecem
+em 20 s no servidor) ocupam cômodos dos dois pisos, fora da vizinhança
+dos spawns. A planta aprovada continua com 8 pistolas e 12 munições, sem
+caixas de vida.
+
+
 ## Mobiliário do térreo da Nocturna
 
 A apresentação do térreo de `nocturna_salao` instancia modelos no cliente e

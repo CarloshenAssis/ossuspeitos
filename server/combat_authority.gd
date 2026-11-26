@@ -11,6 +11,10 @@ const MAX_SEQUENCE_ADVANCE := 64
 const ACTION_INTERVAL_MSEC := 80
 const COMMON_WEAPON_ID := "common_pistol"
 const AMMO_BOX_AMOUNT := 6
+const HEALTH_AMOUNT := 40
+const HEALTH_RESPAWN_MSEC := 20000
+
+const SalaoMap = preload("res://shared/nocturna_salao_map.gd")
 
 var round_authority: RoundAuthority
 var world: AuthoritativeWorld
@@ -26,7 +30,12 @@ func _init(rounds: RoundAuthority, authoritative_world: AuthoritativeWorld, weap
 	world = authoritative_world
 	# Only an omitted/empty catalogue selects defaults. Invalid explicit entries
 	# are filtered by inventory and never silently replaced with a default gun.
-	inventory = InventoryAuthority.new(WeaponCatalog.defaults() if weapon_definitions.is_empty() else weapon_definitions)
+	var catalog: Dictionary = weapon_definitions
+	if catalog.is_empty():
+		catalog = WeaponCatalog.defaults()
+		if SalaoMap.enabled:
+			catalog.merge(WeaponCatalog.nocturna())
+	inventory = InventoryAuthority.new(catalog)
 	combat_rules = CombatRules.new(inventory, rng)
 
 func begin_round(round_id: int, participant_ids: Array) -> void:
@@ -41,12 +50,17 @@ func begin_round(round_id: int, participant_ids: Array) -> void:
 		private_state_changed.emit(id, private_state(id))
 	# Todos os pickups oficiais do mapa, exatamente uma vez por rodada (a
 	# sessão de inventário acabou de ser limpa: nada se duplica).
-	for index in MansionMap.PICKUPS.size():
-		var entry: Dictionary = MansionMap.PICKUPS[index]
-		if str(entry["type"]) == "weapon":
-			inventory.add_ground_weapon(str(entry["id"]), COMMON_WEAPON_ID, ArenaRules.PICKUP_POSITIONS[index], 6, 0, round_id)
+	for index in ArenaRules.official_pickups().size():
+		var entry: Dictionary = ArenaRules.official_pickups()[index]
+		var position: Vector3 = ArenaRules.PICKUP_POSITIONS[index]
+		var kind := str(entry["type"])
+		if kind == "weapon":
+			var weapon_id := str(entry.get("weapon_id", COMMON_WEAPON_ID))
+			inventory.add_ground_weapon(str(entry["id"]), weapon_id, position, -1, 0, round_id)
+		elif kind == "health":
+			inventory.add_ground_health(str(entry["id"]), position, HEALTH_AMOUNT, round_id, HEALTH_RESPAWN_MSEC)
 		else:
-			inventory.add_ground_ammo(str(entry["id"]), ArenaRules.PICKUP_POSITIONS[index], AMMO_BOX_AMOUNT, round_id)
+			inventory.add_ground_ammo(str(entry["id"]), position, AMMO_BOX_AMOUNT, round_id)
 	pickups_changed.emit(public_pickups())
 
 func clear_round() -> void:
@@ -73,6 +87,8 @@ func tick(now_msec: int) -> void:
 		if bool(state["reloading"]) and now_msec >= int(state["reload_deadline_msec"]):
 			inventory.complete_reload(int(peer_id), now_msec)
 			private_state_changed.emit(int(peer_id), private_state(int(peer_id)))
+	if inventory.respawn_expired(now_msec):
+		pickups_changed.emit(public_pickups())
 
 func request_pickup(peer_id: int, pickup_id: Variant, sequence: Variant, now_msec: int) -> Dictionary:
 	var rejection := _gate(peer_id, "pickup", sequence, now_msec)
@@ -82,7 +98,14 @@ func request_pickup(peer_id: int, pickup_id: Variant, sequence: Variant, now_mse
 		return _rejected("invalid_pickup")
 	_commit_sequence(peer_id, "pickup", int(sequence), now_msec)
 	var position: Variant = _official_position(peer_id)
-	var reason := inventory.pickup(peer_id, pickup_id, true, true, position)
+	var item: Dictionary = inventory.ground_items.get(pickup_id, {})
+	var reason := ""
+	if str(item.get("type", "")) == "health":
+		reason = inventory.pickup_health(peer_id, pickup_id, true, true, position, int(health.get(peer_id, 0)), MAX_HEALTH, now_msec)
+		if reason.is_empty():
+			health[peer_id] = clampi(int(health[peer_id]) + inventory.health_amount(pickup_id), 0, MAX_HEALTH)
+	else:
+		reason = inventory.pickup(peer_id, pickup_id, true, true, position)
 	if not reason.is_empty():
 		return _rejected(reason)
 	pickups_changed.emit(public_pickups())

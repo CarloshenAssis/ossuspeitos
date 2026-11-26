@@ -97,6 +97,53 @@ func pickup_ammo(peer_id: int, item_id: Variant, player_alive: bool, round_activ
 	item["available"] = false
 	return ""
 
+func add_ground_health(item_id: String, position: Vector3, amount: int, round_id: int, respawn_msec: int = 0) -> bool:
+	if item_id.is_empty() or ground_items.has(item_id) or ground_items.size() >= MAX_ITEMS_PER_SESSION:
+		return false
+	if not WeaponRules.is_finite_vector3(position) or amount <= 0 or respawn_msec < 0:
+		return false
+	ground_items[item_id] = {"pickup_id": item_id, "type": "health", "position": position,
+		"available": true, "round_id": round_id, "amount": amount, "respawn_msec": respawn_msec,
+		"respawn_at_msec": 0}
+	return true
+
+func pickup_health(peer_id: int, item_id: Variant, player_alive: bool, round_active: bool, official_position: Variant, current_health: int, max_health: int, now_msec: int) -> String:
+	var reason := _validate_pickup_common(peer_id, item_id, player_alive, round_active, official_position)
+	if not reason.is_empty():
+		return reason
+	if now_msec < 0:
+		return "invalid_time"
+	var item: Dictionary = ground_items[item_id]
+	if str(item.get("type", "")) != "health":
+		return "incompatible_item"
+	if current_health >= max_health:
+		return "health_full"
+	item["available"] = false
+	var delay := int(item.get("respawn_msec", 0))
+	item["respawn_at_msec"] = (now_msec + delay) if delay > 0 else 0
+	return ""
+
+func health_amount(item_id: String) -> int:
+	if not ground_items.has(item_id):
+		return 0
+	var item: Dictionary = ground_items[item_id]
+	return int(item["amount"]) if str(item.get("type", "")) == "health" else 0
+
+func respawn_expired(now_msec: int) -> bool:
+	if now_msec < 0:
+		return false
+	var changed := false
+	for item_id in ground_items:
+		var item: Dictionary = ground_items[item_id]
+		if bool(item["available"]):
+			continue
+		var when := int(item.get("respawn_at_msec", 0))
+		if when > 0 and now_msec >= when:
+			item["available"] = true
+			item["respawn_at_msec"] = 0
+			changed = true
+	return changed
+
 func pickup(peer_id: int, item_id: Variant, player_alive: bool, round_active: bool, official_position: Variant) -> String:
 	var common := _validate_pickup_common(peer_id, item_id, player_alive, round_active, official_position)
 	if not common.is_empty():

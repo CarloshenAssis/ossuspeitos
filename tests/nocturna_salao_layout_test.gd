@@ -100,43 +100,67 @@ func _room(id: String) -> Rect2:
 	return Rect2()
 
 func _check_items(free: Dictionary) -> void:
-	var rooms: Array[Rect2] = []
-	for id in ["salao", "biblioteca", "cozinha", "jantar", "hospedes"]:
-		var room := _room(id)
-		rooms.append(room)
-		for group in [salao_map.SPAWNS, salao_map.WEAPONS, salao_map.AMMO]:
-			_expect(group.any(room.has_point), "%s has at least one entry of each item type" % id)
-	var pickups: Array = salao_map.WEAPONS + salao_map.AMMO
-	_expect(salao_map.SPAWNS.size() == 8 and salao_map.WEAPONS.size() == 8 and salao_map.AMMO.size() == 12, "eight spawns, eight weapons, twelve ammo")
+	var weapons: Array = salao_map.pickups_of_type("weapon")
+	var ammo: Array = salao_map.pickups_of_type("ammo")
+	var health: Array = salao_map.pickups_of_type("health")
+	_expect(salao_map.SPAWNS.size() == 8 and weapons.size() == 8 and ammo.size() == 12 and health.size() == 5,
+		"eight spawns, eight weapons, twelve ammo, five health")
+	var ground_spawns := 0
+	var upper_spawns := 0
 	for index in salao_map.SPAWNS.size():
-		var spawn: Vector2 = salao_map.SPAWNS[index]
+		var entry: Dictionary = salao_map.SPAWNS[index]
+		var spawn: Vector2 = salao_map.item_point(entry)
+		var floor_y: float = salao_map.item_floor(entry)
 		var body: Vector3 = movement_rules.SPAWN_POINTS[index]
-		var clear: bool = not arena_rules.overlaps_blocker(body) if spawn == salao_map.GALLERY_SPAWN else free.has(Vector2i(spawn / GRID))
-		_expect(rooms.any(func(room: Rect2) -> bool: return room.has_point(spawn)) and clear,
-			"spawn inside a room with capsule clearance")
+		_expect(is_equal_approx(body.y, MansionMap.BODY_CENTER_HEIGHT + floor_y), "spawn height matches listed floor")
+		_expect(_space_contains(spawn, floor_y, str(entry["space"])) and not arena_rules.overlaps_blocker(body),
+			"spawn inside its room with capsule clearance")
+		if floor_y > 0.0:
+			upper_spawns += 1
+		else:
+			ground_spawns += 1
+			_expect(free.has(Vector2i(spawn / GRID)), "ground spawn sits on capsule-clear floor")
 		for other in range(index + 1, salao_map.SPAWNS.size()):
-			_expect(spawn.distance_to(salao_map.SPAWNS[other]) >= arena_rules.PLAYER_HIT_RADIUS * 2.0, "spawns do not overlap")
-	var lavatory := _room("lavabo")
-	var bathroom := _room("banheiro_marmore")
-	_expect(salao_map.AMMO.any(lavatory.has_point), "lavatory keeps its ammo")
-	_expect(salao_map.AMMO.any(bathroom.has_point), "marble bathroom has ammo")
-	var greenhouse := _room("jardim_inverno")
-	_expect(salao_map.AMMO.any(greenhouse.has_point), "greenhouse has ammo")
-	rooms.append_array([lavatory, bathroom, greenhouse])
+			var other_point: Vector2 = salao_map.item_point(salao_map.SPAWNS[other])
+			_expect(spawn.distance_to(other_point) >= arena_rules.PLAYER_HIT_RADIUS * 2.0, "spawns do not overlap")
+	_expect(ground_spawns >= 3 and upper_spawns >= 3, "spawns are spread across both floors")
+	_expect(ammo.any(func(entry: Dictionary) -> bool: return _room("lavabo").has_point(salao_map.item_point(entry))),
+		"lavatory keeps its ammo")
+	_expect(ammo.any(func(entry: Dictionary) -> bool: return _room("banheiro_marmore").has_point(salao_map.item_point(entry))),
+		"marble bathroom has ammo")
+	_expect(ammo.any(func(entry: Dictionary) -> bool: return _room("jardim_inverno").has_point(salao_map.item_point(entry))),
+		"greenhouse has ammo")
+	_expect(weapons.any(func(entry: Dictionary) -> bool: return str(entry.get("weapon_id", "")) == "hunting_rifle" and str(entry["space"]) == "salao"),
+		"strong rifle sits in the hall")
+	_expect(weapons.any(func(entry: Dictionary) -> bool: return str(entry.get("weapon_id", "")) == "coach_gun" and str(entry["space"]).begins_with("galeria")),
+		"strong shotgun sits in the gallery")
+	var health_rooms: Dictionary = {}
+	var health_floors: Dictionary = {}
+	for entry in health:
+		health_rooms[str(entry["space"])] = true
+		health_floors[salao_map.item_floor(entry)] = true
+	_expect(health_rooms.size() == 5 and health_floors.has(0.0) and health_floors.has(salao_map.GALLERY_FLOOR),
+		"health boxes occupy five rooms on both floors")
+	var pickups: Array = salao_map.PICKUPS
 	for index in pickups.size():
-		var point: Vector2 = pickups[index]
+		var entry: Dictionary = pickups[index]
+		var point: Vector2 = salao_map.item_point(entry)
+		var floor_y: float = salao_map.item_floor(entry)
 		var pickup: Vector3 = arena_rules.PICKUP_POSITIONS[index]
-		var floor_y: float = salao_map.GALLERY_FLOOR if point == salao_map.GALLERY_WEAPON else 0.0
-		var clear: bool = not arena_rules.overlaps_blocker(_body(point) + Vector3.UP * floor_y) if floor_y > 0.0 else free.has(Vector2i(point / GRID))
-		_expect(rooms.any(func(room: Rect2) -> bool: return room.has_point(point)) and clear,
-			"pickup inside a room with capsule clearance")
+		var body := Vector3(point.x, movement_rules.PLAYER_HEIGHT + floor_y, point.y)
+		_expect(_space_contains(point, floor_y, str(entry["space"])) and not arena_rules.overlaps_blocker(body),
+			"pickup inside its room with capsule clearance")
 		_expect(is_equal_approx(pickup.y, MansionMap.PICKUP_HEIGHT + floor_y), "pickup height")
+		_expect(is_equal_approx(salao_map.walk_height(point.x, point.y, body.y), floor_y), "pickup floor is stair-reachable")
 		for door in salao_map.DOORS:
 			var center: Vector2 = salao_map.rect(door).get_center()
 			var door_position := Vector3(center.x, salao_map.space_floor(door) + MansionMap.PICKUP_HEIGHT, center.y)
 			_expect(pickup.distance_to(door_position) >= 1.8, "pickup clearance from door")
+		var kind := str(entry["type"])
+		var spawn_gap := 4.0 if kind == "weapon" else 3.0
 		for spawn in movement_rules.SPAWN_POINTS:
-			_expect(pickup.distance_to(spawn + Vector3.UP * (MansionMap.PICKUP_HEIGHT - movement_rules.PLAYER_HEIGHT)) >= (4.0 if index < salao_map.WEAPONS.size() else 3.0), "pickup clearance from spawn")
+			_expect(pickup.distance_to(spawn + Vector3.UP * (MansionMap.PICKUP_HEIGHT - movement_rules.PLAYER_HEIGHT)) >= spawn_gap,
+				"pickup clearance from spawn")
 		for other in range(index + 1, pickups.size()):
 			_expect(pickup.distance_to(arena_rules.PICKUP_POSITIONS[other]) >= PICKUP_GAP, "pickup pair clearance")
 
@@ -286,7 +310,7 @@ func _check_dining_room() -> void:
 		_expect(position.is_equal_approx(target), "capsule follows the ground-floor loop to %s" % waypoint)
 
 	for index in salao_map.SPAWNS.size():
-		var spawn: Vector2 = salao_map.SPAWNS[index]
+		var spawn: Vector2 = salao_map.item_point(salao_map.SPAWNS[index])
 		if dining.has_point(spawn):
 			var yaw: float = salao_map.spawn_yaw_at(index)
 			var facing := Vector2(-sin(yaw), -cos(yaw))
@@ -356,7 +380,7 @@ func _check_guest_room() -> void:
 		"guest room ceiling seals at 3.5 m")
 
 	for index in salao_map.SPAWNS.size():
-		var spawn: Vector2 = salao_map.SPAWNS[index]
+		var spawn: Vector2 = salao_map.item_point(salao_map.SPAWNS[index])
 		if guest.has_point(spawn):
 			var yaw: float = salao_map.spawn_yaw_at(index)
 			var facing := Vector2(-sin(yaw), -cos(yaw))
@@ -493,6 +517,16 @@ func _check_winter_garden() -> void:
 		_expect(movement_rules.resolve_step(plant_start, direction * 4)["blocked_x"], "plant column blocks the capsule")
 		_expect(is_equal_approx(arena_rules.first_blocker_distance(eye, direction, 4.0), 3.0),
 			"plant column blocks shots at eye height")
+
+func _space_contains(point: Vector2, floor_y: float, space_id: String) -> bool:
+	var space: Dictionary = salao_map.space_at(point, floor_y + 0.1)
+	if space.is_empty():
+		return false
+	var sid := str(space["id"])
+	if sid == space_id:
+		return true
+	# Galeria é um conjunto de vãos com o mesmo nome de família.
+	return space_id.begins_with("galeria") and sid.begins_with("galeria")
 
 func _at(point: Vector2) -> Vector3:
 	return _body(point) + Vector3.UP * salao_map.walk_height(point.x, point.y, movement_rules.PLAYER_HEIGHT)

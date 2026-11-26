@@ -6,6 +6,7 @@ var checks := 0
 func _initialize() -> void:
 	_test_pickups()
 	_test_ammo_and_reload()
+	_test_health()
 	_test_cleanup()
 	if failures:
 		quit(1)
@@ -56,6 +57,22 @@ func _test_ammo_and_reload() -> void:
 	authority.pickup_weapon(2, "bounded", true, true, Vector3.ZERO)
 	state = authority.get_inventory(2)
 	_expect(state["magazine"] == 6 and state["reserve"] == 18, "ammo never exceeds official limits")
+
+func _test_health() -> void:
+	var authority := _authority()
+	authority.register_player(1)
+	_expect(authority.add_ground_health("kit", Vector3.ZERO, 40, 1, 20000), "health kit added")
+	_expect(authority.pickup_health(1, "kit", true, true, Vector3.ZERO, 100, 100, 1000) == "health_full", "full health leaves the kit")
+	_expect(bool(authority.ground_items["kit"]["available"]), "rejected heal does not consume the kit")
+	_expect(authority.pickup_health(1, "kit", true, true, Vector3.ZERO, 50, 100, 1000).is_empty(), "injured player picks up the kit")
+	_expect(authority.health_amount("kit") == 40, "heal amount stays on the official item")
+	_expect(not bool(authority.ground_items["kit"]["available"]), "collected kit becomes unavailable")
+	_expect(authority.pickup_health(1, "kit", true, true, Vector3.ZERO, 50, 100, 2000) == "item_unavailable", "kit stays down until respawn")
+	_expect(not authority.respawn_expired(20999), "kit does not return early")
+	_expect(authority.respawn_expired(21000), "kit returns after the official timer")
+	_expect(bool(authority.ground_items["kit"]["available"]), "respawned kit is available again")
+	_expect(authority.pickup_health(1, "kit", false, true, Vector3.ZERO, 50, 100, 22000) == "player_dead", "dead player cannot heal")
+	_expect(authority.pickup(1, "kit", true, true, Vector3.ZERO) == "incompatible_item", "generic pickup leaves health to combat authority")
 
 func _test_cleanup() -> void:
 	var authority := _authority()
