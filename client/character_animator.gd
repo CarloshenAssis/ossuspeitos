@@ -3,6 +3,7 @@ extends RefCounted
 
 const IDLE := &"CharacterArmature|Idle"
 const WALK := &"CharacterArmature|Walk"
+const RUN := &"CharacterArmature|Run"
 const DEFEAT := &"CharacterArmature|Defeat"
 const ACTION_CLIPS := {
 	"fire": &"CharacterArmature|Shoot_OneHanded",
@@ -14,6 +15,8 @@ const ACTION_CLIPS := {
 const BLEND_TIME := 0.15
 const IDLE_SPEED := 0.3
 const WALK_SPEED := 2.0
+const RUN_START := 3.0
+const RUN_SPEED := 5.0
 const TELEPORT_DISTANCE := 1.5
 
 var actions := CharacterActionState.new()
@@ -38,14 +41,14 @@ func _init(model: Node3D, breath_offset: float = 0.0) -> void:
 	if not is_valid():
 		return
 	player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
-	for clip in [IDLE, WALK]:
+	for clip in [IDLE, WALK, RUN]:
 		player.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
 	_idle_offset = fposmod(breath_offset, player.get_animation(IDLE).length)
 	_clip_head_rotation = skeleton.get_bone_pose_rotation(_head_bone)
 	rest()
 
 func is_valid() -> bool:
-	return player != null and _head_bone >= 0 and head_pivot != null and player.has_animation(IDLE) and player.has_animation(WALK) and player.has_animation(DEFEAT)
+	return player != null and _head_bone >= 0 and head_pivot != null and player.has_animation(IDLE) and player.has_animation(WALK) and player.has_animation(RUN) and player.has_animation(DEFEAT)
 
 func reset(position: Vector3 = Vector3.INF) -> void:
 	rest()
@@ -78,11 +81,18 @@ func update(position: Vector3, _yaw: float, delta: float) -> void:
 	skeleton.set_bone_pose_rotation(_head_bone, _clip_head_rotation)
 
 	if actions.kind.is_empty():
-		var clip := WALK if speed > IDLE_SPEED else IDLE
-		player.speed_scale = clampf(speed / WALK_SPEED, 0.2, 2.5) if clip == WALK else 1.0
+		var clip := IDLE
+		var scale := 1.0
+		if speed > RUN_START:
+			clip = RUN
+			scale = clampf(speed / RUN_SPEED, 0.85, 1.15)
+		elif speed > IDLE_SPEED:
+			clip = WALK
+			scale = clampf(speed / WALK_SPEED, 0.2, 1.5)
+		player.speed_scale = scale
 		if player.assigned_animation != clip or not player.is_playing():
 			var previous := player.assigned_animation
-			var blend := BLEND_TIME if previous == IDLE or previous == WALK else 0.0
+			var blend := BLEND_TIME if previous == IDLE or previous == WALK or previous == RUN else 0.0
 			player.play(clip, blend)
 		player.advance(delta)
 	else:

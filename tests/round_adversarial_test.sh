@@ -9,6 +9,7 @@ set -Eeuo pipefail
 # autoridade, e o peer hostil nunca recebe papel algum.
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/tests/engine_send_races.sh"
 GODOT_BIN="${GODOT_BIN:-}"
 if [[ -z "$GODOT_BIN" ]]; then
   if command -v godot4 >/dev/null; then
@@ -241,7 +242,7 @@ assert_grep "hostile-peer-did-not-degrade-the-handshake" 'SERVER_SHUTDOWN_READY 
 assert_grep "server-completed-the-round" 'ROLE_PRIVACY_TEST_OK clients=4 assassin=1 detective=1 victim=2' "$TMP_DIR/server.log"
 assert_grep "server-shut-down-cleanly" 'SERVER_SHUTDOWN_COMPLETE closed=5' "$TMP_DIR/server.log"
 assert_no_grep "no-shutdown-timeout" 'SERVER_SHUTDOWN_TIMEOUT' "$TMP_DIR"/*.log
-assert_no_grep "no-websocket-state-error" 'ready_state != STATE_OPEN' "$TMP_DIR"/*.log
+assert_engine_send_races_bounded "$TMP_DIR"/*.log
 
 # --- O peer hostil nunca recebeu papel ---------------------------------------
 assert_no_grep "attacker-never-received-a-role" 'ATTACKER_RECEIVED_PRIVATE_ROLE' "$TMP_DIR/attacker.log"

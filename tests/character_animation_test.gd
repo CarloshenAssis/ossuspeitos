@@ -1,7 +1,7 @@
 extends SceneTree
 
 const PREFIX := "CharacterArmature|"
-const CLIPS := ["Idle", "Walk", "Shoot_OneHanded", "Defeat", "RecieveHit", "PickUp", "Punch"]
+const CLIPS := ["Idle", "Walk", "Run", "Shoot_OneHanded", "Defeat", "RecieveHit", "PickUp", "Punch"]
 const ACTION_CLIPS := {"interact": "PickUp", "reload": "PickUp", "fire": "Shoot_OneHanded", "hurt": "RecieveHit", "death": "Defeat"}
 const DT := 1.0 / 60.0
 
@@ -33,11 +33,11 @@ func _test_variant(appearance_id: String) -> void:
 		_expect(animator.player.current_animation == PREFIX + "Idle", "%s plays Idle at rest" % appearance_id)
 		_expect(animator.player.get_animation(PREFIX + "Idle").loop_mode == Animation.LOOP_LINEAR, "%s Idle loops" % appearance_id)
 		var position := _walk(animator, Vector3.ZERO, 1.5)
-		var walk_scale := animator.player.speed_scale
-		_expect(animator.player.current_animation == PREFIX + "Walk", "%s walks when moving" % appearance_id)
+		_expect(animator.player.current_animation == PREFIX + "Walk", "%s walks when moving slowly" % appearance_id)
 		_expect(animator.player.get_animation(PREFIX + "Walk").loop_mode == Animation.LOOP_LINEAR, "%s Walk loops" % appearance_id)
+		_expect(animator.player.get_animation(PREFIX + "Run").loop_mode == Animation.LOOP_LINEAR, "%s Run loops" % appearance_id)
 		_walk(animator, position, MovementRules.MAX_SPEED)
-		_expect(animator.player.current_animation == PREFIX + "Walk" and animator.player.speed_scale > walk_scale, "%s speeds up Walk at max movement speed" % appearance_id)
+		_expect(animator.player.current_animation == PREFIX + "Run", "%s runs at max movement speed" % appearance_id)
 		animator.rest()
 		_expect(animator.player.current_animation == PREFIX + "Idle", "%s returns to Idle on rest" % appearance_id)
 	avatar.free()
@@ -111,7 +111,7 @@ func _test_view_integration() -> void:
 		view.apply_snapshot([local, _state(peer, position, 0.5)])
 		view._process(DT)
 	if animator != null and animator.is_valid():
-		_expect(animator.player.current_animation == PREFIX + "Walk", "remote snapshots drive Walk")
+		_expect(animator.player.current_animation == PREFIX + "Run", "remote snapshots drive Run at max speed")
 	var pivot := avatar.find_child(ArenaModels.HEAD_PIVOT, true, false) as Node3D
 	_expect(pivot != null and is_equal_approx(pivot.rotation.x, ArenaModels.head_rotation_for_pitch(0.5)),
 		"remote snapshots apply the official pitch")

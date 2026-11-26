@@ -7,6 +7,7 @@
 set -eEuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/tests/engine_send_races.sh"
 GODOT_BIN="${GODOT_BIN:-}"
 if [[ -z "$GODOT_BIN" ]]; then
   if command -v godot4 >/dev/null; then GODOT_BIN="$(command -v godot4)";
@@ -102,7 +103,8 @@ if [[ "$PROFILE" != "local" ]]; then
 fi
 if [[ "$STALL" == true ]]; then assert_grep stall-triggered 'SYNC_STALL_TRIGGERED' "$TMP_DIR"/client-*.log; fi
 assert_no_grep no-role-leak 'peer_id=[0-9]+.*role=|ASSASSIN|DETECTIVE|VICTIM' "$TMP_DIR"/client-*.log
-assert_no_grep no-failure-or-runtime-error 'SYNC_TEST_FAILED|ready_state != STATE_OPEN|SCRIPT ERROR|Trying to call an RPC via a multiplayer peer which is not connected' "$TMP_DIR"/*.log
+assert_no_grep no-failure-or-runtime-error 'SYNC_TEST_FAILED|SCRIPT ERROR' "$TMP_DIR"/*.log
+assert_engine_send_races_bounded "$TMP_DIR"/*.log
 grep -hE 'SYNC_(ROLES|MOVE|AIM|VERTICAL|DUPLICATE|PRIVACY)_RESULT|SYNC_STAGE_ENTER' "$TMP_DIR/server.log"
 grep -hE 'NET_STATS|TEST_NET_APPLIED|SYNC_STALL' "$TMP_DIR"/client-*.log || true
 echo "SYNC_NETWORK_TEST_OK profile=$PROFILE seed=$SEED stall=$STALL"

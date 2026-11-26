@@ -6,6 +6,7 @@ set -Eeuo pipefail
 # aguardar a próxima. Nenhuma asserção depende de renderização.
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/tests/engine_send_races.sh"
 GODOT_BIN="${GODOT_BIN:-}"
 if [[ -z "$GODOT_BIN" ]]; then
   if command -v godot4 >/dev/null; then
@@ -319,7 +320,7 @@ assert_equal "public-result-announced-once-per-client" "$(grep -h 'CLIENT_ROUND_
 assert_grep "server-shutdown-ready" 'SERVER_SHUTDOWN_READY clients=5' "$TMP_DIR/server.log"
 assert_grep "server-shutdown-complete" 'SERVER_SHUTDOWN_COMPLETE closed=5' "$TMP_DIR/server.log"
 assert_no_grep "server-shutdown-timeout-absent" 'SERVER_SHUTDOWN_TIMEOUT' "$TMP_DIR"/*.log
-assert_no_grep "websocket-open-state-errors-absent" 'ready_state != STATE_OPEN' "$TMP_DIR"/*.log
+assert_engine_send_races_bounded "$TMP_DIR"/*.log
 for id in 1 2 3 4 5; do
 	assert_equal "client-$id-single-shutdown-prepare" "$(grep -c "CLIENT_SHUTDOWN_PREPARE id=client-$id" "$TMP_DIR/client-$id.log")" "1"
 	assert_equal "client-$id-single-shutdown-complete" "$(grep -c "CLIENT_SHUTDOWN_COMPLETE id=client-$id" "$TMP_DIR/client-$id.log")" "1"

@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/tests/engine_send_races.sh"
 GODOT_BIN="${GODOT_BIN:-}"
 if [[ -z "$GODOT_BIN" ]]; then
   if command -v godot4 >/dev/null; then
@@ -260,7 +261,7 @@ else
 fi
 assert_grep "server-shutdown-ready" 'SERVER_SHUTDOWN_READY clients=4' "$TMP_DIR/server.log"
 assert_no_grep "server-shutdown-timeout-absent" 'SERVER_SHUTDOWN_TIMEOUT' "$TMP_DIR"/*.log
-assert_no_grep "websocket-open-state-errors-absent" 'ready_state != STATE_OPEN' "$TMP_DIR"/*.log
+assert_engine_send_races_bounded "$TMP_DIR"/*.log
 for id in 1 2 3 4; do
 	assert_grep "client-$id-test-ok" "CLIENT_TEST_OK id=client-$id" "$TMP_DIR/client-$id.log"
 	assert_equal "client-$id-single-shutdown-prepare" "$(grep -c "CLIENT_SHUTDOWN_PREPARE id=client-$id" "$TMP_DIR/client-$id.log")" "1"
