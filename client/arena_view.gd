@@ -39,7 +39,7 @@ var current_zone_name := ""
 var region_chip_top := HudStyle.MARGIN
 var gameplay_visuals := true
 var graphics_profile := "baseline"
-var touch_controls: TouchControls
+var touch_controls: Node
 var _previous_3d_scale := 0.0
 var _alive_flags: Dictionary = {}
 ## Aparência cosmética pública por jogador (roster oficial). Nunca vem de papel.
@@ -198,15 +198,16 @@ func _ready() -> void:
 	inspection_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	overlay_root.add_child(inspection_label)
 
-	touch_controls = TouchControls.new()
-	add_child(touch_controls)
-	visibility_changed.connect(_refresh_touch_controls)
-	_refresh_touch_controls()
+	if ResourceLoader.exists("res://client/touch_controls.gd"):
+		touch_controls = (load("res://client/touch_controls.gd") as GDScript).new()
+		add_child(touch_controls)
+		visibility_changed.connect(_refresh_touch_controls)
+		_refresh_touch_controls()
 
 func _refresh_touch_controls() -> void:
 	if touch_controls != null:
 		touch_controls.visible = is_visible_in_tree() and gameplay_visuals and (
-			touch_controls.force_visible or TouchControls.touch_device())
+			touch_controls.force_visible or MenuSettings.touch_device())
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Oculta (lobby da sala online, fase 9): não prende o mouse.
@@ -949,7 +950,7 @@ func _update_presentation_motion(delta: float) -> void:
 
 ## Cosmetics only: overrides belong to this view, cached mansion resources stay immutable.
 func apply_graphics_settings(settings: MenuSettings, force_mobile: bool = false) -> void:
-	var mobile := force_mobile or TouchControls.touch_device()
+	var mobile := force_mobile or MenuSettings.touch_device()
 	var profile := "low" if mobile and not settings.graphics_profile_saved else settings.graphics_profile
 	set_graphics_profile(profile)
 	if mobile and _previous_3d_scale == 0.0:

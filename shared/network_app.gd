@@ -1242,7 +1242,9 @@ func _sample_move() -> Vector2:
 ## Um comando por tick fixo de física: amostra, simula localmente, guarda para
 ## replay e envia em lote (ou na hora, se carrega ação).
 func _client_command_tick() -> void:
-	var look := arena_view.touch_controls.consume_look_delta() if arena_view != null and arena_view.touch_controls != null else Vector2.ZERO
+	var look := Vector2.ZERO
+	if arena_view != null and arena_view.touch_controls != null:
+		look = arena_view.touch_controls.consume_look_delta()
 	if not _commands_enabled():
 		if not outbox.is_empty():
 			_flush_commands()

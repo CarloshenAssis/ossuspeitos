@@ -34,7 +34,7 @@ var fullscreen := false
 var resolution := Vector2i(960, 540)
 var reduce_motion := false
 var graphics_profile_saved := false
-var graphics_profile := "low" if TouchControls.touch_device() else "baseline":
+var graphics_profile := "baseline":
 	set(value):
 		graphics_profile = sanitize_graphics_profile(value)
 		graphics_profile_saved = true
@@ -42,6 +42,11 @@ const GRAPHICS_PROFILES := ["low", "baseline", "high"]
 
 static func sanitize_graphics_profile(value: String) -> String:
 	return value if value in GRAPHICS_PROFILES else "baseline"
+
+static func touch_device() -> bool:
+	return DisplayServer.get_name() != "headless" and (
+		DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")
+		or OS.has_feature("web_android") or OS.has_feature("web_ios"))
 ## O arquivo tinha preferência de tela (senão, a janela fica como o projeto abre).
 var display_saved := false
 

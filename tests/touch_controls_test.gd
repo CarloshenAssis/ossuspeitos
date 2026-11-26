@@ -1,5 +1,7 @@
 extends SceneTree
 
+const TouchControlsScript = preload("res://client/touch_controls.gd")
+
 class ActionRecorder extends Node:
 	var events: Array[String] = []
 
@@ -16,14 +18,14 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
-	var hidden := TouchControls.new()
+	var hidden := TouchControlsScript.new()
 	root.add_child(hidden)
-	expect(not TouchControls.touch_device() and not hidden.visible, "headless hides touch controls")
+	expect(not TouchControlsScript.touch_device() and not hidden.visible, "headless hides touch controls")
 	hidden.free()
 
 	var recorder := ActionRecorder.new()
 	root.add_child(recorder)
-	var controls := TouchControls.new()
+	var controls := TouchControlsScript.new()
 	controls.force_visible = true
 	root.add_child(controls)
 	await process_frame

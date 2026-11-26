@@ -61,7 +61,7 @@ func run() -> void:
 	DirAccess.remove_absolute(MenuSettings.file_path())
 	var settings := MenuSettings.load_saved()
 	var initial_scale := root.scaling_3d_scale
-	expect(not TouchControls.touch_device(), "headless does not select the mobile preset")
+	expect(not MenuSettings.touch_device(), "headless does not select the mobile preset")
 	expect(settings.graphics_profile == "baseline", "old/missing settings default baseline")
 	a.apply_graphics_settings(settings)
 	expect(a.graphics_profile == "baseline" and is_equal_approx(root.scaling_3d_scale, initial_scale),

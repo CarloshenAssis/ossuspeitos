@@ -1,4 +1,3 @@
-class_name TouchControls
 extends CanvasLayer
 
 const LOOK_SENSITIVITY := 0.0025
@@ -20,9 +19,7 @@ var _previous_mouse_emulation := false
 var _active := false
 
 static func touch_device() -> bool:
-	return DisplayServer.get_name() != "headless" and (
-		DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")
-		or OS.has_feature("web_android") or OS.has_feature("web_ios"))
+	return MenuSettings.touch_device()
 
 func _ready() -> void:
 	layer = 2

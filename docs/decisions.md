@@ -1176,4 +1176,5 @@ Pular emite uma ação local sem alterar a simulação.
 
 Em dispositivos com toque, a arena limita a escala 3D a 0,7 e usa o perfil
 Low quando ainda não há uma escolha gráfica salva. A escala é restaurada ao
-sair da arena. O HUD usa a resolução normal.
+sair da arena. O HUD usa a resolução normal. O overlay de toque é carregado
+só se o script existir: os presets Linux Server não o incluem.

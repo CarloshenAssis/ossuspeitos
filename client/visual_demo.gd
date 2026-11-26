@@ -39,7 +39,7 @@ func _process(delta: float) -> void:
 	elapsed += delta
 	if not test_mode:
 		if arena_view.touch_controls != null:
-			var look := arena_view.touch_controls.consume_look_delta()
+			var look: Vector2 = arena_view.touch_controls.consume_look_delta()
 			if look != Vector2.ZERO:
 				_apply_look(look)
 		var move := Input.get_vector("move_left", "move_right", "move_forward", "move_backward")
@@ -54,7 +54,7 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		_apply_look(-event.relative * TouchControls.LOOK_SENSITIVITY)
+		_apply_look(-event.relative * 0.0025)
 
 func _apply_look(look: Vector2) -> void:
 	local_yaw = wrapf(local_yaw + look.x, -PI, PI)
@@ -146,7 +146,7 @@ func _add_demo_banner() -> void:
 	var label := Label.new()
 	label.position = Vector2(28.0, 24.0)
 	label.text = "MODO DEMONSTRAÇÃO — OFFLINE / SEM SERVIDOR\nWASD: mover · clique: capturar mouse · Esc: liberar"
-	if arena_view.touch_controls.visible:
+	if arena_view.touch_controls != null and arena_view.touch_controls.visible:
 		label.text = "MODO DEMONSTRAÇÃO — OFFLINE / SEM SERVIDOR\nJoystick: mover · arraste à direita: mirar\nAtirar e Pular desativados nesta demo"
 	label.add_theme_font_size_override("font_size", 18)
 	layer.add_child(label)
