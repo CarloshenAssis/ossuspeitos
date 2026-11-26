@@ -74,7 +74,7 @@ Estes arquivos entram no jogo, mas a licença ainda não foi confirmada. Não re
 
 ## Personagens CC0 (Quaternius) — todos os mapas
 
-Personagens low-poly de Quaternius (2019), do [Ultimate Animated Character Pack](https://quaternius.com/packs/ultimatedanimatedcharacter.html), também disponível no [OpenGameArt](https://opengameart.org/content/animated-characters-pack). Licença [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). Os modelos foram redimensionados, tiveram os clipes aparados e foram otimizados com `gltf-transform` sem Draco ou meshopt.
+Personagens low-poly de Quaternius (2019), do [Ultimate Animated Character Pack](https://quaternius.com/packs/ultimatedanimatedcharacter.html), também disponível no [OpenGameArt](https://opengameart.org/content/animated-characters-pack). Licença [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). Os modelos foram redimensionados, tiveram os clipes aparados e foram otimizados com `gltf-transform` sem Draco ou meshopt. O clipe `Run` (presente no `.blend` do pacote, mas ausente no FBX) foi bakeado do rig compartilhado `CharacterArmature`, retargetado por nome de osso e embutido nos oito GLBs.
 
 | Arquivo em `assets/characters/` | Nome original |
 |---|---|
