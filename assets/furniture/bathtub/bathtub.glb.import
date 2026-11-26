@@ -3,7 +3,7 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://b5akkrebir8mn"
+uid="uid://bphlbvtuc3xom"
 path="res://.godot/imported/bathtub.glb-c029c8a5cfb2111bfcf6a699ab037ec5.scn"
 
 [deps]
@@ -34,4 +34,4 @@ animation/import_rest_as_RESET=false
 import_script/path=""
 _subresources={}
 gltf/naming_version=1
-gltf/embedded_image_handling=2
+gltf/embedded_image_handling=1

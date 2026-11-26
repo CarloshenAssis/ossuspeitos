@@ -3,7 +3,7 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://uwwy8ptvw6fr"
+uid="uid://bf18cvuas4ks7"
 path="res://.godot/imported/kitchen_cabinet.glb-6493610f70d6728c73bb513d26dd6c67.scn"
 
 [deps]
@@ -34,4 +34,4 @@ animation/import_rest_as_RESET=false
 import_script/path=""
 _subresources={}
 gltf/naming_version=1
-gltf/embedded_image_handling=2
+gltf/embedded_image_handling=1

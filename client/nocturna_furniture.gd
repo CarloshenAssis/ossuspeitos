@@ -233,15 +233,14 @@ func build(greyboxes: Dictionary) -> void:
 			"guarda_roupa":
 				_model("gothic_commode", floor_center, PI / 2, size)
 			"pia":
-				for x_offset in [-size.x / 3.0, 0.0, size.x / 3.0]:
+				for x_offset in [-size.x / 3.0, size.x / 3.0]:
 					_model("kitchen_cabinet", floor_center + Vector3(x_offset, 0, 0), PI,
 						Vector3(size.x / 3.0, 0.85, size.z))
-				_model("faucet", floor_center + Vector3(0, 0.85, 0.35), PI,
-					Vector3(0.13, 0.15, 0.23))
+				# Kenney kitchenSink (torneira + cuba) no módulo central da pia.
+				_model("faucet", floor_center, PI,
+					Vector3(size.x / 3.0, 0.85, size.z))
 			"banheira":
 				_model("bathtub", floor_center, PI / 2, Vector3(1.8, 0.6, size.z))
-				_model("faucet", floor_center + Vector3(0, 0.6, 1.1), PI,
-					Vector3(0.16, 0.4, 0.28))
 			"jardineira_o", "jardineira_s":
 				_box(floor_center, Vector3(size.x, 0.6, size.z), _tile)
 				var offset := Vector3(size.x * 0.1, 0, size.z * 0.23)

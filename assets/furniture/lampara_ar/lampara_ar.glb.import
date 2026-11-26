@@ -3,7 +3,7 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://behjetagl2rpj"
+uid="uid://ckwt74qrcnyc4"
 path="res://.godot/imported/lampara_ar.glb-58557cb0289fc348609f4d83eff7691c.scn"
 
 [deps]
@@ -34,4 +34,4 @@ animation/import_rest_as_RESET=false
 import_script/path=""
 _subresources={}
 gltf/naming_version=1
-gltf/embedded_image_handling=2
+gltf/embedded_image_handling=1
