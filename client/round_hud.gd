@@ -83,6 +83,7 @@ var _anchored: Array = []
 var _notices: Array = []
 var _feed: Array = []
 var _nearby_pickup := ""
+var _nearby_weapon_id := ""
 var _last_health := -1
 var _last_health_round := 0
 var _banner_round := 0
@@ -142,6 +143,7 @@ func apply_round_state(payload: Dictionary, role: int, round_id: int, own_peer_i
 		_notices.clear()
 		_feed.clear()
 		_nearby_pickup = ""
+		_nearby_weapon_id = ""
 	# Rodada nova começando (vinda da contagem): aviso do retorno ao ponto
 	# inicial. Quem entra no meio da rodada não teve salto e não vê o aviso.
 	var new_state := int(payload.get("state", RoundState.WAITING))
@@ -212,10 +214,11 @@ func apply_elimination(peer_id: int) -> void:
 
 ## Tipo do pickup disponível ao alcance ("weapon", "ammo", "health" ou ""), calculado pela
 ## arena com a posição oficial e o estado público dos pickups.
-func set_nearby_pickup(pickup_type: String) -> void:
-	if pickup_type == _nearby_pickup:
+func set_nearby_pickup(pickup_type: String, weapon_id: String = "") -> void:
+	if pickup_type == _nearby_pickup and weapon_id == _nearby_weapon_id:
 		return
 	_nearby_pickup = pickup_type
+	_nearby_weapon_id = weapon_id
 	_render()
 
 func _push_notice(text: String, color: Color) -> void:
@@ -299,14 +302,16 @@ static func transition_notices(before: Dictionary, after: Dictionary) -> Array:
 
 ## Prompt de coleta para o pickup ao alcance, coerente com o que o servidor
 ## aceita: uma arma por vez, munição só com arma e reserva abaixo do máximo.
-static func pickup_prompt(pickup_type: String, combat: Dictionary) -> Dictionary:
+static func pickup_prompt(pickup_type: String, combat: Dictionary, weapon_id: String = "") -> Dictionary:
 	if pickup_type.is_empty() or combat.is_empty() or int(combat.get("health", 0)) <= 0:
 		return {}
 	var armed := not str(combat.get("weapon_id", "")).is_empty()
 	if pickup_type == "weapon":
 		if armed:
 			return {"key": false, "text": "Você já tem uma arma", "kind": "weapon"}
-		return {"key": true, "text": "PEGAR PISTOLA", "kind": "weapon"}
+		# Sem weapon_id (mapa padrão / testes existentes) o texto continua PISTOLA.
+		var weapon_name := str(WEAPON_NAMES.get(weapon_id, "PISTOLA")) if not weapon_id.is_empty() else "PISTOLA"
+		return {"key": true, "text": "PEGAR %s" % weapon_name, "kind": "weapon"}
 	if pickup_type == "ammo":
 		if not armed:
 			return {"key": false, "text": "Munição · pegue uma arma antes", "kind": "ammo"}
@@ -386,7 +391,7 @@ static func view_model(public_state: Dictionary, role: int, role_round_id: int, 
 static func _weapon_model(combat: Dictionary) -> Dictionary:
 	var weapon_id := str(combat.get("weapon_id", ""))
 	if weapon_id.is_empty():
-		return {"armed": false, "name": "SEM ARMA", "ammo": "", "hint": "Procure uma pistola no mapa · E para pegar"}
+		return {"armed": false, "name": "SEM ARMA", "ammo": "", "hint": "Procure uma arma no mapa · E para pegar"}
 	var magazine := maxi(0, int(combat.get("magazine", 0)))
 	var reserve := maxi(0, int(combat.get("reserve", 0)))
 	var reloading := bool(combat.get("reloading", false))
@@ -572,7 +577,7 @@ func _render() -> void:
 		_reload_track.visible = bool(weapon.get("reloading", false))
 
 	var alive := mode == MODE_ALIVE
-	var prompt := pickup_prompt(_nearby_pickup, _combat) if alive else {}
+	var prompt := pickup_prompt(_nearby_pickup, _combat, _nearby_weapon_id) if alive else {}
 	_prompt_panel.visible = not prompt.is_empty()
 	if not prompt.is_empty():
 		var accent := HudStyle.CYAN if str(prompt["kind"]) == "weapon" else HudStyle.COPPER

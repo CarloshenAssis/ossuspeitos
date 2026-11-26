@@ -180,11 +180,31 @@ static func muzzle_offset(weapon_id: String) -> Vector3:
 		return Vector3(0.0, 0.02, -0.22)
 	return Vector3(0.0, 0.03, -0.19)
 
+## Deslocamento e escala da arma na câmera. A pistola permanece no enquadramento
+## original; o rifle e a AUG, mais longos, aproximam-se um pouco do canto
+## inferior direito para não parecerem miniaturas a 0,5 m.
+const VIEWMODEL_OFFSET := Vector3(0.19, -0.16, -0.5)
+const VIEWMODEL_SCALE := 0.8
+
+static func viewmodel_offset(weapon_id: String) -> Vector3:
+	if weapon_id == "hunting_rifle":
+		return Vector3(0.18, -0.12, -0.36)
+	if weapon_id == "aug":
+		return Vector3(0.20, -0.14, -0.40)
+	return VIEWMODEL_OFFSET
+
+static func viewmodel_scale(weapon_id: String) -> float:
+	if weapon_id == "hunting_rifle":
+		return 0.95
+	if weapon_id == "aug":
+		return 0.88
+	return VIEWMODEL_SCALE
+
 ## Arma no chão: pistola procedural, AUG ou rifle, deitada sobre um halo ciano.
 static func build_weapon_pickup(weapon_id: String = "common_pistol") -> Node3D:
 	var root := Node3D.new()
 	root.name = "WeaponPickup"
-	_halo(root, WEAPON_GLOW)
+	_halo(root, WEAPON_GLOW, 0.28, 0.45)
 	var spin := Node3D.new()
 	spin.name = "Spin"
 	root.add_child(spin)
@@ -213,7 +233,7 @@ static func build_weapon_pickup(weapon_id: String = "common_pistol") -> Node3D:
 static func build_ammo_pickup() -> Node3D:
 	var root := Node3D.new()
 	root.name = "AmmoPickup"
-	_halo(root, AMMO_GLOW)
+	_halo(root, AMMO_GLOW, 0.30, 0.50)
 	var spin := Node3D.new()
 	spin.name = "Spin"
 	root.add_child(spin)
@@ -234,13 +254,13 @@ static func build_ammo_pickup() -> Node3D:
 static func build_health_pickup() -> Node3D:
 	var root := Node3D.new()
 	root.name = "HealthPickup"
-	_halo(root, HEALTH_GLOW)
+	_halo(root, HEALTH_GLOW, 0.32, 0.70)
 	var spin := Node3D.new()
 	spin.name = "Spin"
 	root.add_child(spin)
 	_part(spin, "Crate", _box(Vector3(0.36, 0.24, 0.36)), Vector3(0.0, -0.1, 0.0), HEALTH_BOX)
-	_part(spin, "CrossV", _box(Vector3(0.08, 0.04, 0.28)), Vector3(0.0, 0.03, 0.0), HEALTH_GLOW, 0.7)
-	_part(spin, "CrossH", _box(Vector3(0.28, 0.04, 0.08)), Vector3(0.0, 0.03, 0.0), HEALTH_GLOW, 0.7)
+	_part(spin, "CrossV", _box(Vector3(0.08, 0.04, 0.28)), Vector3(0.0, 0.03, 0.0), HEALTH_GLOW, 1.05)
+	_part(spin, "CrossH", _box(Vector3(0.28, 0.04, 0.08)), Vector3(0.0, 0.03, 0.0), HEALTH_GLOW, 1.05)
 	return root
 
 # --- Peças -------------------------------------------------------------------------
@@ -272,9 +292,9 @@ static func _part(parent: Node3D, part_name: String, mesh: Mesh, position: Vecto
 
 ## Disco luminoso rente ao chão sob o pickup (a posição oficial fica 0,25 m
 ## acima do piso).
-static func _halo(root: Node3D, color: Color) -> void:
+static func _halo(root: Node3D, color: Color, radius: float = 0.45, energy: float = 0.9) -> void:
 	# Acima das placas de região (0,02 m), para não sumir sob elas.
-	var halo := _part(root, "Halo", _cylinder(0.45, 0.45, 0.01), Vector3(0.0, -0.215, 0.0), color.darkened(0.2), 0.9)
+	var halo := _part(root, "Halo", _cylinder(radius, radius, 0.01), Vector3(0.0, -0.215, 0.0), color.darkened(0.2), energy)
 	halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 static func _glow_all(root: Node, color: Color, energy: float) -> void:

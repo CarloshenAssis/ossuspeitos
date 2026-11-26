@@ -31,10 +31,12 @@ static func apply_night(env: Environment, sun: DirectionalLight3D) -> void:
 
 
 static func add_lights(root: Node3D) -> void:
-	# Lustres (5) + uma lâmpada representativa por cômodo. 16 omni, sem sombra.
-	# Compatibility acende no máximo 8 omni por objeto; as meshes continuam
-	# caixas separadas, então o teto global pode ser um pouco maior.
+	# Lustres (5) + uma lâmpada representativa por cômodo + acesso ao jardim.
+	# 17 omni, sem sombra. Compatibility acende no máximo 8 omni por objeto;
+	# as meshes continuam caixas separadas, então o teto global pode ser um
+	# pouco maior. Novas lâmpadas ficam de alcance curto.
 	var warm := Color(1.0, 0.78, 0.52)
+	var garden := Color(0.92, 0.84, 0.68)
 	var lamps: Array = [
 		{"p": Vector3(8.0, 5.7, 8.0), "r": 11.0, "e": 2.15, "c": warm},
 		{"p": Vector3(8.0, 5.7, 1.0), "r": 7.0, "e": 1.55, "c": warm},
@@ -42,16 +44,17 @@ static func add_lights(root: Node3D) -> void:
 		{"p": Vector3(-5.5, 6.15, 6.8), "r": 6.5, "e": 1.55, "c": warm},
 		{"p": Vector3(30.3, 6.15, 11.0), "r": 6.5, "e": 1.55, "c": warm},
 		{"p": Vector3(3.1, 2.05, 13.55), "r": 5.0, "e": 0.95, "c": warm},
-		{"p": Vector3(-2.6, 1.95, 12.2), "r": 5.5, "e": 1.05, "c": warm},
+		{"p": Vector3(-2.6, 1.95, 12.2), "r": 7.0, "e": 1.35, "c": warm},
 		{"p": Vector3(21.25, 2.35, 11.5), "r": 6.0, "e": 1.15, "c": warm},
 		{"p": Vector3(-8.15, 1.55, 16.7), "r": 4.5, "e": 0.9, "c": warm},
-		{"p": Vector3(3.7, 1.7, 16.45), "r": 4.0, "e": 0.8, "c": warm},
-		{"p": Vector3(4.45, 1.7, 20.55), "r": 5.0, "e": 1.05, "c": warm},
-		{"p": Vector3(-2.2, 1.85, 22.6), "r": 4.5, "e": 0.9, "c": warm},
-		{"p": Vector3(12.0, 2.25, 26.2), "r": 6.0, "e": 0.9, "c": Color(0.92, 0.84, 0.68)},
+		{"p": Vector3(3.7, 1.7, 16.45), "r": 4.8, "e": 1.15, "c": warm},
+		{"p": Vector3(4.45, 1.7, 20.55), "r": 5.8, "e": 1.20, "c": warm},
+		{"p": Vector3(-2.2, 1.85, 22.6), "r": 5.5, "e": 1.10, "c": warm},
+		{"p": Vector3(12.0, 2.25, 26.2), "r": 6.0, "e": 0.9, "c": garden},
 		{"p": Vector3(21.0, 5.05, 8.6), "r": 6.0, "e": 1.15, "c": warm},
-		{"p": Vector3(-7.85, 4.55, 0.5), "r": 4.5, "e": 0.9, "c": warm},
-		{"p": Vector3(28.4, 4.55, 5.5), "r": 4.5, "e": 0.95, "c": warm},
+		{"p": Vector3(-7.85, 4.55, 0.5), "r": 5.5, "e": 1.15, "c": warm},
+		{"p": Vector3(28.4, 4.55, 5.5), "r": 6.0, "e": 1.15, "c": warm},
+		{"p": Vector3(0.8, 1.85, 27.7), "r": 4.2, "e": 1.05, "c": garden},
 	]
 	for spec in lamps:
 		var light := OmniLight3D.new()
