@@ -125,11 +125,17 @@ var _ended_title: Label
 var _ended_reason: Label
 var _ended_rows: VBoxContainer
 var _ended_footer: Label
+var _scoreboard: Control
+var _scoreboard_rows: VBoxContainer
+var _scoreboard_hint: Label
+var _pings: Dictionary = {}
+var _scoreboard_visible := false
 var _damage_vignette: Control
 var _banner_panel: PanelContainer
 var _banner_label: Label
 
 func _ready() -> void:
+	GameControls.ensure()
 	layer = 5
 	_build()
 	_render()
@@ -164,6 +170,11 @@ func apply_round_state(payload: Dictionary, role: int, round_id: int, own_peer_i
 func apply_roster(entries: Array) -> void:
 	_roster = entries
 	_render()
+
+func apply_pings(pings: Dictionary) -> void:
+	_pings = pings
+	if _scoreboard_visible:
+		_render()
 
 func apply_combat_state(payload: Dictionary) -> void:
 	var previous_health := _last_health
@@ -249,6 +260,10 @@ func _process(_delta: float) -> void:
 		var phase := fmod(float(now) / 700.0, 1.0)
 		_reload_sweep.size = Vector2(width * 0.35, _reload_track.size.y)
 		_reload_sweep.position.x = (width * 1.35) * phase - width * 0.35
+	var want_scoreboard := InputMap.has_action("scoreboard") and Input.is_action_pressed("scoreboard")
+	if want_scoreboard != _scoreboard_visible:
+		_scoreboard_visible = want_scoreboard
+		_render()
 
 # --- Avisos (modelo puro) ---------------------------------------------------------
 
@@ -445,7 +460,10 @@ static func _ended_model(public_state: Dictionary, own_peer_id: int, roster: Arr
 		var status := "—" if entry.is_empty() else ("Vivo" if bool(entry.get("alive", true)) else "Eliminado")
 		rows.append({"peer_id": peer_id, "name": public_label(roster, peer_id), "you": peer_id == own_peer_id,
 			"role": revealed_role, "glyph": str(HudStyle.ROLE_GLYPHS[revealed_role]),
-			"role_name": str(HudStyle.ROLE_NAMES[revealed_role]), "status": status})
+			"role_name": str(HudStyle.ROLE_NAMES[revealed_role]), "status": status,
+			"appearance": CharacterAppearance.display_name(entry.get("appearance", "")),
+			"kills": int(entry.get("kills", 0)) if typeof(entry.get("kills", 0)) == TYPE_INT else 0,
+			"deaths": int(entry.get("deaths", 0)) if typeof(entry.get("deaths", 0)) == TYPE_INT else 0})
 	ended["rows"] = rows
 	ended["revealed"] = true
 	return ended
@@ -492,11 +510,41 @@ static func model_lines(view: Dictionary) -> Array:
 		if bool(ended["revealed"]):
 			lines.append("PAPÉIS REVELADOS")
 			for row in ended["rows"]:
-				lines.append("%s%s  %s %s  %s" % [row["name"], " (VOCÊ)" if bool(row["you"]) else "", row["glyph"], row["role_name"], row["status"]])
+				lines.append("%s%s  %s %s  %s  %d/%d" % [row["name"], " (VOCÊ)" if bool(row["you"]) else "", row["glyph"], row["role_name"], row["status"], int(row.get("kills", 0)), int(row.get("deaths", 0))])
 		else:
 			lines.append("Aguardando revelação dos papéis…")
 		lines.append(str(ended["footer"]))
 	return lines
+
+static func scoreboard_rows(roster: Array, own_peer_id: int, pings: Dictionary = {}) -> Array:
+	var rows: Array = []
+	for raw in roster:
+		if typeof(raw) != TYPE_DICTIONARY:
+			continue
+		var entry: Dictionary = raw
+		var peer_id := int(entry.get("peer_id", 0))
+		if peer_id <= 0:
+			continue
+		var ping_text := "—"
+		if pings.has(peer_id) and typeof(pings[peer_id]) in [TYPE_INT, TYPE_FLOAT] and float(pings[peer_id]) >= 0.0:
+			ping_text = "%d ms" % int(round(float(pings[peer_id])))
+		rows.append({
+			"peer_id": peer_id,
+			"name": public_label(roster, peer_id),
+			"you": peer_id == own_peer_id,
+			"appearance": CharacterAppearance.display_name(entry.get("appearance", "")),
+			"kills": int(entry.get("kills", 0)) if typeof(entry.get("kills", 0)) == TYPE_INT else 0,
+			"deaths": int(entry.get("deaths", 0)) if typeof(entry.get("deaths", 0)) == TYPE_INT else 0,
+			"alive": bool(entry.get("alive", true)),
+			"ping": ping_text,
+		})
+	rows.sort_custom(func(a, b):
+		if int(a["kills"]) != int(b["kills"]):
+			return int(a["kills"]) > int(b["kills"])
+		if int(a["deaths"]) != int(b["deaths"]):
+			return int(a["deaths"]) < int(b["deaths"])
+		return str(a["name"]) < str(b["name"]))
+	return rows
 
 static func public_label(roster: Array, peer_id: int) -> String:
 	for raw_entry in roster:
@@ -632,6 +680,7 @@ func _render() -> void:
 		_ended_reason.text = str(ended["reason"])
 		_ended_footer.text = str(ended["footer"])
 		_render_reveal_rows(ended)
+	_render_scoreboard(mode)
 	for entry in _anchored:
 		HudStyle.anchor_corner(entry[0], entry[1])
 	# Feed logo abaixo do chip de região da arena (canto superior esquerdo).
@@ -654,10 +703,16 @@ func _render_reveal_rows(ended: Dictionary) -> void:
 		line.add_theme_stylebox_override("panel", style)
 		var cells := HBoxContainer.new()
 		cells.add_theme_constant_override("separation", 12)
+		var name_col := VBoxContainer.new()
+		name_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_col.add_theme_constant_override("separation", 0)
 		var name_label := HudStyle.label("%s%s" % [row["name"], "  VOCÊ" if bool(row["you"]) else ""], 15)
-		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_label.clip_text = true
-		cells.add_child(name_label)
+		name_col.add_child(name_label)
+		var appearance := HudStyle.label(str(row.get("appearance", "")), 12, HudStyle.MUTED)
+		appearance.clip_text = true
+		name_col.add_child(appearance)
+		cells.add_child(name_col)
 		var role_label := HudStyle.label("%s %s" % [row["glyph"], row["role_name"]], 16, HudStyle.ROLE_COLORS[int(row["role"])])
 		role_label.custom_minimum_size.x = 150
 		cells.add_child(role_label)
@@ -665,6 +720,10 @@ func _render_reveal_rows(ended: Dictionary) -> void:
 		status_label.custom_minimum_size.x = 90
 		status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		cells.add_child(status_label)
+		var kd := HudStyle.label("%d / %d" % [int(row.get("kills", 0)), int(row.get("deaths", 0))], 13, HudStyle.MUTED)
+		kd.custom_minimum_size.x = 64
+		kd.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		cells.add_child(kd)
 		line.add_child(cells)
 		_ended_rows.add_child(line)
 
@@ -885,7 +944,7 @@ func _build() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var column := VBoxContainer.new()
-	column.custom_minimum_size.x = 520
+	column.custom_minimum_size.x = 640
 	column.add_theme_constant_override("separation", 8)
 	var caption := HudStyle.label("FIM DA RODADA", 12, HudStyle.MUTED)
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -906,6 +965,33 @@ func _build() -> void:
 	center.add_child(column)
 	_ended_screen.add_child(center)
 	root.add_child(_ended_screen)
+
+	_scoreboard = ColorRect.new()
+	(_scoreboard as ColorRect).color = Color(0.04, 0.03, 0.02, 0.82)
+	_scoreboard.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_scoreboard.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_scoreboard.visible = false
+	var board_center := CenterContainer.new()
+	board_center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	board_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var board := HudStyle.panel(Color(0.075, 0.048, 0.035, 0.96), Color("#8D7040"), 1)
+	board.custom_minimum_size = Vector2(620, 0)
+	var board_box := VBoxContainer.new()
+	board_box.add_theme_constant_override("separation", 8)
+	var board_title := HudStyle.label("PLACAR", 22, Color("#C19A55"), true)
+	board_title.add_theme_font_override("font", MenuTheme.serif())
+	board_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_scoreboard_hint = HudStyle.label("Segure Tab", 12, HudStyle.MUTED)
+	_scoreboard_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var header := _scoreboard_header()
+	_scoreboard_rows = VBoxContainer.new()
+	_scoreboard_rows.add_theme_constant_override("separation", 0)
+	for node in [board_title, header, _scoreboard_rows, _scoreboard_hint]:
+		board_box.add_child(node)
+	board.add_child(board_box)
+	board_center.add_child(board)
+	_scoreboard.add_child(board_center)
+	root.add_child(_scoreboard)
 
 ## Quatro faixas vermelhas nas bordas; o centro da visão fica livre.
 func _build_vignette() -> Control:
@@ -929,3 +1015,47 @@ func _build_vignette() -> Control:
 		else: strip.offset_left = -36
 		vignette.add_child(strip)
 	return vignette
+
+func _scoreboard_header() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	var name_h := HudStyle.label("JOGADOR", 11, HudStyle.MUTED)
+	name_h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(name_h)
+	for item in [["PERSONAGEM", 130], ["ABATES", 60], ["MORTES", 60], ["PING", 70]]:
+		var cell := HudStyle.label(str(item[0]), 11, HudStyle.MUTED)
+		cell.custom_minimum_size.x = float(item[1])
+		cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if str(item[0]) != "PERSONAGEM" else HORIZONTAL_ALIGNMENT_LEFT
+		row.add_child(cell)
+	return row
+
+func _render_scoreboard(mode: String) -> void:
+	if _scoreboard == null:
+		return
+	var show := _scoreboard_visible and mode in [MODE_ALIVE, MODE_SPECTATOR]
+	_scoreboard.visible = show
+	if not show:
+		return
+	for child in _scoreboard_rows.get_children():
+		child.queue_free()
+	for row in scoreboard_rows(_roster, _own_peer_id, _pings):
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 12)
+		var color := HudStyle.BONE if bool(row["alive"]) else HudStyle.MUTED
+		var name_label := HudStyle.label("%s%s" % [row["name"], "  (você)" if bool(row["you"]) else ""], 15, color)
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_label.clip_text = true
+		line.add_child(name_label)
+		var appearance := HudStyle.label(str(row["appearance"]), 14, HudStyle.MUTED)
+		appearance.custom_minimum_size.x = 130
+		line.add_child(appearance)
+		for item in [["kills", 60], ["deaths", 60]]:
+			var cell := HudStyle.label(str(int(row[item[0]])), 15, color)
+			cell.custom_minimum_size.x = int(item[1])
+			cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			line.add_child(cell)
+		var ping := HudStyle.label(str(row["ping"]), 14, HudStyle.MUTED)
+		ping.custom_minimum_size.x = 70
+		ping.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		line.add_child(ping)
+		_scoreboard_rows.add_child(line)

@@ -29,7 +29,7 @@ const APPEARANCE_COLORS := {
 	"knight": Color("#A56D71"), "soldier": Color("#788F54"), "ninja": Color("#716081"), "detective": Color("#C39F4E"),
 	"butler": Color("#C8B497"), "viking": Color("#AC6242"), "pirate": Color("#465985"), "cowboy": Color("#96704E"),
 }
-const CARD_WIDTH := 452.0
+const CARD_WIDTH := 480.0
 
 ## Argumentos do processo (endpoint online, automação). Definir antes de
 ## adicionar o menu à árvore.
@@ -72,6 +72,7 @@ func _ready() -> void:
 	if DisplayServer.get_name() != "headless":
 		_player = AudioStreamPlayer.new()
 		add_child(_player)
+		_start_menu_ambient()
 	_show_panel("main", false)
 	print("MENU_READY name=%s online=%s source=%s local_play=%s" % [fields["name"].text, "configured" if bool(online["ok"]) else str(online["reason"]), online["source"], str(MenuSettings.supports_local_play())])
 
@@ -94,12 +95,18 @@ func _build_card() -> void:
 	var body := VBoxContainer.new()
 	body.add_theme_constant_override("separation", 6)
 	card.add_child(body)
+	var heading := VBoxContainer.new()
+	heading.add_theme_constant_override("separation", 2)
+	var kicker := MenuTheme.label("OS SUSPEITOS", 12, MenuTheme.GOLD)
+	kicker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_child(kicker)
 	var title := MenuTheme.label("ARMED MYSTERY", MenuTheme.TITLE_SIZE, MenuTheme.CREAM)
 	title.add_theme_font_override("font", MenuTheme.serif())
 	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
 	title.add_theme_constant_override("shadow_offset_y", 2)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	body.add_child(title)
+	heading.add_child(title)
+	body.add_child(heading)
 	var subtitle := MenuTheme.label("Alguém nesta mansão não é quem diz ser.", MenuTheme.SUBTITLE_SIZE, MenuTheme.GOLD)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	body.add_child(subtitle)
@@ -294,11 +301,15 @@ func _build_room() -> VBoxContainer:
 	room_copy_feedback = MenuTheme.label("", MenuTheme.SMALL_SIZE, MenuTheme.MUTED, true)
 	room_copy_feedback.visible = false
 	box.add_child(room_copy_feedback)
+	var list_holder := Control.new()
+	list_holder.custom_minimum_size = Vector2(0, 132)
+	list_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_holder.clip_contents = true
+	box.add_child(list_holder)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 150)
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	box.add_child(scroll)
+	list_holder.add_child(scroll)
 	var content := VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 4)
@@ -309,7 +320,7 @@ func _build_room() -> VBoxContainer:
 	room_result.visible = false
 	content.add_child(room_result)
 	room_players = VBoxContainer.new()
-	room_players.add_theme_constant_override("separation", 2)
+	room_players.add_theme_constant_override("separation", 4)
 	content.add_child(room_players)
 	room_status = MenuTheme.label("", MenuTheme.BODY_SIZE, MenuTheme.CREAM, true)
 	box.add_child(room_status)
@@ -366,10 +377,15 @@ func _render_room() -> void:
 		var name_text := str(entry["label"])
 		if int(entry["peer_id"]) == room_own_peer_id:
 			name_text += " (você)"
+		var name_col := VBoxContainer.new()
+		name_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_col.add_theme_constant_override("separation", 0)
 		var name_label := MenuTheme.label(name_text, MenuTheme.BODY_SIZE, MenuTheme.CREAM)
-		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_label.clip_text = true
-		row.add_child(name_label)
+		name_col.add_child(name_label)
+		var appearance_label := MenuTheme.label(CharacterAppearance.display_name(entry.get("appearance", "")), MenuTheme.SMALL_SIZE, MenuTheme.MUTED)
+		name_col.add_child(appearance_label)
+		row.add_child(name_col)
 		if bool(entry["host"]):
 			row.add_child(MenuTheme.label("ANFITRIÃO", MenuTheme.SMALL_SIZE, MenuTheme.GOLD))
 		var ready := bool(entry["ready"])
@@ -547,14 +563,23 @@ func _build_howto() -> VBoxContainer:
 func _build_settings() -> VBoxContainer:
 	var box := _panel()
 	box.add_child(MenuTheme.heading("Configurações"))
-	var volume := _slider(box, "settings_volume", "Volume geral", MenuSettings.VOLUME_MIN, MenuSettings.VOLUME_MAX, 0.05, settings.volume,
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 222)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(scroll)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 7)
+	scroll.add_child(content)
+	var volume := _slider(content, "settings_volume", "Volume geral", MenuSettings.VOLUME_MIN, MenuSettings.VOLUME_MAX, 0.05, settings.volume,
 		func(v): return "%d%%" % int(round(v * 100.0)))
 	volume.value_changed.connect(func(v):
 		settings.volume = v
 		settings.apply_audio()
 		_save_settings())
-	_button("settings_audio", "VOLUMES DA PARTIDA", box, false, func(): _show_panel("audio"))
-	var sensitivity := _slider(box, "settings_sensitivity", "Sensibilidade do mouse", MenuSettings.SENSITIVITY_MIN, MenuSettings.SENSITIVITY_MAX, 0.05, settings.sensitivity,
+	_button("settings_audio", "VOLUMES DA PARTIDA", content, false, func(): _show_panel("audio"))
+	var sensitivity := _slider(content, "settings_sensitivity", "Sensibilidade do mouse", MenuSettings.SENSITIVITY_MIN, MenuSettings.SENSITIVITY_MAX, 0.05, settings.sensitivity,
 		func(v): return "%.2f×" % v)
 	sensitivity.value_changed.connect(func(v):
 		settings.sensitivity = MenuSettings.clamp_sensitivity(v)
@@ -564,7 +589,7 @@ func _build_settings() -> VBoxContainer:
 		fullscreen.text = "Tela cheia"
 		fullscreen.button_pressed = settings.fullscreen
 		fullscreen.focus_mode = Control.FOCUS_ALL
-		box.add_child(fullscreen)
+		content.add_child(fullscreen)
 		buttons["settings_fullscreen"] = fullscreen
 		var resolution := OptionButton.new()
 		resolution.focus_mode = Control.FOCUS_ALL
@@ -576,7 +601,7 @@ func _build_settings() -> VBoxContainer:
 		resolution_row.add_child(MenuTheme.label("Janela", MenuTheme.SMALL_SIZE, MenuTheme.PARCHMENT))
 		resolution.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		resolution_row.add_child(resolution)
-		box.add_child(resolution_row)
+		content.add_child(resolution_row)
 		buttons["settings_resolution"] = resolution
 		fullscreen.toggled.connect(func(on):
 			settings.fullscreen = on
@@ -587,7 +612,7 @@ func _build_settings() -> VBoxContainer:
 			settings.resolution = MenuSettings.RESOLUTIONS[index]
 			settings.apply_display()
 			_save_settings())
-	box.add_child(MenuTheme.label("Qualidade gráfica", MenuTheme.SMALL_SIZE, MenuTheme.PARCHMENT))
+	content.add_child(MenuTheme.label("Qualidade gráfica", MenuTheme.SMALL_SIZE, MenuTheme.PARCHMENT))
 	var graphics := Button.new()
 	var graphics_labels := ["Baixa", "Padrão", "Alta (texturas)"]
 	graphics.text = graphics_labels[MenuSettings.GRAPHICS_PROFILES.find(settings.graphics_profile)]
@@ -596,7 +621,7 @@ func _build_settings() -> VBoxContainer:
 		settings.graphics_profile = MenuSettings.GRAPHICS_PROFILES[index]
 		graphics.text = graphics_labels[index]
 		_save_settings())
-	box.add_child(graphics)
+	content.add_child(graphics)
 	buttons["settings_graphics"] = graphics
 	var motion := CheckBox.new()
 	motion.text = "Reduzir movimento da interface"
@@ -606,7 +631,7 @@ func _build_settings() -> VBoxContainer:
 		settings.reduce_motion = on
 		backdrop.reduce_motion = on
 		_save_settings())
-	box.add_child(motion)
+	content.add_child(motion)
 	buttons["settings_motion"] = motion
 	_button("settings_back", "VOLTAR", box, true, func(): _show_panel("main"))
 	return box
@@ -1039,3 +1064,19 @@ func _build_audio_settings() -> VBoxContainer:
 			_save_settings())
 	_button("audio_back","VOLTAR",box,true,func(): _show_panel("settings"))
 	return box
+
+func _start_menu_ambient() -> void:
+	var stream := SfxBank.ambient_stream()
+	if stream == null:
+		return
+	if stream is AudioStreamOggVorbis:
+		stream = stream.duplicate()
+		(stream as AudioStreamOggVorbis).loop = true
+	var player := AudioStreamPlayer.new()
+	player.stream = stream
+	var gain := 0.12
+	if settings != null:
+		gain = clampf(settings.volume, 0.0, 1.0) * 0.12
+	player.volume_db = linear_to_db(maxf(0.0001, gain)) - 8.0
+	add_child(player)
+	player.play()

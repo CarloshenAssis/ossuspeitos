@@ -2089,7 +2089,7 @@ static func snapshot_rejection(payload: Dictionary, known_session: int, last_tic
 
 ## Allowlist do roster público (protocolo 7): só estas chaves chegam à arena e
 ## ao HUD, e a aparência só vale se for um dos oito ids conhecidos.
-const ROSTER_KEYS := ["peer_id", "label", "connected", "participant", "alive", "appearance"]
+const ROSTER_KEYS := ["peer_id", "label", "connected", "participant", "alive", "appearance", "kills", "deaths"]
 
 static func sanitize_roster_entry(entry: Dictionary) -> Dictionary:
 	var clean := {}
@@ -2098,6 +2098,9 @@ static func sanitize_roster_entry(entry: Dictionary) -> Dictionary:
 			clean[key] = entry[key]
 	clean["peer_id"] = int(clean.get("peer_id", 0)) if typeof(clean.get("peer_id", 0)) == TYPE_INT else 0
 	clean["appearance"] = CharacterAppearance.sanitize(clean.get("appearance", ""))
+	for score_key in ["kills", "deaths"]:
+		if clean.has(score_key):
+			clean[score_key] = maxi(0, int(clean[score_key])) if typeof(clean[score_key]) == TYPE_INT else 0
 	return clean
 
 var _last_appearance_log := ""

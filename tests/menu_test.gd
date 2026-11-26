@@ -401,11 +401,14 @@ func _test_online_rooms() -> void:
 	_expect(rooms_menu.panel_name == "room" and rooms_menu.room_title.text == "Sala K7M-2QX", "room shows the display code")
 	_expect(rooms_menu.room_status.text == "AGUARDANDO JOGADORES\n2 de 4 no mínimo. Envie o código da sala aos amigos.", "room below the minimum says it is waiting for players (%s)" % rooms_menu.room_status.text)
 	var texts: Array = []
-	for row in rooms_menu.room_players.get_children():
-		for child in row.get_children():
-			if child is Label:
-				texts.append((child as Label).text)
+	var stack: Array = rooms_menu.room_players.get_children()
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		if node is Label:
+			texts.append((node as Label).text)
+		stack.append_array(node.get_children())
 	_expect("Ana (você)" in texts and "ANFITRIÃO" in texts and "AGUARDANDO" in texts and "PRONTO" in texts, "players, host tag and ready states listed (%s)" % str(texts))
+	_expect("Cavaleiro" in texts and "Soldado" in texts, "lobby lists character display names (%s)" % str(texts))
 	requests.clear()
 	_expect(rooms_menu.press("room_ready") and requests.size() == 1 and requests[0]["value"] == true, "PRONTO asks the server")
 	rooms_menu.press("room_ready")

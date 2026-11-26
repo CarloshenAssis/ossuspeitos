@@ -8,7 +8,7 @@ extends RefCounted
 ## O olhar com o mouse não é ação do InputMap (é movimento relativo com o mouse
 ## capturado); aparece na lista como entrada fixa do grupo "Câmera".
 
-const GROUPS := ["Movimento", "Câmera", "Interação e coleta", "Disparo", "Recarga", "Espectador", "Mouse", "Sair"]
+const GROUPS := ["Movimento", "Câmera", "Interação e coleta", "Disparo", "Recarga", "Placar", "Espectador", "Mouse", "Sair"]
 
 ## Ação -> grupo, descrição e tecla padrão (tecla física ou botão do mouse).
 const ACTIONS := [
@@ -23,6 +23,7 @@ const ACTIONS := [
 	{"action": "object_drop", "group": "Interação e coleta", "text": "Soltar objeto carregado", "key": KEY_Q},
 	{"action": "fire", "group": "Disparo", "text": "Atirar (com arma na mão)", "mouse": MOUSE_BUTTON_LEFT},
 	{"action": "reload", "group": "Recarga", "text": "Recarregar", "key": KEY_R},
+	{"action": "scoreboard", "group": "Placar", "text": "Mostrar placar (segure)", "key": KEY_TAB},
 	{"action": "spectate_previous", "group": "Espectador", "text": "Observar o jogador anterior (eliminado)", "key": KEY_Q},
 	{"action": "spectate_next", "group": "Espectador", "text": "Observar o próximo jogador (eliminado)", "key": KEY_E},
 	{"action": "release_mouse", "group": "Mouse", "text": "Soltar o mouse (clique na janela para capturar de novo)", "key": KEY_ESCAPE},

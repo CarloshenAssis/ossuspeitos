@@ -149,7 +149,8 @@ func request_fire(peer_id: int, sequence: Variant, now_msec: int) -> Dictionary:
 	if int(hit.get("peer_id", 0)) > 0:
 		_apply_damage(int(hit["peer_id"]), peer_id, int(shot["damage"]), now_msec)
 	var event := {"round_id": shot_round_id, "shooter_peer_id": peer_id,
-		"origin": shot["origin"], "end": endpoint, "hit_player": int(hit.get("peer_id", 0)) > 0}
+		"origin": shot["origin"], "end": endpoint, "hit_player": int(hit.get("peer_id", 0)) > 0,
+		"weapon_id": str(inventory.get_inventory(peer_id).get("weapon_id", COMMON_WEAPON_ID))}
 	shot_resolved.emit(event)
 	private_state_changed.emit(peer_id, private_state(peer_id))
 	# `hit_peer_id` remains inside the server process. NetworkApp only exposes the

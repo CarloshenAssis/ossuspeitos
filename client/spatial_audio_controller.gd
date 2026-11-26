@@ -1,7 +1,7 @@
 class_name SpatialAudioController
 extends Node3D
 
-## Fixed-size voice pool; no per-event nodes. Local PCM, no external assets.
+## Fixed-size voice pool; no per-event nodes. Streams come from SfxBank (OGG or synth).
 const MAX_VOICES := 12
 const MAX_DISTANCE := 24.0
 var movement_volume := 0.8
@@ -83,14 +83,15 @@ func consume(events: Variant, round_id: int, listener: Vector3, own_peer: int, b
 		played_events+=1
 		count+=1
 	return count
-func _stream(kind: String) -> AudioStreamWAV:
-	if _streams.has(kind): return _streams[kind]
-	if kind=="reload": return SfxBank.stream("reload_start")
-	var frequency := 95.0 if kind in ["step_walk","step_run"] else (180.0 if kind=="door" else 65.0)
-	var seconds := 0.08 if kind in ["step_walk","step_run"] else 0.18
-	var sound := SfxBank._render(seconds,func(t: float)->float:
-		return 0.25*(sin(TAU*frequency*t)+0.35*sin(TAU*frequency*2.7*t))*exp(-t*32.0))
-	_streams[kind]=sound
-	return sound
+func _stream(kind: String) -> AudioStream:
+	var name := "reload_start" if kind == "reload" else kind
+	var sound := SfxBank.stream(name)
+	if sound != null:
+		return sound
+	if _streams.has(kind):
+		return _streams[kind]
+	var fallback := SfxBank.stream("step_walk")
+	_streams[kind] = fallback
+	return fallback
 func _exit_tree() -> void:
 	for voice in get_children(): voice.stop()

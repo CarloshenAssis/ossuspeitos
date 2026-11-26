@@ -44,8 +44,8 @@ func _process(_delta: float) -> bool:
 func _test_feedback_model() -> void:
 	var unarmed := _combat(1, 100, "", 0, 0, false)
 	var armed := _combat(1, 100, "common_pistol", 6, 0, false)
-	_expect(ArenaView.combat_feedback(unarmed, armed) == ["pickup_ok"], "official weapon pickup")
-	_expect(ArenaView.combat_feedback(armed, _combat(1, 100, "common_pistol", 6, 6, false)) == ["pickup_ok"], "official ammo pickup")
+	_expect(ArenaView.combat_feedback(unarmed, armed) == ["pickup_weapon"], "official weapon pickup")
+	_expect(ArenaView.combat_feedback(armed, _combat(1, 100, "common_pistol", 6, 6, false)) == ["pickup_ammo"], "official ammo pickup")
 	_expect(ArenaView.combat_feedback(armed, _combat(1, 100, "common_pistol", 5, 0, false)).is_empty(), "a shot is not a pickup")
 	_expect(ArenaView.combat_feedback(_combat(1, 100, "common_pistol", 0, 6, false), _combat(1, 100, "common_pistol", 0, 6, true)) == ["reload_start"], "official reload start")
 	_expect(ArenaView.combat_feedback(_combat(1, 100, "common_pistol", 0, 6, true), _combat(1, 100, "common_pistol", 6, 0, false)) == ["reload_end"], "official reload end (reserve moving into the magazine is not a pickup)")
@@ -62,7 +62,7 @@ func _test_pickup_accepted_and_rejected() -> void:
 	_arena.apply_pickups(_pickups([]))
 	_arena.show_rejection("pickup", "inventory_full")
 	_arena.show_rejection("pickup", "out_of_range")
-	_expect(_arena.fx.count_event("pickup_deny") == 2 and not _arena.fx.has_event("pickup_ok"), "rejected pickups sound denied, never successful")
+	_expect(_arena.fx.count_event("pickup_deny") == 2 and not _arena.fx.has_event("pickup_weapon") and not _arena.fx.has_event("pickup_ok"), "rejected pickups sound denied, never successful")
 	_expect(not _arena.fx.has_event("pickup_vanish") and (_arena.pickup_nodes["p0"] as Node3D).visible, "a rejected pickup stays on the floor")
 	_arena.show_rejection("fire", "fire_rate")
 	_arena.show_rejection("fire", "direction_yaw_divergence")
@@ -70,9 +70,9 @@ func _test_pickup_accepted_and_rejected() -> void:
 	# Aceita: o pickup some (público) e só então o estado privado arma o jogador.
 	_arena.fx.events.clear()
 	_arena.apply_pickups(_pickups(["p0"]))
-	_expect(_arena.fx.has_event("pickup_vanish") and not _arena.fx.has_event("pickup_ok"), "public vanish alone is not the local success")
+	_expect(_arena.fx.has_event("pickup_vanish") and not _arena.fx.has_event("pickup_weapon") and not _arena.fx.has_event("pickup_ok"), "public vanish alone is not the local success")
 	_arena.apply_combat_state(_combat(1, 100, "common_pistol", 6, 0, false))
-	_expect(_arena.fx.count_event("pickup_ok") == 1, "official private state confirms the pickup")
+	_expect(_arena.fx.count_event("pickup_weapon") == 1, "official private state confirms the pickup")
 	_arena.apply_pickups(_pickups(["p0"]))
 	_expect(_arena.fx.count_event("pickup_vanish") == 1, "no second ring for an already collected pickup")
 
@@ -117,7 +117,7 @@ func _test_reload_follows_official_state() -> void:
 	_expect(_arena.fx.count_event("reload_start") == 1, "the same official state does not repeat the sound")
 	_arena.apply_combat_state(_combat(1, 100, "common_pistol", 6, 0, false))
 	_expect(_arena.fx.has_event("reload_end") and not _arena._reload_pose, "official reload end raises the pistol")
-	_expect(not _arena.fx.has_event("pickup_ok"), "reload is never mistaken for a pickup")
+	_expect(not _arena.fx.has_event("pickup_ok") and not _arena.fx.has_event("pickup_ammo") and not _arena.fx.has_event("pickup_weapon"), "reload is never mistaken for a pickup")
 
 func _test_damage_and_elimination() -> void:
 	_arena.fx.events.clear()
@@ -154,8 +154,7 @@ func _test_new_round_starts_clean() -> void:
 func _test_sounds_are_generated_in_game() -> void:
 	for sound_name in SfxBank.NAMES:
 		var stream := SfxBank.stream(sound_name)
-		_expect(stream != null and stream.data.size() > 0 and stream.resource_path.is_empty(), "sound %s is synthesised in memory" % sound_name)
-		_expect(stream != null and stream.get_length() <= 0.5, "sound %s is short" % sound_name)
+		_expect(stream != null and stream.get_length() > 0.0 and stream.get_length() <= 0.5, "sound %s is a short playable stream" % sound_name)
 
 func await_frames() -> void:
 	# `queue_free` só conclui no fim do quadro; aqui basta ignorar o que já saiu.

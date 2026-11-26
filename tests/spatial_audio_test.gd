@@ -31,13 +31,19 @@ func run() -> void:
 	check(sounds.snapshot()[0].kind=="step_walk" and sounds.snapshot()[0].peer_id==1,"step has authorized source")
 	sounds.observe_movement()
 	check(sounds.snapshot().size()==1,"stationary actor produces no duplicate")
+	var mid: Vector3=room.world.states[1].position
+	room.world.states[1].velocity=Vector3(5,0,0)
+	room.world.states[1].position=mid+Vector3(0.7,0,0)
+	sounds.observe_movement()
+	check(sounds.snapshot().size()==2 and sounds.snapshot()[1].kind=="step_run","official run speed produces a run footstep")
+	room.world.states[1].velocity=Vector3.ZERO
 	room.world.teleport(1,initial+Vector3(8,0,0))
 	sounds.observe_movement()
-	check(sounds.snapshot().size()==1,"epoch teleport does not create footsteps")
+	check(sounds.snapshot().size()==2,"epoch teleport does not create footsteps")
 	room.round_authority.alive[1]=false
 	room.world.states[1].position+=Vector3(0.7,0,0)
 	sounds.observe_movement()
-	check(sounds.snapshot().size()==1,"dead actor cannot produce footsteps")
+	check(sounds.snapshot().size()==2,"dead actor cannot produce footsteps")
 	check(not sounds.emit_authorized("forged",Vector3.ZERO,1),"unknown event kind refused")
 	for index in 90: sounds.emit_authorized("door",Vector3(3,1,3),0)
 	check(sounds.snapshot().size()<=rules.MAX_EVENTS,"event ring bounded")
