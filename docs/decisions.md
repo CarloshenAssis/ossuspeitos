@@ -1134,3 +1134,10 @@ O movimento continua no piso térreo.
 A distância mínima entre pickups é de 2,5 m nesta variante. As armas
 mantêm 4 m de distância dos spawns, as munições mantêm 3 m, e todos os
 pickups mantêm 1,8 m de distância do centro de cada porta.
+
+## Mobiliário do térreo da Nocturna
+
+A apresentação do térreo de `nocturna_salao` instancia modelos no cliente e
+oculta as malhas cinzas dos móveis substituídos pelos seus IDs oficiais.
+`SalaoMap.FURNITURE` fornece os volumes para encaixe. `ArenaRules.BLOCKERS`
+continua como fonte da colisão e do bloqueio de disparos.

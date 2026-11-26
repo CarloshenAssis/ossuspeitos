@@ -341,6 +341,7 @@ func _build_arena() -> void:
 	set_show_ceilings(show_ceilings)
 
 func _build_salao_greybox() -> void:
+	var greyboxes := {}
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(0.48, 0.49, 0.5)
 	for blocker in ArenaRules.BLOCKERS:
@@ -348,6 +349,7 @@ func _build_salao_greybox() -> void:
 		box.name = blocker["id"]
 		box.set_meta("arena_blocker_id", blocker["id"])
 		box.set_meta("arena_blocker_kind", blocker["kind"])
+		greyboxes[blocker["id"]] = box
 	for entry in ArenaRules.SalaoMap.SPACES + ArenaRules.SalaoMap.DOORS:
 		var area := ArenaRules.SalaoMap.rect(entry)
 		var center := area.get_center()
@@ -356,6 +358,10 @@ func _build_salao_greybox() -> void:
 	gallery.text = ArenaRules.SalaoMap.GALLERY["name"]
 	gallery.position = Vector3(8.0, 4.75, 0.51)
 	add_child(gallery)
+	var furniture := preload("res://client/nocturna_furniture.gd").new()
+	furniture.name = "NocturnaFurniture"
+	add_child(furniture)
+	furniture.build(greyboxes)
 
 func _add_greybox_box(center: Vector3, size: Vector3, material: StandardMaterial3D) -> MeshInstance3D:
 	var box := MeshInstance3D.new()
