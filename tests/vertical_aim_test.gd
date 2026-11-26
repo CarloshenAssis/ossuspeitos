@@ -231,36 +231,36 @@ func _test_spectator_sees_target_pitch() -> void:
 	_expect(is_equal_approx(_arena.camera.rotation.x, 0.0), "leaving spectator returns to the own pitch")
 
 func _test_remote_head_follows_pitch() -> void:
-	var levels := {}
+	_arena.character_animation = true
+	var head_poses := {}
+	var neck_poses := {}
 	for pitch in [0.0, 0.5, -0.5, MovementRules.MAX_PITCH]:
 		_arena.apply_snapshot([_state(SHOOTER, Vector3(0, 1, 0), 0.0, 0.0), _state(TARGET, Vector3(3, 1, 3), 0.0, pitch)])
-		for _i in 40: _arena._process(0.1)
+		for _i in 40:
+			_arena._process(0.1)
 		var avatar: Node3D = _arena.avatars[TARGET]
-		var head := avatar.find_child(ArenaModels.HEAD_PIVOT, true, false) as Node3D
-		var nose := avatar.find_child("Nose", true, false) as MeshInstance3D
-		var head_mesh := avatar.find_child("Head", true, false) as MeshInstance3D
-		var neck := avatar.find_child("Neck", true, false) as MeshInstance3D
-		_expect(head != null and nose.get_parent() == head and head_mesh.get_parent() == head, "head, nose and hair hang from the head pivot")
-		_expect(neck != null and neck.get_parent() != head, "the neck and body do not tilt")
+		var animator: CharacterAnimator = _arena.animators[TARGET]
+		var skeletons := avatar.find_children("*", "Skeleton3D", true, false)
+		var skeleton := skeletons.front() as Skeleton3D if not skeletons.is_empty() else null
+		_expect(skeleton != null and animator.is_valid(), "remote avatar has a working skeleton animator")
+		if skeleton == null or not animator.is_valid():
+			return
+		# Compare the same frame of Idle so only aiming differs.
+		animator.rest()
+		_arena._process(0.016)
+		head_poses[pitch] = skeleton.get_bone_pose_rotation(skeleton.find_bone("Head"))
+		neck_poses[pitch] = skeleton.get_bone_pose_rotation(skeleton.find_bone("Neck"))
+		_expect(is_equal_approx(animator.head_pivot.rotation.x, ArenaModels.head_rotation_for_pitch(pitch)), "head pivot follows the clamped pitch %.2f" % pitch)
 		_expect(is_zero_approx(avatar.rotation.x) and is_zero_approx(avatar.rotation.z), "the body root never tilts (pitch %.2f)" % pitch)
-		var face := (nose.global_transform * nose.get_aabb()).get_center() - (head_mesh.global_transform * head_mesh.get_aabb()).get_center()
-		levels[pitch] = face.y
-		_expect(absf(head.rotation.x) <= ArenaModels.HEAD_PITCH_LIMIT + 0.001, "head tilt stays natural at pitch %.2f" % pitch)
 		_expect(_collision_nodes(avatar) == 0, "no collision added")
-	_expect(levels[0.5] > levels[0.0] + 0.02 and levels[-0.5] < levels[0.0] - 0.02, "others see the face rise and drop with the official pitch (%s)" % str(levels))
-	_expect(is_equal_approx(levels[MovementRules.MAX_PITCH], levels[MovementRules.MAX_PITCH]) and levels[MovementRules.MAX_PITCH] >= levels[0.5], "extreme aim keeps the head at its limit")
-	# Em repouso a cabeça fica exatamente onde o GLB a desenhou.
-	var fresh := ArenaModels.build_character("ember")
-	root.add_child(fresh)
-	var original := (load(CharacterAppearance.scene_path("ember")) as PackedScene).instantiate() as Node3D
-	root.add_child(original)
-	original.position = (fresh.get_node(ArenaModels.CHARACTER_MODEL) as Node3D).position
-	original.rotation.y = ArenaModels.CHARACTER_YAW
-	var moved := (fresh.find_child("Nose", true, false) as MeshInstance3D).global_position
-	var reference := (original.find_child("Nose", true, false) as MeshInstance3D).global_position
-	_expect(moved.distance_to(reference) < 0.001, "at rest the head pivot leaves the GLB head exactly in place")
-	fresh.free()
-	original.free()
+	var level: Quaternion = head_poses[0.0]
+	var level_neck: Quaternion = neck_poses[0.0]
+	for pitch in [0.5, -0.5, MovementRules.MAX_PITCH]:
+		var expected := absf(ArenaModels.head_rotation_for_pitch(pitch))
+		_expect(absf(level.angle_to(head_poses[pitch]) - expected) < 0.01, "head bone tilts by the clamped pitch %.2f" % pitch)
+		_expect(level_neck.is_equal_approx(neck_poses[pitch]), "aiming leaves the neck animation intact")
+	var raised: Quaternion = head_poses[0.5]
+	_expect(absf(raised.angle_to(head_poses[-0.5]) - 1.0) < 0.01, "aiming up and down turns the head bone in opposite directions")
 
 func _collision_nodes(node: Node) -> int:
 	var count := 1 if node is CollisionObject3D or node is CollisionShape3D else 0

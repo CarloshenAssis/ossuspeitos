@@ -30,7 +30,7 @@ func _test_allowlist() -> void:
 	for appearance_id in CharacterAppearance.IDS:
 		_expect(ResourceLoader.exists(CharacterAppearance.scene_path(appearance_id)), "%s GLB is in the project (no runtime download)" % appearance_id)
 		_expect(CharacterAppearance.sanitize(appearance_id) == appearance_id, "%s is allowed" % appearance_id)
-	for bad in ["", "ASSASSIN", "detective", "../../etc", "res://x.glb", 3, null, ["ash"], {"id": "ash"}]:
+	for bad in ["", "ASSASSIN", "ash", "../../etc", "res://x.glb", 3, null, ["viking"], {"id": "viking"}]:
 		_expect(CharacterAppearance.sanitize(bad) == CharacterAppearance.FALLBACK, "invalid appearance %s falls back" % str(bad))
 		_expect(CharacterAppearance.scene_path(bad) == CharacterAppearance.scene_path(CharacterAppearance.FALLBACK), "invalid appearance %s never builds a path" % str(bad))
 
@@ -89,15 +89,15 @@ func _test_independent_of_roles_and_rounds() -> void:
 func _test_client_roster_allowlist() -> void:
 	var app_script := load("res://shared/network_app.gd")
 	var hostile := {"peer_id": 7, "label": "Ana", "connected": true, "participant": true, "alive": true,
-		"appearance": "ash", "inventory": {"weapon_id": "common_pistol"}, "team": 2, "secret": "x"}
+		"appearance": "detective", "inventory": {"weapon_id": "common_pistol"}, "team": 2, "secret": "x"}
 	var clean: Dictionary = app_script.sanitize_roster_entry(hostile)
 	_expect(clean.keys().size() <= 6 and not clean.has("inventory") and not clean.has("team") and not clean.has("secret"), "unknown roster keys are dropped")
-	_expect(clean["appearance"] == "ash" and clean["label"] == "Ana" and int(clean["peer_id"]) == 7, "allowed keys survive")
+	_expect(clean["appearance"] == "detective" and clean["label"] == "Ana" and int(clean["peer_id"]) == 7, "allowed keys survive")
 	var bad: Dictionary = app_script.sanitize_roster_entry({"peer_id": 8, "label": "Beto", "appearance": "ASSASSIN"})
 	_expect(bad["appearance"] == CharacterAppearance.FALLBACK, "unknown appearance id becomes the fallback")
 	var missing: Dictionary = app_script.sanitize_roster_entry({"peer_id": 9, "label": "Caio"})
 	_expect(missing["appearance"] == CharacterAppearance.FALLBACK, "missing appearance becomes the fallback")
-	var bogus_peer: Dictionary = app_script.sanitize_roster_entry({"peer_id": "9", "appearance": "moss"})
+	var bogus_peer: Dictionary = app_script.sanitize_roster_entry({"peer_id": "9", "appearance": "soldier"})
 	_expect(int(bogus_peer["peer_id"]) == 0, "non-integer peer id is not trusted")
 
 func _test_protocol_version() -> void:

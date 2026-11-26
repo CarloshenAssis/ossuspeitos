@@ -9,9 +9,9 @@ extends RefCounted
 ## `IDS` é a allowlist: qualquer valor fora dela vira `FALLBACK` no cliente.
 ## A ordem é a do pacote de personagens e define a ordem de atribuição.
 
-const IDS: Array[String] = ["ember", "moss", "dawn", "night", "cedar", "ash", "sand", "plum"]
-const FALLBACK := "ember"
-const SCENE_PATH := "res://assets/characters/mystery_character_%s.glb"
+const IDS: Array[String] = ["knight", "soldier", "ninja", "detective", "butler", "viking", "pirate", "cowboy"]
+const FALLBACK := "knight"
+const SCENE_PATH := "res://assets/characters/%s.glb"
 
 static func is_valid(appearance_id: Variant) -> bool:
 	return typeof(appearance_id) == TYPE_STRING and IDS.has(appearance_id)

@@ -26,8 +26,8 @@ signal online_leave_requested
 const PANELS := ["main", "host", "join", "online", "howto", "settings", "audio", "hall", "room"]
 ## Cor cosmética por aparência (só um ponto ao lado do nome na lista da sala).
 const APPEARANCE_COLORS := {
-	"ember": Color("#E0703A"), "moss": Color("#7FA35A"), "dawn": Color("#E3A0B0"), "night": Color("#5B6FB0"),
-	"cedar": Color("#A8583C"), "ash": Color("#A8A8A8"), "sand": Color("#D9C08A"), "plum": Color("#9B5FA8"),
+	"knight": Color("#A56D71"), "soldier": Color("#788F54"), "ninja": Color("#716081"), "detective": Color("#C39F4E"),
+	"butler": Color("#C8B497"), "viking": Color("#AC6242"), "pirate": Color("#465985"), "cowboy": Color("#96704E"),
 }
 const CARD_WIDTH := 452.0
 

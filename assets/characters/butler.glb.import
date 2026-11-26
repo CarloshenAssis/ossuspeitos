@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://csmd3kyvgnuxb"
-path="res://.godot/imported/mystery_character_sand.glb-6e648e659a6c820ceb79521430801eb0.scn"
+uid="uid://c5rifg2d1bldm"
+path="res://.godot/imported/butler.glb-689f1fa18e75f603dbfd6704a9bb1d15.scn"
 
 [deps]
 
-source_file="res://assets/characters/mystery_character_sand.glb"
-dest_files=["res://.godot/imported/mystery_character_sand.glb-6e648e659a6c820ceb79521430801eb0.scn"]
+source_file="res://assets/characters/butler.glb"
+dest_files=["res://.godot/imported/butler.glb-689f1fa18e75f603dbfd6704a9bb1d15.scn"]
 
 [params]
 
@@ -19,8 +19,8 @@ nodes/apply_root_scale=true
 nodes/root_scale=1.0
 nodes/import_as_skeleton_bones=false
 nodes/use_node_type_suffixes=true
-meshes/ensure_tangents=false
-meshes/generate_lods=false
+meshes/ensure_tangents=true
+meshes/generate_lods=true
 meshes/create_shadow_meshes=true
 meshes/light_baking=1
 meshes/lightmap_texel_size=0.2

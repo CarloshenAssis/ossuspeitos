@@ -18,9 +18,9 @@ class OfflineSiteArtifactTest(unittest.TestCase):
             (demo / name).write_bytes(b'fake-web-' + name.encode())
         (demo / 'index.pck').write_bytes(
             b'client/visual_demo.gdc client/arena_view.gdc '
-            b'mystery_character_ash mystery_character_cedar mystery_character_dawn '
-            b'mystery_character_ember mystery_character_moss mystery_character_night '
-            b'mystery_character_plum mystery_character_sand offline only')
+            b'assets/characters/viking.glb assets/characters/butler.glb assets/characters/ninja.glb '
+            b'assets/characters/knight.glb assets/characters/soldier.glb assets/characters/detective.glb '
+            b'assets/characters/cowboy.glb assets/characters/pirate.glb offline only')
         return site
 
     def run_check(self, site):
@@ -43,7 +43,7 @@ class OfflineSiteArtifactTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             self.make_site(directory)
             package = Path(directory) / 'demo/index.pck'
-            package.write_bytes(package.read_bytes().replace(b'mystery_character_sand', b'missing_character_sand'))
+            package.write_bytes(package.read_bytes().replace(b'assets/characters/pirate.glb', b'assets/characters/missing.glb'))
             self.assertNotEqual(self.run_check(directory).returncode, 0)
 
     def test_rejects_full_playtest_path(self):

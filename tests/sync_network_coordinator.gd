@@ -583,8 +583,8 @@ func _on_frame_drawn() -> void:
 		subject_position = (arena.avatars[subject] as Node3D).global_position
 		subject_yaw = (arena.avatars[subject] as Node3D).rotation.y
 		var animator: CharacterAnimator = arena.animators.get(subject)
-		if animator != null and animator.rig.get("head") != null:
-			head = (animator.rig["head"] as Node3D).rotation.x
+		if animator != null and animator.head_pivot != null:
+			head = animator.head_pivot.rotation.x
 	var cam := arena.camera.global_position
 	recording_rows.append("%d,%s,%.4f,%.4f,%.4f,%.5f,%.5f,%d,%.4f,%.4f,%.5f,%.4f" % [Time.get_ticks_usec(), recording_stage,
 		cam.x, cam.y, cam.z, arena.player_rig.rotation.y, arena.camera.rotation.x, subject, subject_position.x, subject_position.z, subject_yaw, head])

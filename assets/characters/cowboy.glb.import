@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://do8i2uo3rdx7x"
-path="res://.godot/imported/mystery_character_ember.glb-794801586c4935f879a25333677e5f45.scn"
+uid="uid://nusj2b5j48si"
+path="res://.godot/imported/cowboy.glb-3dd764aafd451f696457e319cf901f96.scn"
 
 [deps]
 
-source_file="res://assets/characters/mystery_character_ember.glb"
-dest_files=["res://.godot/imported/mystery_character_ember.glb-794801586c4935f879a25333677e5f45.scn"]
+source_file="res://assets/characters/cowboy.glb"
+dest_files=["res://.godot/imported/cowboy.glb-3dd764aafd451f696457e319cf901f96.scn"]
 
 [params]
 
@@ -19,8 +19,8 @@ nodes/apply_root_scale=true
 nodes/root_scale=1.0
 nodes/import_as_skeleton_bones=false
 nodes/use_node_type_suffixes=true
-meshes/ensure_tangents=false
-meshes/generate_lods=false
+meshes/ensure_tangents=true
+meshes/generate_lods=true
 meshes/create_shadow_meshes=true
 meshes/light_baking=1
 meshes/lightmap_texel_size=0.2

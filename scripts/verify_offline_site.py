@@ -17,10 +17,10 @@ FORBIDDEN_PACKED_CODE = (
 )
 REQUIRED_WEB_FILES = ('index.html', 'index.wasm', 'index.pck', 'index.js')
 REQUIRED_CHARACTER_ASSETS = (
-    b'mystery_character_ash', b'mystery_character_cedar',
-    b'mystery_character_dawn', b'mystery_character_ember',
-    b'mystery_character_moss', b'mystery_character_night',
-    b'mystery_character_plum', b'mystery_character_sand',
+    b'assets/characters/knight.glb', b'assets/characters/soldier.glb',
+    b'assets/characters/ninja.glb', b'assets/characters/detective.glb',
+    b'assets/characters/butler.glb', b'assets/characters/viking.glb',
+    b'assets/characters/pirate.glb', b'assets/characters/cowboy.glb',
 )
 
 
