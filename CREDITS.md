@@ -23,6 +23,8 @@ Modelos e texturas de [Poly Haven](https://polyhaven.com/), licença [CC0 1.0](h
 | `assets/furniture/pears` | [Food pears asian 01](https://polyhaven.com/a/food_pears_asian_01) |
 | `assets/furniture/ceramic_pot` | [Ceramic pot](https://polyhaven.com/a/ceramic_pot) |
 | `assets/furniture/vintage_drawer` | [Vintage wooden drawer 01](https://polyhaven.com/a/vintage_wooden_drawer_01) |
+| `assets/furniture/antique_katana` | [Antique katana 01](https://polyhaven.com/a/antique_katana_01) |
+| `assets/furniture/cannon_01` | [Cannon 01](https://polyhaven.com/a/cannon_01) |
 
 ## CC-BY 4.0 (Sketchfab)
 
@@ -30,6 +32,19 @@ Modelos e texturas de [Poly Haven](https://polyhaven.com/), licença [CC0 1.0](h
 |---|---|
 | `assets/furniture/bed` (só a cama: estrutura, colchão, edredom e almofadas) | Japanese Inspired Bedroom Set, [lemorett](https://sketchfab.com/lemorett), [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), [modelo](https://sketchfab.com/3d-models/japanese-inspired-bedroom-set-cc911de9509647b2a8e24a1919a75b82) |
 | `assets/furniture/tree_medium`, `tree_large` (mudas e árvore de fruto de verão, tronco + folhagem; `tree_small` permanece no pacote) | Gravel Rally tree pack, [deni_spa](https://sketchfab.com/deni_spa), [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), [modelo](https://sketchfab.com/3d-models/gravel-rally-tree-pack-27-trees-3-seasons-65da19fc1a4449a988f8dbaf2513ae59) |
+
+
+## Pinturas em domínio público (Wikimedia Commons)
+
+Imagens redimensionadas para no máximo 512 px no lado maior, só na variante Nocturna. As obras abaixo estão em domínio público.
+
+| Arquivo no repo | Obra | Autor | Ano | Fonte |
+|---|---|---|---|---|
+| `assets/paintings/vermeer_pearl.jpg` | Moça com o Brinco de Pérola | Johannes Vermeer | 1665 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:1665_Girl_with_a_Pearl_Earring.jpg) |
+| `assets/paintings/vangogh_starry.jpg` | A Noite Estrelada | Vincent van Gogh | 1889 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg) |
+| `assets/paintings/rembrandt_nightwatch.jpg` | A Ronda Noturna | Rembrandt | 1642 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:The_Nightwatch_by_Rembrandt_-_Rijksmuseum.jpg) |
+| `assets/paintings/monet_impression.jpg` | Impressão, nascer do sol | Claude Monet | 1872 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Monet_-_Impression,_Sunrise.jpg) |
+| `assets/paintings/friedrich_wanderer.jpg` | Caminhante sobre o mar de névoa | Caspar David Friedrich | 1817 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Caspar_David_Friedrich_-_Wanderer_above_the_Sea_of_Fog.jpeg) |
 
 ## Licença pendente
 
