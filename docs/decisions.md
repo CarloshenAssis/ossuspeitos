@@ -1149,7 +1149,15 @@ munições, sem caixas de vida.
 A apresentação do térreo de `nocturna_salao` instancia modelos no cliente e
 oculta as malhas cinzas dos móveis substituídos pelos seus IDs oficiais.
 `SalaoMap.FURNITURE` fornece os volumes para encaixe. `ArenaRules.BLOCKERS`
-continua como fonte da colisão e do bloqueio de disparos.
+continua como fonte da colisão e do bloqueio de disparos. A decoração sólida
+do térreo e do andar superior (sofás, escrivaninhas, cadeiras, cômodas,
+armários, vasos e afins) entra na mesma lista como caixas AABB, para o
+servidor e o cliente usarem a mesma colisão. Não se usa trimesh nem
+`StaticBody3D` local. As caixas não cobrem portas, escadas, spawns nem
+pickups; alguns móveis foram deslocados alguns centímetros para manter
+essa folga. As árvores do corredor superior usam um tronco mais estreito
+do que a folhagem, para o vão da escada de serviço e o circuito do
+corredor continuarem caminháveis.
 
 ## Avatares animados de Quaternius
 

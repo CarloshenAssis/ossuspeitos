@@ -25,7 +25,7 @@ func build(greyboxes: Dictionary) -> void:
 	# --- Salão: estar a sul das colunas oeste; lustre ao centro. Fora do spawn (7, 8.75),
 	# das portas e dos pickups (8, 2.5), (0.75, 1.75), (10.75, 13.5), (15.5, 13.5), (1.5, 13.5).
 	_model("chandelier_01", Vector3(8, 7, 8), 0.0, Vector3.ZERO, true)
-	_model("sofa_03", Vector3(1.2, 0, 12.3), PI / 2)
+	_model("sofa_03", Vector3(0.8, 0, 12.3), PI / 2)
 	_model("sofa_03", Vector3(5.0, 0, 12.3), -PI / 2)
 	_model("gothic_coffee_table", Vector3(3.1, 0, 12.3))
 	_model("dining_chair", Vector3(3.1, 0, 11.12), 0.0)
@@ -48,14 +48,14 @@ func build(greyboxes: Dictionary) -> void:
 	_model("dining_chair", Vector3(-2.6, 0, 11.3), 0.0)
 	_model("vintage_drawer", Vector3(-8.8, 0, 5.7), PI)
 	_model("ceramic_pot", Vector3(-0.95, 0, 6.15))
-	_model("ceramic_pot", Vector3(-8.9, 0, 12.35))
+	_model("ceramic_pot", Vector3(-10.15, 0, 13.75))
 
 	# --- Cozinha: parede leste livre das armas (26, 9) e (25.5, 13.5); sul longe da porta.
 	for z in [8.15, 10.25, 10.9, 11.55, 12.2]:
 		_model("kitchen_cabinet", Vector3(26.17, 0, z), -PI / 2)
 	_model("steel_shelves", Vector3(16.88, 0, 11.75), PI / 2)
 	_model("washer", Vector3(26.1, 0, 13.35), -PI / 2)
-	_model("coffee_cart", Vector3(24.25, 0, 12.55), -PI / 2)
+	_model("coffee_cart", Vector3(24.15, 0, 12.4), -PI / 2)
 	_model("kitchen_cabinet", Vector3(21.0, 0, 13.6), 0.0)
 	_model("kitchen_cabinet", Vector3(22.5, 0, 13.6), 0.0)
 	_model("ceramic_pot", Vector3(20.2, 0, 13.55))
@@ -63,10 +63,10 @@ func build(greyboxes: Dictionary) -> void:
 
 	# --- Quarto de Hóspedes (spawn -8.25,19; arma -10,15.25; munição -5.25,19).
 	# Cômoda no tamanho de criado-mudo, à cabeceira norte, para não tapar a cama.
-	_model("vintage_drawer", Vector3(-8.15, 0, 16.65), -PI / 2, Vector3(0.55, 0.72, 0.45))
-	_model("lampara_ar", Vector3(-8.15, 0.72, 16.65))
-	_model("book_set", Vector3(-8.15, 0.72, 16.5))
-	_model("dining_chair", Vector3(-6.9, 0, 17.7), PI / 2)
+	_model("vintage_drawer", Vector3(-8.9, 0, 16.65), -PI / 2, Vector3(0.55, 0.72, 0.45))
+	_model("lampara_ar", Vector3(-8.9, 0.72, 16.65))
+	_model("book_set", Vector3(-8.9, 0.72, 16.5))
+	_model("dining_chair", Vector3(-6.5, 0, 16.8), PI / 2)
 	_model("ceramic_pot", Vector3(-10.15, 0, 19.15))
 
 	# --- Lavabo (muniçao -0.75,17.75; portas a oeste, leste e sul).
@@ -76,14 +76,14 @@ func build(greyboxes: Dictionary) -> void:
 
 	# --- Banheiro de Mármore (vão norte/sul em x=0,5–2,5; munição 1, 24.25).
 	_model("toilet", Vector3(4.6, 0, 22.8), -PI / 2)
-	_model("kitchen_cabinet", Vector3(4.45, 0, 24.85), -PI / 2)
+	_model("kitchen_cabinet", Vector3(4.7, 0, 20.4), -PI / 2)
 	_model("lampara_ar", Vector3(4.45, 0.88, 20.55))
 	_model("ceramic_pot", Vector3(-3.6, 0, 20.55))
-	_model("ceramic_pot", Vector3(3.7, 0, 25.35))
-	_model("ceramic_pot", Vector3(-3.5, 0, 25.3))
+	_model("ceramic_pot", Vector3(4.7, 0, 25.75))
+	_model("ceramic_pot", Vector3(-3.7, 0, 24.35))
 
 	# --- Sala de Jantar (spawn 12.5,18.5; arma 6,20.5; munição 17.5,22; porta sul 11,5–13,5).
-	_model("sofa_03", Vector3(8.4, 0, 21.95), PI)
+	_model("sofa_03", Vector3(9.15, 0, 22.04), PI)
 	_model("dining_chair", Vector3(6.4, 0, 16.3), -PI / 2)
 	_model("ceramic_pot", Vector3(6.35, 0, 15.0))
 	_model("lampara_ar", Vector3(19.0, 1.7, 17.3))
@@ -91,12 +91,12 @@ func build(greyboxes: Dictionary) -> void:
 	_model("ceramic_pot", Vector3(19.0, 1.7, 19.0))
 
 	# --- Jardim de Inverno (porta norte 11,5–13,5; acesso oeste z=26,5–28,5; munição 18,27).
-	_model("tree_medium", Vector3(7.0, 0, 24.0), 0.6, Vector3(1.35, 2.5, 1.48))
+	_model("tree_medium", Vector3(7.0, 0, 23.3), 0.6, Vector3(1.35, 2.5, 1.48))
 	_model("tree_medium", Vector3(17.3, 0, 24.2), -0.4, Vector3(1.35, 2.5, 1.48))
 	_model("dining_chair", Vector3(10.0, 0, 24.15), PI / 2)
 	_model("dining_chair", Vector3(14.8, 0, 24.15), -PI / 2)
-	_model("ceramic_pot", Vector3(10.5, 0, 27.6))
-	_model("ceramic_pot", Vector3(14.2, 0, 27.6))
+	_model("ceramic_pot", Vector3(10.5, 0, 26.3))
+	_model("ceramic_pot", Vector3(14.2, 0, 26.3))
 	_model("ceramic_pot", Vector3(16.4, 0, 28.35))
 	_model("ceramic_pot", Vector3(-3.4, 0, 27.6))
 	_model("lampara_ar", Vector3(-3.4, 0, 28.4))
@@ -110,10 +110,10 @@ func build(greyboxes: Dictionary) -> void:
 	_painting(Vector3(6.25, 5.35, 0.07), 0.0, 1.15, 0.93, "rembrandt_nightwatch")
 	_painting(Vector3(8.85, 5.35, 0.07), 0.0, 0.95, 0.74, "monet_impression")
 	_painting(Vector3(11.05, 5.4, 0.07), 0.0, 0.70, 0.90, "friedrich_wanderer")
-	_bust(Vector3(2.45, UPPER, 0.42), PI)
-	_bust(Vector3(4.95, UPPER, 0.42), PI)
-	_bust(Vector3(9.85, UPPER, 0.42), PI)
-	_model("ceramic_pot", Vector3(1.15, UPPER, 0.38))
+	_bust(Vector3(2.7, UPPER, 0.16), PI)
+	_bust(Vector3(4.2, UPPER, 0.16), PI)
+	_bust(Vector3(9.85, UPPER, 0.16), PI)
+	_model("ceramic_pot", Vector3(0.4, UPPER, 0.28))
 	# Canhão na varanda oeste (perfil norte-sul) e outro na varanda leste, longe do spawn (15, 4)
 	# e da arma (12,5, 0,5).
 	_model("cannon_01", Vector3(2.15, UPPER, 3.55), 0.0, Vector3(0.85, 0.54, 1.55))
@@ -123,7 +123,7 @@ func build(greyboxes: Dictionary) -> void:
 	_model("gothic_commode", Vector3(7.15, UPPER, 4.45), PI)
 	_model("antique_katana", Vector3(6.75, UPPER + 1.22, 4.45), 0.4, Vector3.ZERO, false, Vector3(0.15, 0, 0.2))
 	_model("lampara_ar", Vector3(7.55, UPPER + 1.22, 4.45))
-	_bust(Vector3(8.85, UPPER, 4.45), 0.0)
+	_bust(Vector3(8.85, UPPER, 4.84), 0.0)
 	_model("ceramic_pot", Vector3(6.35, UPPER, 4.55))
 	# Varanda leste: decoração na borda oeste, longe do spawn (15, 4).
 	_model("gothic_commode", Vector3(12.35, UPPER, 3.15), PI / 2)
@@ -133,17 +133,17 @@ func build(greyboxes: Dictionary) -> void:
 
 	# --- Corredor superior (faixa 16,5–18 estreita; leste 18–26,5 × 7–10). Porta da
 	# música em x=26,5, z=8–10; patamar e porta do observatório livres.
-	_model("gothic_commode", Vector3(19.4, UPPER, 9.55), 0.0)
-	_model("lampara_ar", Vector3(19.4, UPPER + 1.22, 9.55))
-	_model("gothic_commode", Vector3(22.6, UPPER, 9.55), 0.0)
-	_model("lampara_ar", Vector3(22.6, UPPER + 1.22, 9.55))
-	_model("ceramic_pot", Vector3(16.85, UPPER, 9.55))
-	_model("ceramic_pot", Vector3(26.05, UPPER, 9.55))
-	_model("ceramic_pot", Vector3(21.0, UPPER, 9.55))
-	_model("tree_medium", Vector3(20.2, UPPER, 7.42), 0.5, Vector3(1.1, 1.8, 1.2))
-	_model("tree_medium", Vector3(24.15, UPPER, 7.42), -0.4, Vector3(1.1, 1.8, 1.2))
+	_model("gothic_commode", Vector3(19.4, UPPER, 9.7), 0.0)
+	_model("lampara_ar", Vector3(19.4, UPPER + 1.22, 9.7))
+	_model("gothic_commode", Vector3(24.65, UPPER, 9.7), 0.0)
+	_model("lampara_ar", Vector3(24.65, UPPER + 1.22, 9.7))
+	_model("ceramic_pot", Vector3(16.85, UPPER, 9.7))
+	_model("ceramic_pot", Vector3(26.17, UPPER, 9.75))
+	_model("ceramic_pot", Vector3(21.0, UPPER, 9.7))
+	_model("tree_medium", Vector3(20.2, UPPER, 7.55), 0.5, Vector3(1.1, 1.8, 1.2))
+	_model("tree_medium", Vector3(24.15, UPPER, 7.55), -0.4, Vector3(1.1, 1.8, 1.2))
 	_model("dining_chair", Vector3(23.5, UPPER, 9.35), PI)
-	_model("ceramic_pot", Vector3(25.0, UPPER, 5.35))
+	_model("ceramic_pot", Vector3(24.85, UPPER, 5.28))
 
 	# --- Quarto Norte (10 × 3 m). Porta leste z=0–2; porta da suíte x=-8–-6, z=3.
 	# O guarda-roupa oficial sobrepõe o canto da cama: cama visual um pouco a leste.
@@ -165,39 +165,39 @@ func build(greyboxes: Dictionary) -> void:
 	_model("book_set", Vector3(-7.85, UPPER + 0.72, 6.45))
 	_model("vintage_drawer", Vector3(-7.85, UPPER, 8.75), -PI / 2, Vector3(0.55, 0.72, 0.45))
 	_model("lampara_ar", Vector3(-7.85, UPPER + 0.72, 8.75))
-	_model("gothic_commode", Vector3(-5.4, UPPER, 9.55), 0.0)
-	_model("lampara_ar", Vector3(-5.4, UPPER + 1.22, 9.55))
-	_model("gothic_commode", Vector3(-3.6, UPPER, 9.55), 0.0)
-	_model("wooden_bookshelf", Vector3(-4.3, UPPER, 3.82), PI, Vector3(1.1, 2.2, 0.45))
-	_model("book_set", Vector3(-4.3, UPPER + 0.8, 3.98), PI)
-	_model("book_set", Vector3(-4.3, UPPER + 1.4, 3.98), PI)
-	_model("wooden_bookshelf", Vector3(-2.6, UPPER, 3.82), PI, Vector3(1.1, 2.2, 0.45))
-	_model("book_set", Vector3(-2.6, UPPER + 1.1, 3.98), PI)
+	_model("gothic_commode", Vector3(-5.5, UPPER, 9.71), 0.0)
+	_model("lampara_ar", Vector3(-5.5, UPPER + 1.22, 9.71))
+	_model("gothic_commode", Vector3(-4.2, UPPER, 9.71), 0.0)
+	_model("wooden_bookshelf", Vector3(-0.85, UPPER, 5.6), -PI / 2, Vector3(0.45, 2.2, 1.1))
+	_model("book_set", Vector3(-0.70, UPPER + 0.8, 5.6), -PI / 2)
+	_model("book_set", Vector3(-0.70, UPPER + 1.4, 5.6), -PI / 2)
+	_model("wooden_bookshelf", Vector3(-0.85, UPPER, 6.7), -PI / 2, Vector3(0.45, 2.2, 1.1))
+	_model("book_set", Vector3(-0.70, UPPER + 1.1, 6.7), -PI / 2)
 	_model("dining_chair", Vector3(-4.8, UPPER, 7.4), PI / 2)
 	_model("ceramic_pot", Vector3(-10.15, UPPER, 3.9))
 	_model("ceramic_pot", Vector3(-10.15, UPPER, 9.65))
 	_model("ceramic_pot", Vector3(-0.95, UPPER, 9.65))
 	_model("chandelier_03", Vector3(-5.5, 6.95, 6.8), 0.0, Vector3.ZERO, true)
 
-	# --- Sala de Música (piano e armário oficiais no match). Cadeiras a norte do piano.
-	_model("dining_chair", Vector3(29.0, UPPER, 11.05), 0.0)
-	_model("dining_chair", Vector3(30.2, UPPER, 11.05), 0.0)
-	_model("dining_chair", Vector3(31.4, UPPER, 11.05), 0.0)
+	# --- Sala de Música (piano e armário oficiais no match). Cadeiras na parede oeste, fora do centro do cômodo.
+	_model("dining_chair", Vector3(27.4, UPPER, 10.8), -PI / 2)
+	_model("dining_chair", Vector3(27.4, UPPER, 11.6), -PI / 2)
+	_model("dining_chair", Vector3(27.4, UPPER, 12.4), -PI / 2)
 	_model("gothic_commode", Vector3(27.45, UPPER, 13.45), PI / 2)
 	_model("lampara_ar", Vector3(27.45, UPPER + 1.22, 13.45))
 	_model("ceramic_pot", Vector3(27.4, UPPER, 10.4))
 	_model("ceramic_pot", Vector3(33.6, UPPER, 13.55))
-	_model("dining_chair", Vector3(32.6, UPPER, 10.6), -PI / 2)
+	_model("dining_chair", Vector3(32.6, UPPER, 11.9), -PI / 2)
 	_model("chandelier_03", Vector3(30.3, 6.95, 11.0), 0.0, Vector3.ZERO, true)
 
 	# --- Observatório (telescópio no pedestal oficial). Escrivaninha na parede norte,
 	# longe das portas (26,5–27, z=5–7) e (29–31, z=8).
-	_table(Vector3(28.4, UPPER, 5.48), Vector3(1.2, 0.75, 0.55))
-	_model("lampara_ar", Vector3(28.0, UPPER + 0.75, 5.48))
-	_model("book_set", Vector3(28.7, UPPER + 0.75, 5.48))
-	_model("book_set", Vector3(28.9, UPPER + 0.75, 5.58), 0.3)
-	_model("dining_chair", Vector3(28.4, UPPER, 6.2), PI)
-	_model("ceramic_pot", Vector3(33.6, UPPER, 5.35))
+	_table(Vector3(28.4, UPPER, 5.25), Vector3(1.2, 0.75, 0.55))
+	_model("lampara_ar", Vector3(28.0, UPPER + 0.75, 5.25))
+	_model("book_set", Vector3(28.7, UPPER + 0.75, 5.25))
+	_model("book_set", Vector3(28.9, UPPER + 0.75, 5.35), 0.3)
+	_model("dining_chair", Vector3(30.4, UPPER, 5.25), 0.0)
+	_model("ceramic_pot", Vector3(32.0, UPPER, 5.3))
 	_model("ceramic_pot", Vector3(33.6, UPPER, 7.65))
 	_model("book_set", Vector3(32.5, UPPER + 0.5, 6.5))
 
@@ -279,6 +279,9 @@ func build(greyboxes: Dictionary) -> void:
 			"pedestal_observatorio":
 				_telescope(floor_center)
 			_:
+				# Volumes só de colisão (decoração já instanciada acima).
+				if greyboxes.has(id):
+					(greyboxes[id] as MeshInstance3D).hide()
 				continue
 		(greyboxes[id] as MeshInstance3D).hide()
 
