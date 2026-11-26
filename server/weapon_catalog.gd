@@ -10,6 +10,6 @@ static func defaults() -> Dictionary:
 static func nocturna() -> Dictionary:
 	return {
 		"hunting_rifle": WeaponDefinition.new("hunting_rifle", 50, 4, 12, 550, 35.0, 1600, 0.01),
-		"coach_gun": WeaponDefinition.new("coach_gun", 62, 2, 8, 700, 12.0, 1800, 0.08),
+		"aug": WeaponDefinition.new("aug", 40, 20, 40, 300, 28.0, 1400, 0.02, 0.02, 0.012, 0.06, 0.15),
 	}
 

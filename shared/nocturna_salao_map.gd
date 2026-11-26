@@ -124,13 +124,17 @@ const SPAWNS := [
 ]
 const PICKUPS := [
 	{"id": "weapon_0", "type": "weapon", "weapon_id": "hunting_rifle", "space": "salao", "position": Vector2(10.8, 12.8), "floor": 0.0},
-	{"id": "weapon_1", "type": "weapon", "weapon_id": "coach_gun", "space": "galeria", "position": Vector2(2.0, 0.8), "floor": GALLERY_FLOOR},
-	{"id": "weapon_2", "type": "weapon", "weapon_id": "common_pistol", "space": "biblioteca", "position": Vector2(-8.5, 8.0), "floor": 0.0},
-	{"id": "weapon_3", "type": "weapon", "weapon_id": "common_pistol", "space": "cozinha", "position": Vector2(25.2, 13.0), "floor": 0.0},
-	{"id": "weapon_4", "type": "weapon", "weapon_id": "common_pistol", "space": "jantar", "position": Vector2(7.5, 16.2), "floor": 0.0},
-	{"id": "weapon_5", "type": "weapon", "weapon_id": "common_pistol", "space": "hospedes", "position": Vector2(-9.8, 16.0), "floor": 0.0},
-	{"id": "weapon_6", "type": "weapon", "weapon_id": "common_pistol", "space": "observatorio", "position": Vector2(33.4, 5.6), "floor": GALLERY_FLOOR},
-	{"id": "weapon_7", "type": "weapon", "weapon_id": "common_pistol", "space": "jardim_inverno", "position": Vector2(17.5, 27.2), "floor": 0.0},
+	{"id": "weapon_1", "type": "weapon", "weapon_id": "hunting_rifle", "space": "galeria", "position": Vector2(2.0, 0.8), "floor": GALLERY_FLOOR},
+	{"id": "weapon_2", "type": "weapon", "weapon_id": "hunting_rifle", "space": "jantar", "position": Vector2(7.5, 16.2), "floor": 0.0},
+	{"id": "weapon_3", "type": "weapon", "weapon_id": "hunting_rifle", "space": "cozinha", "position": Vector2(25.2, 13.0), "floor": 0.0},
+	{"id": "weapon_4", "type": "weapon", "weapon_id": "aug", "space": "biblioteca", "position": Vector2(-8.5, 8.0), "floor": 0.0},
+	{"id": "weapon_5", "type": "weapon", "weapon_id": "aug", "space": "galeria", "position": Vector2(11.4, 0.6), "floor": GALLERY_FLOOR},
+	{"id": "weapon_6", "type": "weapon", "weapon_id": "aug", "space": "observatorio", "position": Vector2(33.4, 5.6), "floor": GALLERY_FLOOR},
+	{"id": "weapon_7", "type": "weapon", "weapon_id": "aug", "space": "salao", "position": Vector2(6.2, 0.6), "floor": 0.0},
+	{"id": "weapon_8", "type": "weapon", "weapon_id": "common_pistol", "space": "hospedes", "position": Vector2(-9.8, 16.0), "floor": 0.0},
+	{"id": "weapon_9", "type": "weapon", "weapon_id": "common_pistol", "space": "jardim_inverno", "position": Vector2(17.5, 27.2), "floor": 0.0},
+	{"id": "weapon_10", "type": "weapon", "weapon_id": "common_pistol", "space": "suite", "position": Vector2(-8.8, 4.8), "floor": GALLERY_FLOOR},
+	{"id": "weapon_11", "type": "weapon", "weapon_id": "common_pistol", "space": "jantar", "position": Vector2(12.2, 18.7), "floor": 0.0},
 	{"id": "ammo_0", "type": "ammo", "space": "lavabo", "position": Vector2(-0.3, 18.7), "floor": 0.0},
 	{"id": "ammo_1", "type": "ammo", "space": "banheiro_marmore", "position": Vector2(-3.3, 25.2), "floor": 0.0},
 	{"id": "ammo_2", "type": "ammo", "space": "jardim_inverno", "position": Vector2(11.2, 24.2), "floor": 0.0},
@@ -142,12 +146,12 @@ const PICKUPS := [
 	{"id": "ammo_8", "type": "ammo", "space": "quarto_norte", "position": Vector2(-5.3, 0.7), "floor": GALLERY_FLOOR},
 	{"id": "ammo_9", "type": "ammo", "space": "corredor_leste", "position": Vector2(22.2, 9.2), "floor": GALLERY_FLOOR},
 	{"id": "ammo_10", "type": "ammo", "space": "jardim_acesso", "position": Vector2(0.2, 28.2), "floor": 0.0},
-	{"id": "ammo_11", "type": "ammo", "space": "suite", "position": Vector2(-2.8, 7.2), "floor": GALLERY_FLOOR},
+	{"id": "ammo_11", "type": "ammo", "space": "jardim_inverno", "position": Vector2(7.3, 28.4), "floor": 0.0},
 	{"id": "health_0", "type": "health", "space": "biblioteca", "position": Vector2(-5.5, 13.0), "floor": 0.0},
 	{"id": "health_1", "type": "health", "space": "banheiro_marmore", "position": Vector2(4.0, 25.2), "floor": 0.0},
 	{"id": "health_2", "type": "health", "space": "cozinha", "position": Vector2(25.2, 8.2), "floor": 0.0},
 	{"id": "health_3", "type": "health", "space": "musica", "position": Vector2(32.5, 10.5), "floor": GALLERY_FLOOR},
-	{"id": "health_4", "type": "health", "space": "suite", "position": Vector2(-9.0, 5.2), "floor": GALLERY_FLOOR},
+	{"id": "health_4", "type": "health", "space": "suite", "position": Vector2(-3.0, 9.3), "floor": GALLERY_FLOOR},
 ]
 
 static var enabled := OS.get_environment("OSSUSPEITOS_MAP") == "nocturna_salao"
@@ -196,6 +200,12 @@ static func pickups() -> Array:
 
 static func pickups_of_type(kind: String) -> Array:
 	return PICKUPS.filter(func(entry): return str(entry["type"]) == kind)
+
+static func weapon_id_of(pickup_id: String) -> String:
+	for entry in PICKUPS:
+		if str(entry["id"]) == pickup_id and str(entry["type"]) == "weapon":
+			return str(entry.get("weapon_id", "common_pistol"))
+	return "common_pistol"
 
 static func item_floor(entry: Dictionary) -> float:
 	return float(entry.get("floor", 0.0))

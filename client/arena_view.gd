@@ -115,7 +115,8 @@ func _ready() -> void:
 	player_rig.add_child(camera)
 	# Pistola na mão no canto inferior direito da visão: não cobre o centro
 	# nem o painel de munição. Só aparece com arma no inventário oficial.
-	weapon_model = ArenaModels.build_pistol()
+	_held_weapon_id = CombatAuthority.COMMON_WEAPON_ID
+	weapon_model = ArenaModels.build_held_weapon(_held_weapon_id)
 	weapon_model.scale = Vector3.ONE * VIEWMODEL_SCALE
 	weapon_model.rotation = Vector3(0.04, 0.06, 0.0)
 	weapon_model.visible = false
@@ -474,6 +475,7 @@ func camera_direction() -> Vector3:
 	return -camera.global_transform.basis.z.normalized() if camera != null else Vector3.FORWARD
 
 var _combat_has_weapon := false
+var _held_weapon_id := ""
 
 const RELOAD_POSE := Vector3(-0.45, 0.25, 0.2)
 const RELOAD_DROP := Vector3(0.0, -0.04, 0.02)
@@ -482,8 +484,29 @@ const RECOIL_TILT := 0.14
 const DAMAGE_KICK := 0.035
 const IMPACT_CAMERA_CLEARANCE := 1.2
 
+func _set_held_weapon(weapon_id: String) -> void:
+	if weapon_id == _held_weapon_id and weapon_model != null:
+		return
+	_held_weapon_id = weapon_id
+	var was_visible := weapon_model != null and weapon_model.visible
+	if _muzzle_flash != null and _muzzle_flash.get_parent() != null:
+		_muzzle_flash.get_parent().remove_child(_muzzle_flash)
+	if weapon_model != null:
+		weapon_model.queue_free()
+	weapon_model = ArenaModels.build_held_weapon(weapon_id)
+	weapon_model.scale = Vector3.ONE * VIEWMODEL_SCALE
+	weapon_model.rotation = Vector3(0.04, 0.06, 0.0)
+	weapon_model.visible = was_visible
+	weapon_pivot.add_child(weapon_model)
+	if _muzzle_flash != null:
+		_muzzle_flash.position = ArenaModels.muzzle_offset(weapon_id)
+		weapon_model.add_child(_muzzle_flash)
+
 func apply_combat_state(state: Dictionary) -> void:
-	_combat_has_weapon = not str(state.get("weapon_id", "")).is_empty() and int(state.get("health", 0)) > 0
+	var weapon_id := str(state.get("weapon_id", ""))
+	if not weapon_id.is_empty():
+		_set_held_weapon(weapon_id)
+	_combat_has_weapon = not weapon_id.is_empty() and int(state.get("health", 0)) > 0
 	_refresh_gameplay_visuals()
 	for feedback in combat_feedback(_combat_prev, state):
 		match feedback:
@@ -710,7 +733,7 @@ func can_predict_fire() -> bool:
 		return false
 	if int(_combat_prev.get("magazine", 0)) - predicted_shots.size() <= 0:
 		return false
-	return Time.get_ticks_msec() - _last_predicted_shot_msec >= WeaponRules.COMMON_FIRE_INTERVAL_MSEC + PREDICTED_SHOT_MARGIN_MSEC
+	return Time.get_ticks_msec() - _last_predicted_shot_msec >= WeaponRules.fire_interval_msec(str(_combat_prev.get("weapon_id", ""))) + PREDICTED_SHOT_MARGIN_MSEC
 
 ## Recusa oficial de um disparo antecipado: some da fila sem repetir efeito.
 func discard_predicted_shot(action_id: int) -> void:
@@ -777,7 +800,10 @@ func _create_pickup(entry: Dictionary) -> Node3D:
 	var kind := str(entry.get("type", ""))
 	var node: Node3D
 	if kind == "weapon":
-		node = ArenaModels.build_weapon_pickup()
+		var weapon_id := "common_pistol"
+		if ArenaRules.SalaoMap.enabled:
+			weapon_id = ArenaRules.SalaoMap.weapon_id_of(str(entry.get("id", "")))
+		node = ArenaModels.build_weapon_pickup(weapon_id)
 	elif kind == "health":
 		node = ArenaModels.build_health_pickup()
 	else:

@@ -16,6 +16,17 @@ const MAX_AIM_PITCH_RADIANS := deg_to_rad(25.0)
 ## Cadência da pistola comum (pública): o servidor a usa na definição oficial e
 ## o cliente só para decidir se antecipa o efeito local de um disparo.
 const COMMON_FIRE_INTERVAL_MSEC := 400
+const HUNTING_RIFLE_FIRE_INTERVAL_MSEC := 550
+const AUG_FIRE_INTERVAL_MSEC := 300
+
+static func fire_interval_msec(weapon_id: String) -> int:
+	match weapon_id:
+		"hunting_rifle":
+			return HUNTING_RIFLE_FIRE_INTERVAL_MSEC
+		"aug":
+			return AUG_FIRE_INTERVAL_MSEC
+		_:
+			return COMMON_FIRE_INTERVAL_MSEC
 
 static func validate_definition(definition: Variant) -> String:
 	if not definition is WeaponDefinition:

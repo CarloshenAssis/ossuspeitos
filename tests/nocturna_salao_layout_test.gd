@@ -103,8 +103,8 @@ func _check_items(free: Dictionary) -> void:
 	var weapons: Array = salao_map.pickups_of_type("weapon")
 	var ammo: Array = salao_map.pickups_of_type("ammo")
 	var health: Array = salao_map.pickups_of_type("health")
-	_expect(salao_map.SPAWNS.size() == 8 and weapons.size() == 8 and ammo.size() == 12 and health.size() == 5,
-		"eight spawns, eight weapons, twelve ammo, five health")
+	_expect(salao_map.SPAWNS.size() == 8 and weapons.size() == 12 and ammo.size() == 12 and health.size() == 5,
+		"eight spawns, twelve weapons, twelve ammo, five health")
 	var ground_spawns := 0
 	var upper_spawns := 0
 	for index in salao_map.SPAWNS.size():
@@ -130,10 +130,24 @@ func _check_items(free: Dictionary) -> void:
 		"marble bathroom has ammo")
 	_expect(ammo.any(func(entry: Dictionary) -> bool: return _room("jardim_inverno").has_point(salao_map.item_point(entry))),
 		"greenhouse has ammo")
+	var weapon_counts := {}
+	var weapon_floors := {}
+	for entry in weapons:
+		var weapon_id := str(entry.get("weapon_id", ""))
+		weapon_counts[weapon_id] = int(weapon_counts.get(weapon_id, 0)) + 1
+		var floors: Dictionary = weapon_floors.get(weapon_id, {})
+		floors[salao_map.item_floor(entry)] = true
+		weapon_floors[weapon_id] = floors
+	_expect(weapon_counts.get("hunting_rifle", 0) == 4 and weapon_counts.get("aug", 0) == 4 and weapon_counts.get("common_pistol", 0) == 4 and weapon_counts.size() == 3,
+		"four of each of the three Nocturna weapons")
+	_expect(not weapon_counts.has("coach_gun"), "the shotgun stays off the Nocturna list")
 	_expect(weapons.any(func(entry: Dictionary) -> bool: return str(entry.get("weapon_id", "")) == "hunting_rifle" and str(entry["space"]) == "salao"),
-		"strong rifle sits in the hall")
-	_expect(weapons.any(func(entry: Dictionary) -> bool: return str(entry.get("weapon_id", "")) == "coach_gun" and str(entry["space"]).begins_with("galeria")),
-		"strong shotgun sits in the gallery")
+		"a rifle sits in the hall")
+	_expect(weapons.any(func(entry: Dictionary) -> bool: return str(entry.get("weapon_id", "")) == "hunting_rifle" and str(entry["space"]).begins_with("galeria")),
+		"a rifle sits in the gallery")
+	for weapon_id in ["hunting_rifle", "aug", "common_pistol"]:
+		var floors: Dictionary = weapon_floors.get(weapon_id, {})
+		_expect(floors.has(0.0) and floors.has(salao_map.GALLERY_FLOOR), "%s is on both floors" % weapon_id)
 	var health_rooms: Dictionary = {}
 	var health_floors: Dictionary = {}
 	for entry in health:

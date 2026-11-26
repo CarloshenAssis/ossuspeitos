@@ -28,7 +28,7 @@ const MODE_NEXT_ROUND := "next_round"
 const HEALTH_BAR_MAX := 100
 ## Um tiro da pistola comum tira 34: com 34 ou menos, o próximo acerto mata.
 const LOW_HEALTH := 34
-const WEAPON_NAMES := {"common_pistol": "PISTOLA", "hunting_rifle": "RIFLE", "coach_gun": "ESPINGARDA"}
+const WEAPON_NAMES := {"common_pistol": "PISTOLA", "hunting_rifle": "RIFLE", "aug": "AUG"}
 ## Mesmos valores da pistola comum e da caixa de munição do servidor
 ## (`CombatAuthority`); o teste do HUD confere que não divergem. Servem só para
 ## desenhar as balas do pente e escrever o prompt de coleta.

@@ -28,16 +28,16 @@ func _run() -> void:
 	authority.begin_round(1, [1, 2, 3, 4])
 
 	var pickups: Array = authority.public_pickups()
-	_expect(pickups.size() == 25, "nocturna round has eight weapons, twelve ammo and five health")
+	_expect(pickups.size() == 29, "nocturna round has twelve weapons, twelve ammo and five health")
 	var counts := {"weapon": 0, "ammo": 0, "health": 0}
 	for pickup in pickups:
 		_expect(pickup.keys().size() == 5 and not pickup.has("weapon_id") and not pickup.has("amount"), "health snapshot stays on the public allowlist")
 		var kind := str(pickup["type"])
 		counts[kind] = int(counts.get(kind, 0)) + 1
-	_expect(counts["weapon"] == 8 and counts["ammo"] == 12 and counts["health"] == 5, "public counts match the official list")
-	_expect(authority.inventory.definitions.has("hunting_rifle") and authority.inventory.definitions.has("coach_gun"), "nocturna catalogue is armed")
+	_expect(counts["weapon"] == 12 and counts["ammo"] == 12 and counts["health"] == 5, "public counts match the official list")
+	_expect(authority.inventory.definitions.has("hunting_rifle") and authority.inventory.definitions.has("aug") and not authority.inventory.definitions.has("coach_gun"), "nocturna catalogue is armed")
 	_expect(str(authority.inventory.ground_items["weapon_0"]["weapon_id"]) == "hunting_rifle", "hall weapon is the rifle")
-	_expect(str(authority.inventory.ground_items["weapon_1"]["weapon_id"]) == "coach_gun", "gallery weapon is the shotgun")
+	_expect(str(authority.inventory.ground_items["weapon_4"]["weapon_id"]) == "aug", "library weapon is the AUG")
 
 	var kit_position: Vector3 = authority.inventory.ground_items["health_0"]["position"]
 	world.states[1]["position"] = kit_position

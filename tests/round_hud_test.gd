@@ -124,7 +124,7 @@ func _test_values_match_the_official_rules() -> void:
 	_expect(RoundHud.MAX_RESERVE == int(definition.max_reserve_ammo), "full-reserve prompt uses the official maximum")
 	_expect(RoundHud.AMMO_BOX_AMOUNT == CombatAuthority.AMMO_BOX_AMOUNT, "ammo prompt shows the official box amount")
 	_expect(RoundHud.HEALTH_BOX_AMOUNT == CombatAuthority.HEALTH_AMOUNT, "health prompt shows the official heal amount")
-	_expect(RoundHud.WEAPON_NAMES.has("hunting_rifle") and RoundHud.WEAPON_NAMES.has("coach_gun"), "nocturna weapons have display names")
+	_expect(RoundHud.WEAPON_NAMES.has("hunting_rifle") and RoundHud.WEAPON_NAMES.has("aug") and not RoundHud.WEAPON_NAMES.has("coach_gun"), "nocturna weapons have display names")
 	_expect(RoundHud.REASON_TEXT.has(RoundRules.REASON_ASSASSIN_DOWN) and RoundHud.REASON_TEXT.has(RoundRules.REASON_INNOCENTS_DOWN), "every official win reason has a sentence")
 
 func _test_weapon_panel_follows_official_state() -> void:
