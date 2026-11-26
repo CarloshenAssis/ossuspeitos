@@ -34,6 +34,21 @@ Modelos e texturas de [Poly Haven](https://polyhaven.com/), licença [CC0 1.0](h
 | `assets/furniture/tree_medium`, `tree_large` (mudas e árvore de fruto de verão, tronco + folhagem; `tree_small` permanece no pacote) | Gravel Rally tree pack, [deni_spa](https://sketchfab.com/deni_spa), [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), [modelo](https://sketchfab.com/3d-models/gravel-rally-tree-pack-27-trees-3-seasons-65da19fc1a4449a988f8dbaf2513ae59) |
 
 
+
+## Texturas CC0 (Poly Haven) — pintura da Nocturna
+
+Albedos 1k, convertidos para WebP, só na variante `OSSUSPEITOS_MAP=nocturna_salao`. Licença [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+
+| Arquivo no repo | Origem |
+|---|---|
+| `assets/textures/nocturna/herringbone_parquet.webp` | [Herringbone parquet](https://polyhaven.com/a/herringbone_parquet) |
+| `assets/textures/nocturna/dark_paneled_wood.webp` | [Dark paneled wood](https://polyhaven.com/a/dark_paneled_wood) |
+| `assets/textures/nocturna/marble_01.webp` | [Marble 01](https://polyhaven.com/a/marble_01) |
+| `assets/textures/nocturna/floor_tiles_06.webp` | [Floor tiles 06](https://polyhaven.com/a/floor_tiles_06) |
+| `assets/textures/nocturna/terracotta_floor_tiles.webp` | [Terracotta floor tiles](https://polyhaven.com/a/terracotta_floor_tiles) |
+| `assets/textures/nocturna/painted_plaster_wall.webp` | [Painted plaster wall](https://polyhaven.com/a/painted_plaster_wall) |
+| `assets/textures/nocturna/grey_plaster.webp` | [Grey plaster](https://polyhaven.com/a/grey_plaster) |
+
 ## Pinturas em domínio público (Wikimedia Commons)
 
 Imagens redimensionadas para no máximo 512 px no lado maior, só na variante Nocturna. As obras abaixo estão em domínio público.
