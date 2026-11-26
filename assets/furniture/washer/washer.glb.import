@@ -3,7 +3,7 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://cpjl8lynh8156"
+uid="uid://vtcp84163vf3"
 path="res://.godot/imported/washer.glb-bcd794aa733419fa77dd9f11effc31d2.scn"
 
 [deps]
@@ -34,4 +34,4 @@ animation/import_rest_as_RESET=false
 import_script/path=""
 _subresources={}
 gltf/naming_version=1
-gltf/embedded_image_handling=2
+gltf/embedded_image_handling=1

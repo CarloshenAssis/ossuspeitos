@@ -3,7 +3,7 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://b0ug2obcj131l"
+uid="uid://dvymmld4axaec"
 path="res://.godot/imported/dining_chair.glb-a27188a9f821cfda531e2305e8ed606d.scn"
 
 [deps]
@@ -34,4 +34,4 @@ animation/import_rest_as_RESET=false
 import_script/path=""
 _subresources={}
 gltf/naming_version=1
-gltf/embedded_image_handling=2
+gltf/embedded_image_handling=1

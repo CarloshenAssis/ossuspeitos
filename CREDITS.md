@@ -63,14 +63,20 @@ Imagens redimensionadas para no máximo 512 px no lado maior, só na variante No
 | `assets/paintings/monet_impression.jpg` | Impressão, nascer do sol | Claude Monet | 1872 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Monet_-_Impression,_Sunrise.jpg) |
 | `assets/paintings/friedrich_wanderer.jpg` | Caminhante sobre o mar de névoa | Caspar David Friedrich | 1817 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Caspar_David_Friedrich_-_Wanderer_above_the_Sea_of_Fog.jpeg) |
 
-## Licença pendente
+## CC0 (Kenney) — variante Nocturna
 
-Estes arquivos entram no jogo, mas a licença ainda não foi confirmada. Não redistribuir como se fossem CC0/CC-BY até haver confirmação.
+Modelos do [Furniture Kit](https://kenney.nl/assets/furniture-kit) de [Kenney](https://kenney.nl/), licença [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). Redimensionados para o volume dos modelos anteriores e otimizados com `gltf-transform` sem Draco, meshopt ou quantização.
 
-| Modelo no repo | Nota |
-|---|---|
-| `assets/furniture/bathtub`, `toilet`, `faucet`, `dining_chair`, `kitchen_cabinet`, `kettle`, `washer` | Extraídos de `PipeworkFreeSample_scene.glb` (nós `SM_Bathtub_Clawfoot_01`, `SM_Toilet_01`, `SM_Faucet_Gooseneck_01`, `SM_DiningChair_Wood_01`, `SM_KitCab_Base_Door_05`, `SM_Kettle_Electric_01`, `SM_Washer_Front_01`). Licença pendente. |
-| `assets/furniture/lampara_ar` | Origem Sketchfab; licença desconhecida / pendente. |
+| Arquivo no repo | Modelo original | Poly Pizza |
+|---|---|---|
+| `assets/furniture/bathtub` | bathtub | [kVFRyNEn4F](https://poly.pizza/m/kVFRyNEn4F) |
+| `assets/furniture/toilet` | toilet | [QsQdZcnTsI](https://poly.pizza/m/QsQdZcnTsI) |
+| `assets/furniture/faucet` | kitchenSink (pia com torneira) | [nNGtcp9qK2](https://poly.pizza/m/nNGtcp9qK2) |
+| `assets/furniture/dining_chair` | chair | [vHyrBYPBum](https://poly.pizza/m/vHyrBYPBum) |
+| `assets/furniture/kitchen_cabinet` | kitchenCabinet | [tWyOLYYHPw](https://poly.pizza/m/tWyOLYYHPw) |
+| `assets/furniture/washer` | washer | [C7HZypH3D6](https://poly.pizza/m/C7HZypH3D6) |
+| `assets/furniture/kettle` | kitchenCoffeeMachine | [jBUiOz36vs](https://poly.pizza/m/jBUiOz36vs) |
+| `assets/furniture/lampara_ar` | lampRoundTable | [auXnXwXD7S](https://poly.pizza/m/auXnXwXD7S) |
 
 ## Personagens CC0 (Quaternius) — todos os mapas
 
