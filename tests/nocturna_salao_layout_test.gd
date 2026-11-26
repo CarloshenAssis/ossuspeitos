@@ -295,6 +295,27 @@ func _check_upper_rooms() -> void:
 		var hit: float = arena_rules.first_blocker_distance(start + Vector3.UP * 0.7, direction, distance + 0.25)
 		_expect(is_equal_approx(hit, distance) if furniture[4] else hit < 0.0, "%s eye-height shot behavior" % furniture[0])
 
+	for furniture in [
+		["sofa_salao_l", Vector2(7.0, 12.3), Vector3.LEFT, 0.0],
+		["escrivaninha_biblioteca", Vector2(-5.0, 12.2), Vector3.RIGHT, 0.0],
+		["sofa_jantar", Vector2(6.2, 22.04), Vector3.RIGHT, 0.0],
+	]:
+		var start := _body(furniture[1])
+		var direction: Vector3 = furniture[2]
+		var result: Dictionary = movement_rules.resolve_step(start, direction * 3.0)
+		_expect(result["blocked_x"] if direction.x != 0 else result["blocked_z"], "%s stops the capsule" % furniture[0])
+		_expect(not arena_rules.overlaps_blocker(start), "%s test start stays clear" % furniture[0])
+
+	for furniture in [
+		["escrivaninha_observatorio", Vector2(28.4, 6.3), Vector3.FORWARD, salao_map.GALLERY_FLOOR],
+		["comoda_corredor_0", Vector2(19.4, 8.5), Vector3.BACK, salao_map.GALLERY_FLOOR],
+	]:
+		var start := _body(furniture[1]) + Vector3.UP * float(furniture[3])
+		var direction: Vector3 = furniture[2]
+		var result: Dictionary = movement_rules.resolve_step(start, direction * 3.0)
+		_expect(result["blocked_x"] if direction.x != 0 else result["blocked_z"], "%s stops the capsule" % furniture[0])
+		_expect(not arena_rules.overlaps_blocker(start), "%s test start stays clear" % furniture[0])
+
 	var under_suite := _body(suite)
 	_expect(is_equal_approx(arena_rules.first_blocker_distance(under_suite + upstairs, Vector3.UP, 10.0), 2.5),
 		"suite ceiling seals at 7 m")
