@@ -1242,10 +1242,14 @@ func _sample_move() -> Vector2:
 ## Um comando por tick fixo de física: amostra, simula localmente, guarda para
 ## replay e envia em lote (ou na hora, se carrega ação).
 func _client_command_tick() -> void:
+	var look := arena_view.touch_controls.consume_look_delta() if arena_view != null and arena_view.touch_controls != null else Vector2.ZERO
 	if not _commands_enabled():
 		if not outbox.is_empty():
 			_flush_commands()
 		return
+	if look != Vector2.ZERO and window_focused:
+		look *= mouse_sensitivity / MOUSE_SENSITIVITY
+		prediction.add_look(look.x, look.y, Time.get_ticks_usec())
 	if not test_script.is_empty():
 		_apply_test_script_tick()
 	var command := prediction.build_command(_sample_move())
@@ -2824,7 +2828,7 @@ func _menu_open(panel_id: String) -> void:
 func _apply_menu_settings(settings: MenuSettings) -> void:
 	if arena_view != null:
 		arena_view.set_presentation_motion(not settings.reduce_motion)
-		arena_view.set_graphics_profile(settings.graphics_profile)
+		arena_view.apply_graphics_settings(settings)
 		arena_view.configure_audio(settings)
 	mouse_sensitivity = MOUSE_SENSITIVITY * MenuSettings.clamp_sensitivity(settings.sensitivity)
 	print("MENU_SETTINGS_APPLIED volume=%.2f sensitivity=%.2f" % [settings.volume, settings.sensitivity])

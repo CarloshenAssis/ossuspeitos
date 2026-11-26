@@ -1166,3 +1166,14 @@ primeira vaga livre. No cliente, o AnimationPlayer avança manualmente para
 compor o pitch com a pose do osso Head. A velocidade apresentada ajusta a
 cadência de Walk. O clipe Defeat termina em pé, então os corpos deitam com um giro de 90° em X
 e usam os limites da malha deformada para alinhar o modelo ao piso.
+
+## Controles por toque e gráficos no navegador
+
+A arena hospeda os controles de toque para compartilhar a entrada entre a
+demonstração e o cliente online. O joystick e os botões usam as ações locais
+do Godot, e o arraste de mira entra na predição do cliente online. O botão
+Pular emite uma ação local sem alterar a simulação.
+
+Em dispositivos com toque, a arena limita a escala 3D a 0,7 e usa o perfil
+Low quando ainda não há uma escolha gráfica salva. A escala é restaurada ao
+sair da arena. O HUD usa a resolução normal.
