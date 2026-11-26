@@ -115,7 +115,7 @@ func _ready() -> void:
 	player_rig.add_child(camera)
 	# Pistola na mão no canto inferior direito da visão: não cobre o centro
 	# nem o painel de munição. Só aparece com arma no inventário oficial.
-	_held_weapon_id = CombatAuthority.COMMON_WEAPON_ID
+	_held_weapon_id = "common_pistol"
 	weapon_model = ArenaModels.build_held_weapon(_held_weapon_id)
 	weapon_model.scale = Vector3.ONE * VIEWMODEL_SCALE
 	weapon_model.rotation = Vector3(0.04, 0.06, 0.0)
