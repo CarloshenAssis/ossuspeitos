@@ -1178,3 +1178,14 @@ Em dispositivos com toque, a arena limita a escala 3D a 0,7 e usa o perfil
 Low quando ainda não há uma escolha gráfica salva. A escala é restaurada ao
 sair da arena. O HUD usa a resolução normal. O overlay de toque é carregado
 só se o script existir: os presets Linux Server não o incluem.
+
+## Entrada de texto e prazo de conexão na Web
+
+Os presets Web Demo e Web Playtest habilitam o teclado virtual experimental
+do Godot 4.4.1. Em navegadores com toque, ele encaminha os eventos de texto
+de um campo HTML para o `LineEdit`. O redimensionamento adaptativo continua
+ajustando o canvas.
+
+O prazo de conexão de 10 segundos termina quando o servidor confirma a
+entrada no hall ou a entrada direta em uma partida. No hall, o jogador tem
+o prazo de 10 minutos do servidor para entrar em uma sala.

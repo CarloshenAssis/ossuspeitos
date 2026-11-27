@@ -3,9 +3,9 @@
 // Uso: node tests/web_playtest_browser.mjs <dir-do-export> <cenário> [args]
 //   offline               abre a página sem servidor: menu pronto, online
 //                         configurado para o Railway, sem criar/entrar local.
-//   room <porta> <código> entra numa sala de um servidor local pelo menu
-//                         (código digitado em minúsculas), marca PRONTO,
-//                         joga a rodada, vê o resultado e sai da sala.
+//   room <porta> <código> usa o teclado Web com toque emulado, redimensiona
+//                         o canvas e espera no hall antes de entrar pelo
+//                         código, jogar uma rodada e sair da sala.
 //   external              JOGAR ONLINE no servidor padrão (Railway), cria uma
 //                         sala e fecha (a sala vazia some em 30 s).
 // Cada linha do console do jogo é impressa como `WEB_CONSOLE <texto>`; o
@@ -60,17 +60,24 @@ async function main() {
   const port = server.address().port;
   const browser = await playwright.chromium.launch({
     headless: true,
+    executablePath: process.env.CHROMIUM_BIN || undefined,
     args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
   });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const page = await browser.newPage({
+    viewport: scenario === 'room' ? { width: 960, height: 540 } : { width: 1280, height: 720 },
+    ...(scenario === 'room' ? { isMobile: true, hasTouch: true } : {}),
+  });
+  let navigations = 0;
+  page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) navigations += 1; });
   page.on('console', (msg) => { const text = msg.text(); lines.push(text); console.log(`WEB_CONSOLE ${text}`); });
   page.on('pageerror', (err) => { lines.push(`PAGE_ERROR ${err.message}`); console.log(`WEB_PAGE_ERROR ${err.message}`); });
   let query = '';
+  let typedCode = '';
   if (scenario === 'room') {
     const [serverPort, code] = rest;
-    const typed = `${code.slice(0, 3)}-${code.slice(3)}`.toLowerCase();
-    query = `?online-url=${encodeURIComponent(`ws://127.0.0.1:${serverPort}`)}&menu-auto=online&menu-room=join&room-code=${typed}`
-      + '&menu-name=Navegador&menu-room-ready-min-players=4&menu-room-leave-after-result=true&transition-metrics=true';
+    typedCode = `${code.slice(0, 3)}-${code.slice(3)}`.toLowerCase();
+    query = `?online-url=${encodeURIComponent(`ws://127.0.0.1:${serverPort}`)}`
+      + '&menu-room-ready-min-players=4&menu-room-leave-after-result=true&transition-metrics=true';
   } else if (scenario === 'external') {
     query = '?menu-auto=online&menu-room=create&menu-name=SondaWeb';
   } else if (scenario === 'offline-injection') {
@@ -89,6 +96,24 @@ async function main() {
       if (lines.some((l) => /CLIENT_CONNECTING/.test(l))) throw new Error('connected without JOGAR ONLINE');
       await page.screenshot({ path: path.join(process.env.WEB_SHOTS || '.', `web_${scenario}.png`) });
     } else if (scenario === 'room') {
+      // Coordenadas dos controles no menu Godot a 960 × 540.
+      await page.touchscreen.tap(200, 303); // Seu nome.
+      const input = page.locator('input:focus');
+      await input.fill('Navegador', { timeout: 5000 });
+      await page.touchscreen.tap(200, 350); // JOGAR ONLINE.
+      await waitFor(/^MENU_ONLINE_HALL$/, 30000);
+      await page.touchscreen.tap(190, 430); // Código da sala.
+      await input.fill(typedCode.slice(0, 3), { timeout: 5000 });
+      // Simula a redução da viewport com o teclado aberto e ultrapassa
+      // o prazo de conexão de 10 s com o campo ainda em foco.
+      await page.setViewportSize({ width: 960, height: 350 });
+      await page.waitForTimeout(12000);
+      await page.setViewportSize({ width: 960, height: 540 });
+      if (navigations !== 1 || lines.some((l) => /^CLIENT_TIMEOUT|^MENU_RETURNED/.test(l))) {
+        throw new Error('hall connection lost or page reloaded while entering the code');
+      }
+      await input.fill(typedCode, { timeout: 5000 });
+      await page.touchscreen.tap(410, 430); // ENTRAR EM SALA.
       await waitFor(/^MENU_ROOM_SHOWN code=/, 30000);
       await page.waitForTimeout(500);
       await page.screenshot({ path: path.join(process.env.WEB_SHOTS || '.', 'web_room.png') });

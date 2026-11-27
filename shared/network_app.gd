@@ -493,9 +493,8 @@ func _process(_delta: float) -> void:
 		_advance_arena_prewarm()
 	if metrics_hitch_frames > 0:
 		_track_render_hitch()
-	# O prazo é de conexão: depois do encerramento combinado com o servidor
-	# (`joined` volta a falso ao desconectar), ele não se aplica mais.
-	if not joined and not returning_to_menu and not shutdown_prepare_received \
+	# O hall online confirma o handshake antes de o jogador entrar em uma sala.
+	if not joined and not online_rooms and not returning_to_menu and not shutdown_prepare_received \
 			and Time.get_ticks_msec() - started_at_msec > _connect_timeout_msec():
 		if interactive_session:
 			print("CLIENT_TIMEOUT id=%s" % client_label)
